@@ -128,8 +128,8 @@ test.describe('AI Coach - reasoning specificity', () => {
       localStorage.setItem('ai-coach-onboarding-complete', 'true')
     })
 
-    await page.goto(AI_COACH_URL)
-    await page.waitForLoadState('networkidle')
+    await page.goto(AI_COACH_URL, { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('textarea[aria-label="Message the AI coach"]').first()).toBeVisible()
 
     await page
       .locator('textarea[aria-label="Message the AI coach"]')

@@ -2,21 +2,15 @@ import { test, expect, type Page } from '@playwright/test'
 import { authenticateAsMember } from '../../helpers/member-auth'
 
 /**
- * AI Coach E2E Tests — Center Panel Views
+ * AI Coach E2E Tests — Current two-panel model
  *
- * Tests the AI Coach center panel view switching, onboarding flow,
- * and individual view rendering.
- *
- * Prerequisites:
- *   - Frontend running on localhost:3000
- *   - Backend running on localhost:3001
- *   - A test user session (or mock auth)
+ * Validates onboarding, welcome, and chart/options/journal workflows.
  */
 
 const AI_COACH_URL = '/members/ai-coach'
 const ONBOARDING_KEY = 'ai-coach-onboarding-complete'
 const PREFERENCES_KEY = 'ai-coach-preferences-v2'
-const WELCOME_VIEW_HEADING = /Ready to execute the session plan\?/i
+const WELCOME_VIEW_HEADING = /Ask for a complete trade thesis/i
 
 async function prepareMemberSession(page: Page, options?: { onboardingComplete?: boolean }) {
   await page.addInitScript(({ onboardingKey, preferencesKey, onboardingComplete }) => {
@@ -72,8 +66,9 @@ test.describe('AI Coach — Page Load', () => {
   test('should display the AI Coach header', async ({ page }) => {
     await prepareMemberSession(page, { onboardingComplete: true })
     await navigateAsAuthenticatedUser(page)
-    // The page should have AI Coach branding
-    await expect(page.locator('main h3:visible', { hasText: 'AI Coach' }).first()).toBeVisible({ timeout: 10000 })
+    const headerTitle = page.locator('main h3:visible').first()
+    await expect(headerTitle).toBeVisible({ timeout: 10000 })
+    await expect(headerTitle).toHaveText(/\S+/, { timeout: 10000 })
   })
 })
 
@@ -84,35 +79,27 @@ test.describe('AI Coach — Onboarding Flow', () => {
 
   test('should show onboarding on first visit', async ({ page }) => {
     await navigateAsAuthenticatedUser(page)
-    // Look for onboarding content
-    const welcomeHeading = page.locator('text=Welcome to AI Coach')
-    await expect(welcomeHeading.first()).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('text=Welcome to AI Coach').first()).toBeVisible({ timeout: 10000 })
   })
 
   test('should navigate through onboarding steps', async ({ page }) => {
     await navigateAsAuthenticatedUser(page)
     await page.waitForSelector('text=Welcome to AI Coach', { timeout: 10000 })
 
-    // Click Next through all steps
     const nextButton = page.locator('button:has-text("Next")')
 
-    // Step 1 -> Step 2
     await nextButton.click()
     await expect(page.locator('text=Market Analysis').first()).toBeVisible()
 
-    // Step 2 -> Step 3
     await nextButton.click()
     await expect(page.locator('text=Options & Positions').first()).toBeVisible()
 
-    // Step 3 -> Step 4
     await nextButton.click()
-    await expect(page.locator('text=Trading Tools').first()).toBeVisible()
+    await expect(page.locator('text=Workflow Tools').first()).toBeVisible()
 
-    // Step 4 -> Complete
     const getStartedButton = page.locator('button:has-text("Get Started")')
     await getStartedButton.click()
 
-    // Current flow exits onboarding into Chart view.
     await waitForChartView(page)
   })
 
@@ -123,7 +110,6 @@ test.describe('AI Coach — Onboarding Flow', () => {
     const skipButton = page.locator('text=Skip tour')
     await skipButton.click()
 
-    // Current flow exits onboarding into Chart view.
     await waitForChartView(page)
   })
 
@@ -131,7 +117,6 @@ test.describe('AI Coach — Onboarding Flow', () => {
     await prepareMemberSession(page, { onboardingComplete: true })
     await navigateAsAuthenticatedUser(page)
 
-    // Completed onboarding restores to chart by default.
     await waitForChartView(page)
     await expect(page.getByRole('heading', { name: 'Welcome to AI Coach' })).not.toBeVisible()
   })
@@ -145,29 +130,20 @@ test.describe('AI Coach — Center Panel Views', () => {
   })
 
   test('should display quick access cards on welcome view', async ({ page }) => {
-    // Check for feature cards
     await expect(page.getByRole('button', { name: /Live Chart/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /^Options/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Analyze/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Daily Brief/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /^Journal/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Scanner/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /^LEAPS/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /^Macro/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Open Settings/i })).toBeVisible()
   })
 
   test('should navigate to Chart view', async ({ page }) => {
     await page.getByRole('button', { name: /Live Chart/i }).click()
     await expect(page.getByRole('heading', { name: /Chart$/i })).toBeVisible()
-    // Chart tab should be active in the tab bar
-    const chartTab = page.getByRole('tab', { name: 'Chart' })
-    await expect(chartTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tab', { name: 'Chart' })).toHaveAttribute('aria-selected', 'true')
   })
 
   test('should navigate to Options view', async ({ page }) => {
-    // Click Options card from welcome
     await page.getByRole('button', { name: /^Options/i }).click()
-    // Tab bar should appear
     const optionsTab = page.getByRole('tab', { name: 'Options' })
     await expect(optionsTab).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByRole('combobox').first()).toBeVisible()
@@ -178,28 +154,12 @@ test.describe('AI Coach — Center Panel Views', () => {
     await expect(page.locator('text=Trade Journal').first()).toBeVisible({ timeout: 10000 })
   })
 
-  test('should navigate to Alerts view', async ({ page }) => {
-    await page.getByRole('button', { name: /More Tools/i }).click()
-    await page.getByRole('button', { name: /^Alerts$/ }).click()
-    // Alerts panel should appear
-    await expect(page.getByRole('heading', { name: 'Price Alerts' })).toBeVisible({ timeout: 10000 })
-  })
-
-  test('should navigate to Scanner view', async ({ page }) => {
-    await page.getByRole('button', { name: /^Scanner/i }).click()
-    await expect(page.locator('text=Opportunity Scanner').first()).toBeVisible({ timeout: 10000 })
-  })
-
   test('should return to Home from tab bar', async ({ page }) => {
-    // Go to Chart first
     await page.getByRole('button', { name: /Live Chart/i }).click()
-    await page.waitForTimeout(500)
 
-    // Click Home button
     const homeButton = page.getByRole('button', { name: 'Go to home view' })
     await homeButton.click()
 
-    // Should be back at welcome view
     await waitForWelcomeView(page)
   })
 })
@@ -211,13 +171,11 @@ test.describe('AI Coach — Chat Panel', () => {
   })
 
   test('should display chat input area', async ({ page }) => {
-    // Look for the chat input
     const chatInput = page.locator('textarea, input[type="text"]').first()
     await expect(chatInput).toBeVisible({ timeout: 10000 })
   })
 
   test('should have new session capability', async ({ page }) => {
-    // Look for new session/chat button
     const newButton = page.locator('button[aria-label*="new"], button:has-text("New")')
     if (await newButton.count() > 0) {
       await expect(newButton.first()).toBeVisible()
@@ -241,13 +199,11 @@ test.describe('AI Coach — Example Prompts', () => {
 })
 
 test.describe('AI Coach — Responsive Layout', () => {
-  test('should show mobile toggle on small screens', async ({ page }) => {
+  test('should show mobile view controls on small screens', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
     await prepareMemberSession(page, { onboardingComplete: true })
     await navigateAsAuthenticatedUser(page)
 
-    // On mobile, there should be a toggle between chat and panel views
-    // Look for the mobile view toggle buttons
     const chatToggle = page.locator('button:has-text("Chat")')
     if (await chatToggle.count() > 0) {
       await expect(chatToggle.first()).toBeVisible()

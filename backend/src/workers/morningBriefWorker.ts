@@ -54,22 +54,6 @@ export function shouldGenerateMorningBriefs(
 async function loadCandidateUserIds(): Promise<string[]> {
   const userIds = new Set<string>();
 
-  const { data: watchlistRows, error: watchlistError } = await supabase
-    .from('ai_coach_watchlists')
-    .select('user_id')
-    .limit(5000);
-
-  if (watchlistError) {
-    logger.warn('Morning brief worker: failed to load watchlist users', {
-      error: watchlistError.message,
-      code: (watchlistError as any).code,
-    });
-  } else {
-    for (const row of watchlistRows || []) {
-      if (row?.user_id) userIds.add(String(row.user_id));
-    }
-  }
-
   const { data: coachUserRows, error: coachUserError } = await supabase
     .from('ai_coach_users')
     .select('user_id')

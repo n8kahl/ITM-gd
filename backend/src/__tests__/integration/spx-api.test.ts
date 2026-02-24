@@ -32,6 +32,7 @@ jest.mock('../../services/spx/gexEngine', () => ({
 
 jest.mock('../../services/spx/setupDetector', () => ({
   detectActiveSetups: jest.fn(),
+  getLatestSetupEnvironmentState: jest.fn(),
   getSetupById: jest.fn(),
 }));
 
@@ -103,7 +104,7 @@ jest.mock('../../config/database', () => ({
 import spxRouter from '../../routes/spx';
 import { getMergedLevels } from '../../services/spx/levelEngine';
 import { computeUnifiedGEXLandscape } from '../../services/spx/gexEngine';
-import { detectActiveSetups, getSetupById } from '../../services/spx/setupDetector';
+import { detectActiveSetups, getLatestSetupEnvironmentState, getSetupById } from '../../services/spx/setupDetector';
 import { getFibLevels } from '../../services/spx/fibEngine';
 import { getFlowEvents } from '../../services/spx/flowEngine';
 import { classifyCurrentRegime } from '../../services/spx/regimeClassifier';
@@ -123,6 +124,7 @@ import { getSPXOptimizerWorkerStatus } from '../../workers/spxOptimizerWorker';
 const mockGetMergedLevels = getMergedLevels as jest.MockedFunction<typeof getMergedLevels>;
 const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as jest.MockedFunction<typeof computeUnifiedGEXLandscape>;
 const mockDetectActiveSetups = detectActiveSetups as jest.MockedFunction<typeof detectActiveSetups>;
+const mockGetLatestSetupEnvironmentState = getLatestSetupEnvironmentState as jest.MockedFunction<typeof getLatestSetupEnvironmentState>;
 const mockGetSetupById = getSetupById as jest.MockedFunction<typeof getSetupById>;
 const mockGetFibLevels = getFibLevels as jest.MockedFunction<typeof getFibLevels>;
 const mockGetFlowEvents = getFlowEvents as jest.MockedFunction<typeof getFlowEvents>;
@@ -188,6 +190,15 @@ describe('SPX API integration schema', () => {
         timestamp: '2026-02-15T15:00:00.000Z',
       },
     });
+
+    mockGetLatestSetupEnvironmentState.mockResolvedValue({
+      asOf: '2026-02-15T15:00:00.000Z',
+      macroBias: 'neutral',
+      eventRisk: 'low',
+      volatilityRegime: 'normal',
+      newsSentiment: 'neutral',
+      overallBias: 'neutral',
+    } as any);
 
     mockDetectActiveSetups.mockResolvedValue([]);
     mockGetSetupById.mockResolvedValue({

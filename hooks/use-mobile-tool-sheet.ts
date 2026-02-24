@@ -5,18 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 export type MobileToolView =
   | 'chart'
   | 'options'
-  | 'position'
-  | 'screenshot'
   | 'journal'
-  | 'alerts'
-  | 'brief'
-  | 'scanner'
-  | 'tracked'
-  | 'leaps'
-  | 'earnings'
-  | 'macro'
-  | 'watchlist'
-  | 'preferences'
 
 interface MobileToolSheetState {
   activeSheet: MobileToolView | null
@@ -87,34 +76,49 @@ export function resolveMobileSheetFromWidgetEvent(
     }
   }
 
-  if (eventName === 'ai-coach-widget-alert') {
-    return {
-      view: 'alerts',
-      symbol: typeof detail?.symbol === 'string' ? detail.symbol : null,
-      params: {
-        price: detail?.price,
-        alertType: detail?.alertType,
-        notes: detail?.notes,
-      },
-    }
-  }
-
   if (eventName === 'ai-coach-widget-analyze') {
     const setup = detail?.setup as Record<string, unknown> | undefined
+    const symbol = typeof setup?.symbol === 'string' ? setup.symbol : null
     return {
-      view: 'position',
-      symbol: typeof setup?.symbol === 'string' ? setup.symbol : null,
-      params: { setup },
+      view: 'chart',
+      symbol,
+      params: symbol
+        ? {
+            setup,
+            chartRequest: {
+              symbol,
+              timeframe: '15m',
+            },
+          }
+        : { setup },
     }
   }
 
-  const view = detail?.view
-  if (typeof view !== 'string') return null
+  if (eventName === 'ai-coach-widget-alert') {
+    return null
+  }
+
+  const requestedView = typeof detail?.view === 'string' ? detail.view : null
+  const symbol = typeof detail?.symbol === 'string' ? detail.symbol : null
+
+  if (requestedView === 'options') {
+    return { view: 'options', symbol, params: {} }
+  }
+  if (requestedView === 'journal') {
+    return { view: 'journal', symbol, params: {} }
+  }
 
   return {
-    view: view as MobileToolView,
-    symbol: typeof detail?.symbol === 'string' ? detail.symbol : null,
-    params: {},
+    view: 'chart',
+    symbol,
+    params: symbol
+      ? {
+          chartRequest: {
+            symbol,
+            timeframe: '5m',
+          },
+        }
+      : {},
   }
 }
 

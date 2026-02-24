@@ -3,35 +3,12 @@ import { authenticateToken, checkQueryLimit } from '../middleware/auth';
 import { validateParams, validateQuery } from '../middleware/validate';
 import { getEarningsAnalysis, getEarningsCalendar } from '../services/earnings';
 import { earningsCalendarQuerySchema, earningsSymbolParamSchema } from '../schemas/earningsValidation';
-import { supabase } from '../config/database';
 import { POPULAR_SYMBOLS, sanitizeSymbols } from '../lib/symbols';
 import { logger } from '../lib/logger';
 import { requireTier } from '../middleware/requireTier';
 
 const router = Router();
 const DEFAULT_WATCHLIST = [...POPULAR_SYMBOLS].slice(0, 6);
-
-async function loadUserWatchlistSymbols(userId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('ai_coach_watchlists')
-    .select('symbols, is_default, updated_at')
-    .eq('user_id', userId)
-    .order('is_default', { ascending: false })
-    .order('updated_at', { ascending: false });
-
-  if (error) {
-    throw new Error(`Failed to load user watchlist: ${error.message}`);
-  }
-
-  const watchlists = data || [];
-  if (watchlists.length === 0) return DEFAULT_WATCHLIST;
-
-  const preferred = watchlists.find((watchlist) => watchlist.is_default) || watchlists[0];
-  if (!Array.isArray(preferred.symbols)) return DEFAULT_WATCHLIST;
-
-  const symbols = sanitizeSymbols(preferred.symbols, 25);
-  return symbols.length > 0 ? symbols : DEFAULT_WATCHLIST;
-}
 
 router.get(
   '/calendar',
@@ -46,9 +23,6 @@ router.get(
       };
 
       let watchlist = sanitizeSymbols(validated.watchlist || [], 25);
-      if (watchlist.length === 0 && req.user?.id) {
-        watchlist = await loadUserWatchlistSymbols(req.user.id);
-      }
       if (watchlist.length === 0) {
         watchlist = DEFAULT_WATCHLIST;
       }

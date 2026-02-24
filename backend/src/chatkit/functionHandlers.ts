@@ -206,12 +206,6 @@ export async function executeFunctionCall(functionCall: FunctionCall, context?: 
     case 'get_trade_history':
       return await handleGetTradeHistory(typedArgs, context?.userId);
 
-    case 'set_alert':
-      return await handleSetAlert(typedArgs, context?.userId);
-
-    case 'get_alerts':
-      return await handleGetAlerts(typedArgs, context?.userId);
-
     case 'scan_opportunities':
       return await handleScanOpportunities(typedArgs, context?.userId);
 
@@ -1735,145 +1729,16 @@ async function handleGetTradeHistory(
 }
 
 /**
- * Handler: set_alert
- * Creates a price alert for a symbol
+ * Scanner helpers
  */
-async function handleSetAlert(
-  args: { symbol: string; alert_type: string; target_value: number; notes?: string },
-  userId?: string
-) {
-  if (!userId) {
-    return { error: 'User not authenticated' };
-  }
-
-  const { symbol, alert_type, target_value, notes } = args;
-
-  try {
-    const { data, error } = await supabase
-      .from('ai_coach_alerts')
-      .insert({
-        user_id: userId,
-        symbol: symbol.toUpperCase(),
-        alert_type,
-        target_value,
-        notification_channels: ['in-app'],
-        notes: notes || null,
-      })
-      .select()
-      .single();
-
-    if (error) throw new Error(error.message);
-
-    const typeLabels: Record<string, string> = {
-      price_above: 'Price Above',
-      price_below: 'Price Below',
-      level_approach: 'Level Approach',
-      level_break: 'Level Break',
-      volume_spike: 'Volume Spike',
-    };
-
-    return {
-      success: true,
-      alert: {
-        id: data.id,
-        symbol: data.symbol,
-        type: typeLabels[data.alert_type] || data.alert_type,
-        targetValue: data.target_value,
-        status: data.status,
-        createdAt: data.created_at,
-      },
-      message: `Alert set: ${typeLabels[alert_type] || alert_type} ${target_value} for ${symbol}`,
-    };
-  } catch (error: any) {
-    return {
-      error: 'Failed to create alert',
-      message: error.message,
-    };
-  }
-}
-
-/**
- * Handler: get_alerts
- * Gets the user's alerts with optional filtering
- */
-async function handleGetAlerts(
-  args: { status?: string; symbol?: string },
-  userId?: string
-) {
-  if (!userId) {
-    return { error: 'User not authenticated' };
-  }
-
-  const { status = 'active', symbol } = args;
-
-  try {
-    let query = supabase
-      .from('ai_coach_alerts')
-      .select('*')
-      .eq('user_id', userId);
-
-    if (status) query = query.eq('status', status);
-    if (symbol) query = query.eq('symbol', symbol.toUpperCase());
-
-    const { data: alerts, error } = await query
-      .order('created_at', { ascending: false });
-
-    if (error) throw new Error(error.message);
-
-    const typeLabels: Record<string, string> = {
-      price_above: 'Price Above',
-      price_below: 'Price Below',
-      level_approach: 'Level Approach',
-      level_break: 'Level Break',
-      volume_spike: 'Volume Spike',
-    };
-
-    return {
-      alerts: (alerts || []).map(a => ({
-        id: a.id,
-        symbol: a.symbol,
-        type: typeLabels[a.alert_type] || a.alert_type,
-        targetValue: a.target_value,
-        status: a.status,
-        conditionMet: a.condition_met,
-        triggeredAt: a.triggered_at,
-        notes: a.notes,
-        createdAt: a.created_at,
-      })),
-      count: (alerts || []).length,
-    };
-  } catch (error: any) {
-    return {
-      error: 'Failed to fetch alerts',
-      message: error.message,
-    };
-  }
-}
-
 function normalizeScannerSymbols(symbols?: string[]): string[] {
   if (!Array.isArray(symbols)) return [];
   return sanitizeSymbols(symbols, 20);
 }
 
 async function getDefaultScannerSymbols(userId?: string): Promise<string[]> {
-  if (!userId) return [...POPULAR_SYMBOLS];
-
-  const { data } = await supabase
-    .from('ai_coach_watchlists')
-    .select('symbols, is_default, updated_at')
-    .eq('user_id', userId)
-    .order('is_default', { ascending: false })
-    .order('updated_at', { ascending: false });
-
-  const watchlists = data || [];
-  if (watchlists.length === 0) return [...POPULAR_SYMBOLS];
-
-  const defaultWatchlist = watchlists.find((watchlist) => watchlist.is_default) || watchlists[0];
-  const symbols = Array.isArray(defaultWatchlist.symbols)
-    ? normalizeScannerSymbols(defaultWatchlist.symbols)
-    : [];
-
-  return symbols.length > 0 ? symbols : [...POPULAR_SYMBOLS];
+  void userId;
+  return sanitizeSymbols([...POPULAR_SYMBOLS], 20);
 }
 
 /**

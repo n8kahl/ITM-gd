@@ -168,24 +168,8 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 
 export class MorningBriefService {
   async getDefaultWatchlist(userId: string): Promise<string[]> {
-    const { data, error } = await supabase
-      .from('ai_coach_watchlists')
-      .select('symbols, is_default, created_at')
-      .eq('user_id', userId)
-      .order('is_default', { ascending: false })
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      logger.warn('Morning brief: failed to load watchlist, using defaults', { error: error.message, userId });
-      return DEFAULT_WATCHLIST_SYMBOLS;
-    }
-
-    const watchlists = data || [];
-    if (watchlists.length === 0) return DEFAULT_WATCHLIST_SYMBOLS;
-
-    const defaultWatchlist = watchlists.find((watchlist) => watchlist.is_default) || watchlists[0];
-    const symbols = normalizeSymbols(defaultWatchlist.symbols);
-    return symbols.length > 0 ? symbols : DEFAULT_WATCHLIST_SYMBOLS;
+    void userId;
+    return [...DEFAULT_WATCHLIST_SYMBOLS];
   }
 
   async getOpenPositions(userId: string): Promise<MorningBrief['openPositionStatus']> {

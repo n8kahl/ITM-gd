@@ -14,18 +14,7 @@ interface MobileToolSheetProps {
 const SHEET_LABELS: Record<MobileToolView, string> = {
   chart: 'Live Chart',
   options: 'Options Chain',
-  position: 'Position Analyzer',
-  screenshot: 'Screenshot Upload',
   journal: 'Trade Journal',
-  alerts: 'Alerts',
-  brief: 'Daily Brief',
-  scanner: 'Opportunity Scanner',
-  tracked: 'Tracked Setups',
-  leaps: 'LEAPS Dashboard',
-  earnings: 'Earnings',
-  macro: 'Macro Context',
-  watchlist: 'Watchlist',
-  preferences: 'Settings',
 }
 
 export function MobileToolSheet({ activeSheet, onClose, children }: MobileToolSheetProps) {

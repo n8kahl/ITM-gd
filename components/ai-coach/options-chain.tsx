@@ -402,7 +402,7 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
     setWorkflowSymbol(symbol)
     setWorkflowStrike(contract.strike)
     setWorkflowExpiry(expiry || null)
-    setCenterView('position')
+    setCenterView('chart')
 
     analyzeSetup({
       symbol,

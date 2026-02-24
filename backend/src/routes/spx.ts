@@ -70,8 +70,8 @@ function dateDaysAgoET(days: number): string {
 
 function parseBacktestSource(value: unknown): SPXWinRateBacktestSource {
   const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'auto') return 'auto';
   if (normalized === 'spx_setup_instances' || normalized === 'instances') return 'spx_setup_instances';
-  if (normalized === 'ai_coach_tracked_setups' || normalized === 'legacy') return 'ai_coach_tracked_setups';
   return 'spx_setup_instances';
 }
 

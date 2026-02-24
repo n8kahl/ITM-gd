@@ -26,6 +26,7 @@ import {
   ChevronLeft,
   ChevronRight,
   List,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -36,27 +37,15 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { LevelAnnotation } from './trading-chart'
 import { usePriceStream } from '@/hooks/use-price-stream'
 import { OptionsChain } from './options-chain'
-import { PositionTracker } from './position-tracker'
-import { ScreenshotUpload } from './screenshot-upload'
 import { TradeJournal } from './trade-journal'
-import { AlertsPanel } from './alerts-panel'
-import { OpportunityScanner } from './opportunity-scanner'
-import { LEAPSDashboard } from './leaps-dashboard'
-import { MacroContext } from './macro-context'
-import { EarningsDashboard } from './earnings-dashboard'
 import { Onboarding, hasCompletedOnboarding } from './onboarding'
-import { MorningBriefPanel } from './morning-brief'
-import { TrackedSetupsPanel } from './tracked-setups-panel'
-import { WatchlistPanel } from './watchlist-panel'
 import { WidgetContextMenu } from './widget-context-menu'
-import { WorkflowBreadcrumb } from './workflow-breadcrumb'
 import { PreferencesPanel } from './preferences-panel'
 import { ViewTransition } from './view-transition'
 import { ChartSkeleton } from './skeleton-loaders'
 import { DesktopContextStrip } from './desktop-context-strip'
 import { clearHoverTarget, emitHoverTarget } from '@/hooks/use-hover-coordination'
 import {
-  alertAction,
   chartAction,
   chatAction,
   optionsAction,
@@ -86,18 +75,11 @@ import {
 } from './preferences'
 import {
   getChartData,
-  scanOpportunities,
   AICoachAPIError,
   type ChartTimeframe,
   type ChartBar,
   type ChartProviderIndicators,
-  type ScanOpportunity,
-  type ExtractedPosition,
 } from '@/lib/api/ai-coach'
-import {
-  syncExtractedPositionsToMonitor,
-  toPositionInputFromExtracted,
-} from '@/lib/ai-coach/screenshot-monitoring'
 import { mergeRealtimePriceIntoBars } from './chart-realtime'
 import { InfoTip } from '@/components/ui/info-tip'
 
@@ -181,17 +163,7 @@ export type CenterView =
   | 'welcome'
   | 'chart'
   | 'options'
-  | 'position'
-  | 'screenshot'
   | 'journal'
-  | 'alerts'
-  | 'brief'
-  | 'scanner'
-  | 'tracked'
-  | 'leaps'
-  | 'earnings'
-  | 'macro'
-  | 'watchlist'
   | 'preferences'
 
 interface CenterPanelProps {
@@ -216,7 +188,7 @@ const EXAMPLE_PROMPTS = [
   {
     icon: Sunrise,
     label: 'Morning Brief',
-    prompt: '__NAVIGATE_BRIEF__',
+    prompt: 'Give me this morning brief with overnight gaps, key levels, and what to watch during the session.',
     description: 'Pre-market overview, overnight gaps, key levels & events',
   },
   {
@@ -237,20 +209,11 @@ const TABS: Array<{
   view: CenterView
   icon: typeof CandlestickChart
   label: string
-  group: 'analyze' | 'portfolio' | 'monitor' | 'research'
+  group: 'analyze' | 'journal'
 }> = [
   { view: 'chart', icon: CandlestickChart, label: 'Chart', group: 'analyze' },
   { view: 'options', icon: TableProperties, label: 'Options', group: 'analyze' },
-  { view: 'position', icon: Calculator, label: 'Positions', group: 'analyze' },
-  { view: 'scanner', icon: Search, label: 'Scanner', group: 'analyze' },
-  { view: 'journal', icon: BookOpen, label: 'Journal', group: 'portfolio' },
-  { view: 'tracked', icon: ListChecks, label: 'Tracked', group: 'portfolio' },
-  { view: 'alerts', icon: Bell, label: 'Alerts', group: 'monitor' },
-  { view: 'watchlist', icon: List, label: 'Watchlist', group: 'monitor' },
-  { view: 'brief', icon: Sunrise, label: 'Daily Brief', group: 'monitor' },
-  { view: 'leaps', icon: Clock, label: 'LEAPS', group: 'research' },
-  { view: 'earnings', icon: Calendar, label: 'Earnings', group: 'research' },
-  { view: 'macro', icon: Globe, label: 'Macro', group: 'research' },
+  { view: 'journal', icon: BookOpen, label: 'Journal', group: 'journal' },
 ]
 
 const PRESSABLE_PROPS = {
@@ -258,26 +221,15 @@ const PRESSABLE_PROPS = {
   whileTap: { scale: 0.98 },
 }
 
-const TAB_GROUP_LABELS: Record<'analyze' | 'portfolio' | 'monitor' | 'research', string> = {
+const TAB_GROUP_LABELS: Record<'analyze' | 'journal', string> = {
   analyze: 'Analyze',
-  portfolio: 'Portfolio',
-  monitor: 'Monitor',
-  research: 'Research',
+  journal: 'Journal',
 }
 
 const ROUTABLE_VIEWS = new Set<CenterView>([
   'chart',
   'options',
-  'position',
   'journal',
-  'alerts',
-  'brief',
-  'scanner',
-  'tracked',
-  'leaps',
-  'earnings',
-  'macro',
-  'watchlist',
 ])
 
 // Level annotation colors by type
@@ -361,12 +313,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
   const {
     activeCenterView,
     activeSymbol,
-    workflowPath,
     setCenterView,
     setSymbol,
-    trackPosition,
-    goToWorkflowStep,
-    clearWorkflowPath,
   } = useAICoachWorkflow()
   const accessToken = session?.access_token || null
 
@@ -395,13 +343,10 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     if (hasAppliedRouteViewRef.current) return
 
     const requestedView = searchParams.get('view')?.toLowerCase() ?? null
-    const requestedPanel = searchParams.get('panel')?.toLowerCase() ?? null
 
     const nextView = ROUTABLE_VIEWS.has(requestedView as CenterView)
       ? requestedView as CenterView
-      : requestedPanel === 'earnings'
-        ? 'earnings'
-        : null
+      : null
 
     if (nextView) {
       setActiveView(nextView)
@@ -507,12 +452,6 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     } else {
       setActiveView('chart')
       setCenterView('chart')
-    }
-
-    const requestedView = searchParams.get('view')
-    if (requestedView === 'brief') {
-      setActiveView('brief')
-      setCenterView('brief')
     }
 
     setPendingInitialChartLoad({
@@ -937,24 +876,6 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
     }
   }, [chartSymbol, chartTimeframe, fetchChartData, setCenterView])
 
-  const handleScreenshotPositionsConfirmed = useCallback((positions: ExtractedPosition[]) => {
-    if (positions.length === 0) return
-
-    const entryDate = new Date().toISOString().slice(0, 10)
-    for (const position of positions) {
-      trackPosition(toPositionInputFromExtracted(position, entryDate))
-    }
-
-    if (session?.access_token) {
-      void syncExtractedPositionsToMonitor(positions, session.access_token).catch((error) => {
-        console.error('Failed to sync screenshot positions to tracked setups:', error)
-      })
-    }
-
-    setActiveView('tracked')
-    setCenterView('tracked')
-  }, [session?.access_token, setCenterView, trackPosition])
-
   const handleTabKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Home' && event.key !== 'End') {
       return
@@ -980,20 +901,19 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
   // RENDER
   // ============================================
 
+  const shouldRenderChartCanvas = activeView === 'chart' || (!isSheetMode && (activeView === 'options' || activeView === 'journal'))
+  const isDesktopOptionsOverlay = !isSheetMode && activeView === 'options'
+  const isDesktopJournalOverlay = !isSheetMode && activeView === 'journal'
+  const isSheetOptionsView = isSheetMode && activeView === 'options'
+  const isSheetJournalView = isSheetMode && activeView === 'journal'
+  const viewTransitionKey: CenterView = activeView === 'options' || activeView === 'journal' ? 'chart' : activeView
+
   return (
     <div className="h-full flex flex-col relative">
       {!isSheetMode && activeView !== 'onboarding' && (
         <DesktopContextStrip
           accessToken={session?.access_token}
           onSendPrompt={onSendPrompt}
-        />
-      )}
-
-      {activeView !== 'onboarding' && (
-        <WorkflowBreadcrumb
-          path={workflowPath}
-          onStepClick={goToWorkflowStep}
-          onClear={clearWorkflowPath}
         />
       )}
 
@@ -1116,7 +1036,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
 
       {/* View content */}
       <div className="flex-1 min-h-0" role="tabpanel" id={`ai-coach-panel-${activeView}`} aria-labelledby={`ai-coach-tab-${activeView}`}>
-        <ViewTransition viewKey={activeView}>
+        <ViewTransition viewKey={viewTransitionKey}>
           {activeView === 'onboarding' && (
             <Onboarding
               onComplete={() => {
@@ -1128,8 +1048,13 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
                 setCenterView('chart')
               }}
               onTryFeature={(feature) => {
-                setActiveView(feature as CenterView)
-                setCenterView(feature as Parameters<typeof setCenterView>[0])
+                const nextView: CenterView = feature === 'options'
+                  ? 'options'
+                  : feature === 'journal'
+                    ? 'journal'
+                    : 'chart'
+                setActiveView(nextView)
+                setCenterView(nextView as Parameters<typeof setCenterView>[0])
               }}
             />
           )}
@@ -1144,48 +1069,16 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
                 setActiveView('options')
                 setCenterView('options')
               }}
-              onShowPosition={() => {
-                setActiveView('position')
-                setCenterView('position')
-              }}
               onShowJournal={() => {
                 setActiveView('journal')
                 setCenterView('journal')
-              }}
-              onShowAlerts={() => {
-                setActiveView('alerts')
-                setCenterView('alerts')
-              }}
-              onShowBrief={() => {
-                setActiveView('brief')
-                setCenterView('brief')
-              }}
-              onShowScanner={() => {
-                setActiveView('scanner')
-                setCenterView('scanner')
-              }}
-              onShowTracked={() => {
-                setActiveView('tracked')
-                setCenterView('tracked')
-              }}
-              onShowLeaps={() => {
-                setActiveView('leaps')
-                setCenterView('leaps')
-              }}
-              onShowEarnings={() => {
-                setActiveView('earnings')
-                setCenterView('earnings')
-              }}
-              onShowMacro={() => {
-                setActiveView('macro')
-                setCenterView('macro')
               }}
               onShowPreferences={() => setIsPreferencesOpen(true)}
               hideContextData={!isSheetMode && isDesktopViewport}
             />
           )}
 
-          {activeView === 'chart' && (
+          {shouldRenderChartCanvas && (
             <ChartView
               symbol={chartSymbol}
               timeframe={chartTimeframe}
@@ -1217,7 +1110,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
             />
           )}
 
-          {activeView === 'options' && (
+          {isSheetOptionsView && (
             <OptionsChain
               initialSymbol={chartSymbol}
               preferences={{
@@ -1229,132 +1122,77 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
             />
           )}
 
-          {activeView === 'position' && (
-            <PositionTracker
-              onClose={() => {
-                setActiveView('welcome')
-                setCenterView(null)
-              }}
-              onSendPrompt={onSendPrompt}
-            />
-          )}
-
-          {activeView === 'journal' && (
+          {isSheetJournalView && (
             <TradeJournal onClose={() => {
               setActiveView('welcome')
               setCenterView(null)
             }} />
           )}
 
-          {activeView === 'alerts' && (
-            <AlertsPanel onClose={() => {
-              setActiveView('welcome')
-              setCenterView(null)
-            }} />
-          )}
-
-          {activeView === 'watchlist' && (
-            <WatchlistPanel
-              onClose={() => {
-                setActiveView('welcome')
-                setCenterView(null)
-              }}
-              onNavigateChart={(symbol) => {
-                handleSymbolChange(symbol)
-                setActiveView('chart')
-                setCenterView('chart')
-              }}
-            />
-          )}
-
-          {activeView === 'brief' && (
-            <MorningBriefPanel
-              onClose={() => {
-                setActiveView('welcome')
-                setCenterView(null)
-              }}
-              onSendPrompt={onSendPrompt}
-            />
-          )}
-
-          {activeView === 'scanner' && (
-            <OpportunityScanner
-              onClose={() => {
-                setActiveView('welcome')
-                setCenterView(null)
-              }}
-              onSendPrompt={onSendPrompt}
-            />
-          )}
-
-          {activeView === 'tracked' && (
-            <TrackedSetupsPanel
-              onClose={() => {
-                setActiveView('welcome')
-                setCenterView(null)
-              }}
-              onSendPrompt={onSendPrompt}
-            />
-          )}
-
-          {activeView === 'screenshot' && (
-            <ScreenshotUpload
-              onPositionsConfirmed={handleScreenshotPositionsConfirmed}
-              onOpenView={(view) => {
-                if (view === 'tracked') {
-                  setActiveView('tracked')
-                  setCenterView('tracked')
-                  return
-                }
-                if (view === 'journal') {
-                  setActiveView('journal')
-                  setCenterView('journal')
-                  return
-                }
-                if (view === 'position') {
-                  setActiveView('position')
-                  setCenterView('position')
-                }
-              }}
-              onSendPrompt={onSendPrompt}
-              onClose={() => {
-                setActiveView('welcome')
-                setCenterView(null)
-              }}
-            />
-          )}
-
-          {activeView === 'leaps' && (
-            <LEAPSDashboard
-              onClose={() => {
-                setActiveView('welcome')
-                setCenterView(null)
-              }}
-              onSendPrompt={onSendPrompt}
-            />
-          )}
-
-          {activeView === 'earnings' && (
-            <EarningsDashboard
-              onClose={() => {
-                setActiveView('welcome')
-                setCenterView(null)
-              }}
-              onSendPrompt={onSendPrompt}
-            />
-          )}
-
-          {activeView === 'macro' && (
-            <MacroContext
-              onClose={() => {
-                setActiveView('welcome')
-                setCenterView(null)
-              }}
-              onSendPrompt={onSendPrompt}
-            />
-          )}
-
         </ViewTransition>
+
+        <AnimatePresence>
+          {isDesktopOptionsOverlay && (
+            <motion.div
+              key="desktop-options-overlay"
+              initial={{ x: 28, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 28, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="absolute inset-y-0 right-0 z-20 w-full xl:w-[72%] border-l border-white/10 bg-[#0B0D10]"
+            >
+              <div className="flex items-center justify-between border-b border-white/5 px-3 py-2.5">
+                <div className="flex items-center gap-2 text-xs text-white/70">
+                  <TableProperties className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Options Overlay</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveView('chart')
+                    setCenterView('chart')
+                  }}
+                  className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/60 transition-colors hover:bg-white/10 hover:text-white/80"
+                  aria-label="Close options overlay"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <X className="h-3.5 w-3.5" />
+                    Close
+                  </span>
+                </button>
+              </div>
+              <div className="h-[calc(100%-2.5rem)] min-h-0 overflow-hidden">
+                <OptionsChain
+                  initialSymbol={chartSymbol}
+                  preferences={{
+                    defaultOptionsStrikeRange: preferences.defaultOptionsStrikeRange,
+                    defaultShowGex: preferences.defaultShowGex,
+                    defaultShowVolAnalytics: preferences.defaultShowVolAnalytics,
+                    autoSyncWorkflowSymbol: preferences.autoSyncWorkflowSymbol,
+                  }}
+                />
+              </div>
+            </motion.div>
+          )}
+
+          {isDesktopJournalOverlay && (
+            <motion.div
+              key="desktop-journal-overlay"
+              initial={{ x: 28, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 28, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="absolute inset-y-0 right-0 z-20 w-full xl:w-[72%] border-l border-white/10 bg-[#0B0D10]"
+            >
+              <TradeJournal
+                onClose={() => {
+                  setActiveView('chart')
+                  setCenterView('chart')
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {!isSheetMode && (
@@ -1573,7 +1411,7 @@ function ChartView({
     if (roundedHoverPrice != null) {
       actions.splice(1, 0,
         optionsAction(symbol, roundedHoverPrice),
-        alertAction(symbol, roundedHoverPrice, 'level_approach', `${symbol} ${timeframe} chart level`),
+        chatAction(`Alert me when ${symbol} approaches ${roundedHoverPrice.toFixed(2)} and explain the trigger context.`, 'Create Alert Prompt'),
       )
     }
 
@@ -1712,15 +1550,7 @@ function WelcomeView({
   onSendPrompt,
   onShowChart,
   onShowOptions,
-  onShowPosition,
   onShowJournal,
-  onShowAlerts,
-  onShowBrief,
-  onShowScanner,
-  onShowTracked,
-  onShowLeaps,
-  onShowEarnings,
-  onShowMacro,
   onShowPreferences,
   hideContextData = false,
 }: {
@@ -1729,19 +1559,11 @@ function WelcomeView({
   onSendPrompt?: (prompt: string) => void
   onShowChart: () => void
   onShowOptions: () => void
-  onShowPosition: () => void
   onShowJournal: () => void
-  onShowAlerts: () => void
-  onShowBrief: () => void
-  onShowScanner: () => void
-  onShowTracked: () => void
-  onShowLeaps: () => void
-  onShowEarnings: () => void
-  onShowMacro: () => void
   onShowPreferences: () => void
   hideContextData?: boolean
 }) {
-  const [clockTick, setClockTick] = useState(0)
+  const [, setClockTick] = useState(0)
   const [spxTicker, setSpxTicker] = useState<{
     price: number | null
     change: number | null
@@ -1757,26 +1579,14 @@ function WelcomeView({
     isLoading: true,
     error: null,
   })
-  const [nextSetup, setNextSetup] = useState<{
-    opportunity: ScanOpportunity | null
-    scannedAt: string | null
-    isLoading: boolean
-    error: string | null
-  }>({
-    opportunity: null,
-    scannedAt: null,
-    isLoading: true,
-    error: null,
-  })
-  const [showMoreTools, setShowMoreTools] = useState(false)
 
   useEffect(() => {
     const interval = setInterval(() => setClockTick((value) => value + 1), 60_000)
     return () => clearInterval(interval)
   }, [])
 
-  const marketStatus = useMemo(() => getWelcomeMarketStatus(), [clockTick])
-  const greeting = useMemo(() => getWelcomeGreeting(displayName), [displayName, clockTick])
+  const marketStatus = getWelcomeMarketStatus()
+  const greeting = getWelcomeGreeting(displayName)
   const sessionDescriptor = useMemo(() => {
     if (marketStatus.label === 'Pre-Market') return 'Pre-Market Prep'
     if (marketStatus.label === 'Open') return 'Live Session'
@@ -1830,38 +1640,6 @@ function WelcomeView({
     }
   }, [accessToken])
 
-  const loadNextSetup = useCallback(async () => {
-    if (!accessToken) return
-
-    setNextSetup((prev) => ({
-      ...prev,
-      isLoading: true,
-      error: null,
-    }))
-
-    try {
-      const scan = await scanOpportunities(accessToken, {
-        symbols: ['SPX', 'NDX', 'QQQ', 'SPY'],
-        includeOptions: true,
-      })
-      const topOpportunity = [...scan.opportunities]
-        .sort((a, b) => b.score - a.score)[0] ?? null
-
-      setNextSetup({
-        opportunity: topOpportunity,
-        scannedAt: scan.scannedAt,
-        isLoading: false,
-        error: topOpportunity ? null : 'No qualifying setup right now.',
-      })
-    } catch {
-      setNextSetup((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: 'Setup scan is temporarily unavailable.',
-      }))
-    }
-  }, [accessToken])
-
   useEffect(() => {
     if (!accessToken || hideContextData) return
     void loadSPXTicker()
@@ -1872,15 +1650,6 @@ function WelcomeView({
     return () => clearInterval(interval)
   }, [accessToken, hideContextData, loadSPXTicker])
 
-  useEffect(() => {
-    if (!accessToken || hideContextData) return
-    void loadNextSetup()
-    const interval = setInterval(() => {
-      void loadNextSetup()
-    }, 120_000)
-    return () => clearInterval(interval)
-  }, [accessToken, hideContextData, loadNextSetup])
-
   const quickAccessCards: Array<{
     label: string
     subtitle: string
@@ -1889,21 +1658,7 @@ function WelcomeView({
   }> = [
     { label: 'Live Chart', subtitle: 'SPX & NDX', icon: CandlestickChart, onClick: onShowChart },
     { label: 'Options', subtitle: 'Greeks & IV', icon: TableProperties, onClick: onShowOptions },
-    { label: 'Analyze', subtitle: 'P&L & Risk', icon: Calculator, onClick: onShowPosition },
-    { label: 'Daily Brief', subtitle: 'Pre-Market', icon: Sunrise, onClick: onShowBrief },
     { label: 'Journal', subtitle: 'Trade Log', icon: BookOpen, onClick: onShowJournal },
-    { label: 'Scanner', subtitle: 'Find Setups', icon: Search, onClick: onShowScanner },
-    { label: 'LEAPS', subtitle: 'Long Dated', icon: Clock, onClick: onShowLeaps },
-    { label: 'Macro', subtitle: 'Events & Flows', icon: Globe, onClick: onShowMacro },
-  ]
-  const secondaryTools: Array<{
-    label: string
-    onClick: () => void
-  }> = [
-    { label: 'Alerts', onClick: onShowAlerts },
-    { label: 'Tracked Setups', onClick: onShowTracked },
-    { label: 'Earnings', onClick: onShowEarnings },
-    { label: 'Settings', onClick: onShowPreferences },
   ]
 
   const containerMotion = {
@@ -1916,26 +1671,15 @@ function WelcomeView({
   }
 
   const tickerPositive = (spxTicker.change ?? 0) >= 0
-  const setupDirectionPositive = (nextSetup.opportunity?.direction ?? 'neutral') !== 'bearish'
-  const setupConfidenceRaw = nextSetup.opportunity?.confidence ?? null
-  const setupConfidence = setupConfidenceRaw === null
-    ? null
-    : Math.round(
-      Math.max(
-        0,
-        Math.min(100, setupConfidenceRaw <= 1 ? setupConfidenceRaw * 100 : setupConfidenceRaw)
-      )
-    )
-  const setupScore = nextSetup.opportunity ? Math.round(nextSetup.opportunity.score) : null
 
   return (
     <div className="h-full flex flex-col">
       <div className="border-b border-white/5 px-4 py-3 lg:px-5 lg:py-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs text-emerald-400/80 uppercase tracking-[0.14em]">Command Center</p>
+            <p className="text-xs text-emerald-400/80 uppercase tracking-[0.14em]">Coach Workspace</p>
             <h2 className="mt-1 text-lg font-semibold text-white lg:text-xl">{greeting}</h2>
-            <p className="mt-1 text-xs text-white/45 lg:text-sm">{sessionDescriptor} across chart, options, and risk in one panel.</p>
+            <p className="mt-1 text-xs text-white/45 lg:text-sm">{sessionDescriptor} across chart, options, and journal context.</p>
           </div>
           <span className={cn('text-[11px] font-medium px-2.5 py-1 rounded-md border shrink-0', marketStatus.toneClass)}>
             {marketStatus.label}
@@ -1943,8 +1687,7 @@ function WelcomeView({
         </div>
 
         {!hideContextData && (
-          <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+          <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[10px] text-emerald-300/75 uppercase tracking-[0.12em]">SPX Live</p>
@@ -1971,85 +1714,24 @@ function WelcomeView({
                 </div>
               )}
             </div>
-            {spxTicker.asOf && (
-              <p className="mt-1 text-[10px] text-white/35">As of {spxTicker.asOf} ET</p>
-            )}
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-[10px] text-white/45 uppercase tracking-[0.12em]">Next Best Setup</p>
-                <p className="mt-0.5 text-[11px] text-white/35">Auto-refreshes every 2 minutes</p>
-              </div>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              {spxTicker.asOf ? (
+                <p className="text-[10px] text-white/35">As of {spxTicker.asOf} ET</p>
+              ) : <span className="text-[10px] text-white/35">&nbsp;</span>}
               <motion.button
                 type="button"
                 onClick={() => {
-                  void loadNextSetup()
+                  void loadSPXTicker()
                 }}
                 className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/55 transition-colors hover:bg-white/10 hover:text-white/75 disabled:opacity-50"
-                disabled={nextSetup.isLoading}
-                aria-label="Refresh next best setup"
+                disabled={spxTicker.isLoading}
+                aria-label="Refresh SPX context"
                 {...PRESSABLE_PROPS}
               >
-                <RefreshCw className={cn('h-3 w-3', nextSetup.isLoading && 'animate-spin')} />
+                <RefreshCw className={cn('h-3 w-3', spxTicker.isLoading && 'animate-spin')} />
                 Refresh
               </motion.button>
             </div>
-
-            <div className="mt-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-              {nextSetup.isLoading && !nextSetup.opportunity ? (
-                <p className="text-sm text-white/45">Scanning watchlist setups...</p>
-              ) : nextSetup.error && !nextSetup.opportunity ? (
-                <p className="text-sm text-red-300/80">{nextSetup.error}</p>
-              ) : nextSetup.opportunity ? (
-                <>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white">
-                        {nextSetup.opportunity.symbol} · {nextSetup.opportunity.setupType}
-                      </p>
-                      <p className="mt-1 line-clamp-1 text-xs text-white/45">{nextSetup.opportunity.description}</p>
-                    </div>
-                    <span
-                      className={cn(
-                        'shrink-0 rounded-md border px-2 py-1 text-[11px] capitalize',
-                        setupDirectionPositive
-                          ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
-                          : 'border-red-500/30 bg-red-500/15 text-red-300'
-                      )}
-                    >
-                      {nextSetup.opportunity.direction}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 grid grid-cols-3 gap-2 text-[11px] text-white/50">
-                    <span>Score: {setupScore ?? '--'}</span>
-                    <span>Conf: {setupConfidence !== null ? `${setupConfidence}%` : '--'}</span>
-                    <span>Price: ${nextSetup.opportunity.currentPrice.toFixed(2)}</span>
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    <motion.button
-                      type="button"
-                      onClick={() => {
-                        onSendPrompt?.(`Expand this setup into a full trade plan with entry, stop, target, and invalidation: ${nextSetup.opportunity?.symbol} ${nextSetup.opportunity?.setupType} (${nextSetup.opportunity?.direction}).`)
-                      }}
-                      className="rounded border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-[11px] text-emerald-200 transition-colors hover:bg-emerald-500/25"
-                      {...PRESSABLE_PROPS}
-                    >
-                      Build Trade Plan
-                    </motion.button>
-                    <span className="text-[10px] text-white/35">
-                      {nextSetup.scannedAt
-                        ? `Scanned ${new Date(nextSetup.scannedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })} ET`
-                        : 'Awaiting scan timestamp'}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-white/45">No setup available yet.</p>
-              )}
-            </div>
-          </div>
           </div>
         )}
       </div>
@@ -2066,10 +1748,10 @@ function WelcomeView({
               <BarChart3 className="w-8 h-8 text-emerald-500" />
             </motion.div>
             <motion.h3 variants={itemMotion} className="text-lg font-semibold text-white mb-2">
-              Ready to execute the session plan?
+              Ask for a complete trade thesis
             </motion.h3>
             <motion.p variants={itemMotion} className="text-sm text-white/50 leading-relaxed">
-              Start with one high-impact workflow below, then pivot into chart, options, and risk views as setups develop.
+              Start with one high-impact prompt below, then project levels and context directly onto the chart.
             </motion.p>
           </motion.div>
 
@@ -2082,16 +1764,12 @@ function WelcomeView({
             {EXAMPLE_PROMPTS.map((item) => {
               const Icon = item.icon
               return (
-            <motion.button
-              variants={itemMotion}
-              key={item.label}
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={() => {
-                if (item.prompt === '__NAVIGATE_BRIEF__') {
-                  onShowBrief()
-                      return
-                    }
+                <motion.button
+                  variants={itemMotion}
+                  key={item.label}
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => {
                     onSendPrompt?.(item.prompt)
                   }}
                   className="group glass-card-heavy border-emerald-500/10 hover:border-emerald-500/30 rounded-xl p-4 text-left transition-all duration-300 hover:-translate-y-0.5"
@@ -2102,15 +1780,11 @@ function WelcomeView({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium text-white">
-                          {item.label}
-                        </span>
+                        <span className="text-sm font-medium text-white">{item.label}</span>
                         <ArrowRight className="w-3 h-3 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                       <p className="text-xs text-white/40 mb-1.5">{item.description}</p>
-                      <p className="text-xs text-emerald-500/70 italic">
-                        &ldquo;{item.prompt === '__NAVIGATE_BRIEF__' ? 'Open Morning Brief panel' : item.prompt}&rdquo;
-                      </p>
+                      <p className="text-xs text-emerald-500/70 italic">&ldquo;{item.prompt}&rdquo;</p>
                     </div>
                   </div>
                 </motion.button>
@@ -2118,12 +1792,11 @@ function WelcomeView({
             })}
           </motion.div>
 
-          {/* Quick Access Cards */}
           <motion.div
             variants={containerMotion}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4"
+            className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4"
           >
             {quickAccessCards.map((card) => {
               const Icon = card.icon
@@ -2144,47 +1817,16 @@ function WelcomeView({
             })}
           </motion.div>
 
-          <motion.div
-            variants={containerMotion}
-            initial="hidden"
-            animate="show"
-            className="mt-3"
+          <motion.button
+            variants={itemMotion}
+            type="button"
+            onClick={onShowPreferences}
+            className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/65 hover:text-white/80 hover:bg-white/10 transition-colors"
+            {...PRESSABLE_PROPS}
           >
-            <motion.button
-              type="button"
-              onClick={() => setShowMoreTools((current) => !current)}
-              className="w-full inline-flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/65 hover:text-white/80 hover:bg-white/10 transition-colors"
-              {...PRESSABLE_PROPS}
-            >
-              <span>More Tools</span>
-              <span className="text-white/35">{showMoreTools ? 'Hide' : 'Show'}</span>
-            </motion.button>
-            <AnimatePresence initial={false}>
-              {showMoreTools && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4, height: 0 }}
-                  animate={{ opacity: 1, y: 0, height: 'auto' }}
-                  exit={{ opacity: 0, y: -4, height: 0 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="overflow-hidden"
-                >
-                  <div className="grid grid-cols-2 gap-2 pt-2">
-                    {secondaryTools.map((tool) => (
-                      <motion.button
-                        key={tool.label}
-                        type="button"
-                        onClick={tool.onClick}
-                        className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-left text-xs text-white/60 hover:text-white/80 hover:border-emerald-500/30 hover:bg-emerald-500/10 transition-colors"
-                        {...PRESSABLE_PROPS}
-                      >
-                        {tool.label}
-                      </motion.button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
+            <Settings className="h-3.5 w-3.5" />
+            Open Settings
+          </motion.button>
         </div>
       </div>
     </div>

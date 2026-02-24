@@ -596,10 +596,10 @@ function PnLTrackerCard({ data }: { data: Record<string, unknown> }) {
   } | undefined
   const positive = totalPnl >= 0
   const openCard = () => {
-    viewAction('position', 'Open Analyzer').action()
+    viewAction('chart', 'Open Chart').action()
   }
   const actions: WidgetAction[] = normalizeActions([
-    viewAction('position', 'Open Analyzer'),
+    viewAction('chart', 'Open Chart'),
     viewAction('journal', 'Open Journal'),
     chatAction('Summarize my portfolio risk and what to manage first.'),
     copyAction(`Portfolio PnL ${positive ? '+' : ''}${totalPnl.toFixed(2)} (${totalPnlPct.toFixed(2)}%), Value ${totalValue.toFixed(2)}`),
@@ -684,7 +684,7 @@ function MarketOverviewCard({ data }: { data: Record<string, unknown> }) {
   }
   const actions: WidgetAction[] = normalizeActions([
     chartAction('SPX'),
-    viewAction(status === 'pre-market' ? 'brief' : 'macro', status === 'pre-market' ? 'Open Brief' : 'Open Macro', 'SPX'),
+    viewAction('chart', status === 'pre-market' ? 'Open Brief Context' : 'Open Macro Context', 'SPX'),
     chatAction('Given current market status, what trading approach should I prioritize?'),
   ])
   const openCard = () => {
@@ -739,16 +739,16 @@ function AlertStatusCard({ data }: { data: Record<string, unknown> }) {
       chartAction(alerts[0].symbol, alerts[0].target, '5m', `${alerts[0].type}`).action()
       return
     }
-    viewAction('alerts', 'Open Alerts').action()
+    viewAction('chart', 'Open Chart').action()
   }
   const actions: WidgetAction[] = normalizeActions(alerts.length > 0
     ? [
         chartAction(alerts[0].symbol, alerts[0].target),
         alertAction(alerts[0].symbol, alerts[0].target, 'level_approach', `Alert from widget (${alerts[0].type})`),
-        viewAction('alerts', 'Manage Alerts', alerts[0].symbol),
+        chatAction(`Review my active alerts for ${alerts[0].symbol} and recommend which to keep.`, 'Manage Alerts'),
         chatAction(`Review my active alerts and suggest which ones to keep or remove.`, 'Review Alerts'),
       ]
-    : [viewAction('alerts', 'Open Alerts'), chatAction('Show my active alerts and suggest which ones to keep.')])
+    : [viewAction('chart', 'Open Chart'), chatAction('Show my active alerts and suggest which ones to keep.')])
 
   return (
     <div
@@ -876,11 +876,11 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
       chartAction(symbolImpact.symbol, undefined, '5m', 'Macro Context').action()
       return
     }
-    viewAction('macro', 'Open Macro').action()
+    viewAction('chart', 'Open Chart', 'SPX').action()
   }
   const actions: WidgetAction[] = normalizeActions([
-    symbolImpact?.symbol ? chartAction(symbolImpact.symbol) : viewAction('macro', 'Open Macro'),
-    symbolImpact?.symbol ? optionsAction(symbolImpact.symbol) : viewAction('brief', 'Open Brief'),
+    symbolImpact?.symbol ? chartAction(symbolImpact.symbol) : viewAction('chart', 'Open Chart', 'SPX'),
+    symbolImpact?.symbol ? optionsAction(symbolImpact.symbol) : viewAction('chart', 'Open Brief Context', 'SPX'),
     chatAction(symbolImpact?.symbol
       ? `Give me a macro-aware plan for ${symbolImpact.symbol} this week.`
       : 'Summarize the top macro risks and catalysts this week.'),
@@ -941,7 +941,7 @@ function MacroContextCard({ data }: { data: Record<string, unknown> }) {
             <WidgetRowActions
               key={`${event.event}-${event.date}-${i}`}
               actions={normalizeActions([
-                symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', `${event.event}`) : viewAction('macro', 'Open Macro'),
+                symbolImpact?.symbol ? chartAction(symbolImpact.symbol, undefined, '5m', `${event.event}`) : viewAction('chart', 'Open Chart', 'SPX'),
                 chatAction(`How should I position around ${event.event} on ${event.date}?`, 'Ask AI'),
                 copyAction(`${event.event} | ${event.date} | ${event.impact}`, 'Copy Event'),
               ])}
@@ -1426,7 +1426,7 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
   const bestScore = opportunities.length > 0 ? Math.max(...opportunities.map((opp) => opp.score)) : null
   const openCard = () => {
     if (!opportunities[0]) {
-      viewAction('scanner', 'Open Scanner').action()
+      viewAction('chart', 'Open Chart').action()
       return
     }
     openScannerSetupChart(opportunities[0], '15m')
@@ -1435,11 +1435,11 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
     ? [
         scannerChartAction(opportunities[0], '15m'),
         optionsAction(opportunities[0].symbol, opportunities[0].currentPrice),
-        viewAction('tracked', 'Open Tracked', opportunities[0].symbol),
+        viewAction('journal', 'Open Journal', opportunities[0].symbol),
         chatAction(`Review top scanner opportunities and rank by conviction with risk plan.`),
         copyAction(`Top setup: ${opportunities[0].symbol} ${opportunities[0].setupType} (${opportunities[0].direction}) score ${opportunities[0].score}`),
       ]
-    : [viewAction('scanner', 'Open Scanner'), chatAction('Run another opportunity scan and summarize strongest setups.')])
+    : [viewAction('chart', 'Open Chart'), chatAction('Run another opportunity scan and summarize strongest setups.')])
 
   return (
     <div
@@ -1727,10 +1727,10 @@ function EconomicCalendarCard({ data }: { data: Record<string, unknown> }) {
   const impactFilter = String(data.impactFilter || 'HIGH')
   const events = Array.isArray(data.events) ? data.events as Array<Record<string, unknown>> : []
   const openCard = () => {
-    viewAction('macro', 'Open Macro').action()
+    viewAction('chart', 'Open Chart', 'SPX').action()
   }
   const cardActions: WidgetAction[] = normalizeActions([
-    viewAction('macro', 'Open Macro'),
+    viewAction('chart', 'Open Chart', 'SPX'),
     chatAction('Summarize this week\'s economic events and likely IV/volatility impact.'),
     copyAction(`Economic events (${impactFilter}): ${events.slice(0, 5).map((event) => String(event.event || '')).join(', ')}`),
   ])
@@ -1766,7 +1766,7 @@ function EconomicCalendarCard({ data }: { data: Record<string, unknown> }) {
               <WidgetRowActions
                 key={`${String(event.event)}-${String(event.date)}-${idx}`}
                 actions={normalizeActions([
-                  viewAction('macro', 'Open Macro'),
+                  viewAction('chart', 'Open Chart', 'SPX'),
                   chatAction(`How should I position around ${String(event.event)} on ${String(event.date)}?`, 'Ask AI'),
                   copyAction(`${String(event.event)} | ${String(event.date)} | ${impact}`, 'Copy Event'),
                 ])}
@@ -1799,10 +1799,10 @@ function EarningsCalendarCard({ data }: { data: Record<string, unknown> }) {
   const watchlist = Array.isArray(data.watchlist) ? data.watchlist as string[] : []
   const daysAhead = parseNumeric(data.daysAhead)
   const openCard = () => {
-    viewAction('earnings', 'Open Earnings').action()
+    chartAction(watchlist[0] || 'SPX').action()
   }
   const cardActions: WidgetAction[] = normalizeActions([
-    viewAction('earnings', 'Open Earnings'),
+    chartAction(watchlist[0] || 'SPX'),
     chatAction('Summarize this earnings calendar and highlight the highest-risk names for options day traders.'),
     copyAction(`Earnings watchlist: ${watchlist.join(', ')}`),
   ])
@@ -1871,7 +1871,7 @@ function EarningsAnalysisCard({ data }: { data: Record<string, unknown> }) {
   const cardActions: WidgetAction[] = normalizeActions([
     optionsAction(symbol, currentPrice),
     chartAction(symbol, currentPrice, '5m', 'Earnings Setup'),
-    currentPrice > 0 ? alertAction(symbol, currentPrice, 'level_approach', `${symbol} earnings watch`) : viewAction('earnings', 'Open Earnings', symbol),
+    currentPrice > 0 ? alertAction(symbol, currentPrice, 'level_approach', `${symbol} earnings watch`) : chartAction(symbol, undefined, '5m', 'Earnings Context'),
     chatAction(`Rank the pre-earnings strategies for ${symbol} by risk/reward and IV crush risk.`),
     copyAction(`${symbol} earnings expected move ${points ?? 'N/A'} (${pct ?? 'N/A'}%)`),
   ])
@@ -1999,7 +1999,7 @@ function TradeHistoryCard({ data }: { data: Record<string, unknown> }) {
   }
   const cardActions: WidgetAction[] = normalizeActions([
     viewAction('journal', 'Open Journal', symbol !== 'All Symbols' ? symbol : undefined),
-    symbol !== 'All Symbols' ? chartAction(symbol) : viewAction('tracked', 'Open Tracked'),
+    symbol !== 'All Symbols' ? chartAction(symbol) : viewAction('journal', 'Open Journal'),
     chatAction(`Use this ${symbol} trade history to identify the top two recurring mistakes and fixes.`),
     copyAction(`Win rate: ${String(summary?.winRate || 'N/A')} | Total PnL: ${String(summary?.totalPnl || 'N/A')}`),
   ])

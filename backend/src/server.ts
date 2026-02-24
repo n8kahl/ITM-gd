@@ -17,22 +17,15 @@ import chatRouter from './routes/chat';
 import optionsRouter from './routes/options';
 import chartRouter from './routes/chart';
 import screenshotRouter from './routes/screenshot';
-import alertsRouter from './routes/alerts';
-import leapsRouter from './routes/leaps';
 import marketRouter from './routes/market';
 import macroRouter from './routes/macro';
-import scannerRouter from './routes/scanner';
-import watchlistRouter from './routes/watchlist';
 import briefRouter from './routes/brief';
-import trackedSetupsRouter from './routes/trackedSetups';
 import symbolsRouter from './routes/symbols';
 import earningsRouter from './routes/earnings';
 import economicRouter from './routes/economic';
 import fibonacciRouter from './routes/fibonacci';
 import spxRouter from './routes/spx';
-import { startAlertWorker, stopAlertWorker } from './workers/alertWorker';
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
-import { startSetupPushWorker, stopSetupPushWorker } from './workers/setupPushWorker';
 import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers/positionTrackerWorker';
 import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/sessionCleanupWorker';
 import { startWorkerHealthAlertWorker, stopWorkerHealthAlertWorker } from './workers/workerHealthAlertWorker';
@@ -41,7 +34,6 @@ import { startSPXOptimizerWorker, stopSPXOptimizerWorker } from './workers/spxOp
 import { startPortfolioSyncWorker, stopPortfolioSyncWorker } from './workers/portfolioSyncWorker';
 import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startMassiveTickStream, stopMassiveTickStream } from './services/massiveTickStream';
-import { startSetupDetectorService, stopSetupDetectorService } from './services/setupDetector';
 import { initializeMarketHolidays } from './services/marketHours';
 
 const app: Application = express();
@@ -126,14 +118,9 @@ app.use('/api/options', optionsRouter);
 app.use('/api/positions', optionsRouter);
 app.use('/api/chart', chartRouter);
 app.use('/api/screenshot', screenshotRouter);
-app.use('/api/alerts', alertsRouter);
-app.use('/api/leaps', leapsRouter);
 app.use('/api/market', marketRouter);
 app.use('/api/macro', macroRouter);
-app.use('/api/scanner', scannerRouter);
-app.use('/api/watchlist', watchlistRouter);
 app.use('/api/brief', briefRouter);
-app.use('/api/tracked-setups', trackedSetupsRouter);
 app.use('/api/symbols', symbolsRouter);
 app.use('/api/earnings', earningsRouter);
 app.use('/api/economic', economicRouter);
@@ -162,10 +149,8 @@ app.get('/', (_req: Request, res: Response) => {
       economicCalendar: '/api/economic/calendar', economicUpcoming: '/api/economic/calendar/upcoming',
       positionsAnalyze: '/api/positions/analyze', positionsLive: '/api/positions/live', positionsAdvice: '/api/positions/advice',
       chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
-      alerts: '/api/alerts', alertCancel: '/api/alerts/:id/cancel', leaps: '/api/leaps', leapsDetail: '/api/leaps/:id',
-      leapsRoll: '/api/leaps/:id/roll-calculation', macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol',
-      scannerScan: '/api/scanner/scan', watchlist: '/api/watchlist', briefToday: '/api/brief/today', spx: '/api/spx/*',
-      trackedSetups: '/api/tracked-setups', symbolSearch: '/api/symbols/search', chatStream: '/api/chat/stream', wsPrices: '/ws/prices',
+      macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol', briefToday: '/api/brief/today', spx: '/api/spx/*',
+      symbolSearch: '/api/symbols/search', chatStream: '/api/chat/stream', wsPrices: '/ws/prices',
       fibonacci: '/api/fibonacci',
     }
   });
@@ -211,13 +196,10 @@ async function start() {
     initWebSocket(httpServer);
     startMassiveTickStream();
 
-    // Start background alert worker
-    startAlertWorker();
+    // Start active background workers
     startMorningBriefWorker();
-    startSetupPushWorker();
     startPositionTrackerWorker();
     startSessionCleanupWorker();
-    startSetupDetectorService();
     startWorkerHealthAlertWorker();
     startSPXDataLoop();
     startSPXOptimizerWorker();
@@ -240,12 +222,9 @@ async function gracefulShutdown(signal: string) {
   const shutdownTimeout = setTimeout(() => { logger.error('Graceful shutdown timed out, forcing exit'); process.exit(1); }, 30000);
   try {
     // Stop background services
-    stopAlertWorker();
     stopMorningBriefWorker();
-    stopSetupPushWorker();
     stopPositionTrackerWorker();
     stopSessionCleanupWorker();
-    stopSetupDetectorService();
     stopWorkerHealthAlertWorker();
     stopSPXDataLoop();
     stopSPXOptimizerWorker();

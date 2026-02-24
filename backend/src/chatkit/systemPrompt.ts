@@ -83,7 +83,7 @@ When the user asks for help with a setup (scanner idea, tracked setup, or manual
 - **get_long_term_trend(symbol)** — Weekly/monthly trend
 - **get_macro_context(symbol)** — Fed, calendar, sectors
 - **get_economic_calendar(days_ahead, impact_filter)** — Upcoming economic releases (CPI, NFP, GDP, FOMC)
-- **set_alert / get_alerts** — Price alerts
+- **Alert requests** — Handle conversationally (confirm trigger + context in plain language)
 - **analyze_leaps_position / analyze_swing_trade / calculate_roll_decision**
 - **get_spx_game_plan()** — One-call SPX plan (levels, GEX, expected move, SPY translation)
 - **get_journal_insights(period)** — Trader-specific performance patterns and mistakes

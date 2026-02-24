@@ -10,8 +10,15 @@ import {
   MessageSquare,
   TableProperties,
 } from 'lucide-react'
-import type { AlertType, ChartTimeframe, PositionInput } from '@/lib/api/ai-coach'
-import type { WorkflowCenterView } from '@/contexts/AICoachWorkflowContext'
+import type { ChartTimeframe, PositionInput } from '@/lib/api/ai-coach'
+
+export type WidgetViewTarget =
+  | 'chart'
+  | 'options'
+  | 'journal'
+  | 'preferences'
+
+export type AlertType = 'price_above' | 'price_below' | 'level_approach' | 'level_break' | 'volume_spike'
 
 export interface WidgetAction {
   label: string
@@ -154,7 +161,7 @@ export function copyAction(text: string, buttonLabel = 'Copy'): WidgetAction {
 }
 
 export function viewAction(
-  view: WorkflowCenterView,
+  view: WidgetViewTarget,
   buttonLabel = 'Open View',
   symbol?: string,
 ): WidgetAction {

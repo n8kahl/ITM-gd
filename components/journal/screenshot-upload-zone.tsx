@@ -71,7 +71,7 @@ export function ScreenshotUploadZone({
       .join(', ')
   }, [])
 
-  const runSuggestedAction = useCallback((actionId: ScreenshotActionId) => {
+  const runSuggestedAction = useCallback((actionId: ScreenshotActionId | 'set_alert') => {
     const topPosition = analysis?.positions?.[0]
     const summary = summarizePositions(analysis?.positions || [])
 
@@ -97,6 +97,7 @@ export function ScreenshotUploadZone({
         openAICoach('Create a structured setup from this screenshot with entry, stop, target, and invalidation.')
         return
       case 'set_alert':
+      case 'suggest_alerts':
         openAICoach('Suggest practical alerts from this screenshot and explain each trigger.')
         return
       case 'review_journal_context':

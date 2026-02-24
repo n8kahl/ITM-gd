@@ -14,7 +14,7 @@ const ATTENTION_EVENTS = [
 const ATTENTION_LABELS: Record<(typeof ATTENTION_EVENTS)[number], string> = {
   'ai-coach-widget-chart': 'Chart updated',
   'ai-coach-widget-options': 'Options loaded',
-  'ai-coach-widget-alert': 'Alert panel open',
+  'ai-coach-widget-alert': 'Alert prompt prepared',
   'ai-coach-widget-analyze': 'Analyzing position',
   'ai-coach-widget-view': 'View changed',
   'ai-coach-show-chart': 'Chart updated',

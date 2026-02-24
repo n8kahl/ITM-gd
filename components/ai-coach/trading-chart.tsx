@@ -585,7 +585,7 @@ export function TradingChart({
         chartRef.current = null
       }
     }
-  }, [timeframe, clearLevelPriceLines, resetMainChartRefs, onChartReady])
+  }, [timeframe, futureOffsetBars, clearLevelPriceLines, resetMainChartRefs, onChartReady])
 
   // Initialize chart on mount
   useEffect(() => {

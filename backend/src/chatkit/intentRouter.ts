@@ -199,8 +199,8 @@ const INTENT_SPECS: IntentSpec[] = [
   {
     id: 'alerts',
     phrases: ['set alert', 'price alert', 'notify me', 'alert me', 'what alerts do i have'],
-    requiredFunctions: ['set_alert'],
-    recommendedFunctions: ['get_alerts'],
+    requiredFunctions: [],
+    recommendedFunctions: ['get_current_price'],
   },
   {
     id: 'ticker_news',

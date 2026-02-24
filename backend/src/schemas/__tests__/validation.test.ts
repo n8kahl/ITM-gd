@@ -1,135 +1,7 @@
-import { createAlertSchema as alertSchema, alertIdSchema } from '../alertsValidation';
 import { createTradeSchema as tradeSchema, importTradesSchema as importSchema } from '../journalValidation';
 import { sendMessageSchema as messageSchema } from '../chatValidation';
 
 describe('Validation Schemas', () => {
-  describe('Alert Schemas', () => {
-    describe('createAlertSchema', () => {
-      it('should accept valid alert input', () => {
-        const validAlert = {
-          symbol: 'spx',
-          alert_type: 'price_above' as const,
-          target_value: 5500,
-        };
-
-        const result = alertSchema.safeParse(validAlert);
-        expect(result.success).toBe(true);
-        if (result.success) {
-          expect(result.data.symbol).toBe('SPX'); // Should be uppercased
-        }
-      });
-
-      it('should accept all valid alert_type values', () => {
-        const alertTypes: Array<'price_above' | 'price_below' | 'level_approach' | 'level_break' | 'volume_spike'> = [
-          'price_above',
-          'price_below',
-          'level_approach',
-          'level_break',
-          'volume_spike',
-        ];
-
-        for (const alertType of alertTypes) {
-          const alert = {
-            symbol: 'SPX',
-            alert_type: alertType,
-            target_value: 5500,
-          };
-
-          const result = alertSchema.safeParse(alert);
-          expect(result.success).toBe(true);
-        }
-      });
-
-      it('should reject invalid alert_type', () => {
-        const invalidAlert = {
-          symbol: 'SPX',
-          alert_type: 'invalid_type',
-          target_value: 5500,
-        };
-
-        const result = alertSchema.safeParse(invalidAlert);
-        expect(result.success).toBe(false);
-      });
-
-      it('should uppercase symbol', () => {
-        const alert = {
-          symbol: 'qqq',
-          alert_type: 'price_above' as const,
-          target_value: 400,
-        };
-
-        const result = alertSchema.safeParse(alert);
-        expect(result.success).toBe(true);
-        if (result.success) {
-          expect(result.data.symbol).toBe('QQQ');
-        }
-      });
-
-      it('should reject missing required field', () => {
-        const incompleteAlert = {
-          symbol: 'SPX',
-          alert_type: 'price_above',
-        };
-
-        const result = alertSchema.safeParse(incompleteAlert);
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject negative target_value', () => {
-        const invalidAlert = {
-          symbol: 'SPX',
-          alert_type: 'price_above' as const,
-          target_value: -100,
-        };
-
-        const result = alertSchema.safeParse(invalidAlert);
-        expect(result.success).toBe(false);
-      });
-
-      it('should accept optional fields', () => {
-        const alert = {
-          symbol: 'SPX',
-          alert_type: 'price_above' as const,
-          target_value: 5500,
-          notes: 'Test alert',
-          notification_channels: ['email', 'sms'],
-        };
-
-        const result = alertSchema.safeParse(alert);
-        expect(result.success).toBe(true);
-      });
-    });
-
-    describe('alertIdSchema', () => {
-      it('should accept valid UUID', () => {
-        const validId = {
-          id: '550e8400-e29b-41d4-a716-446655440000',
-        };
-
-        const result = alertIdSchema.safeParse(validId);
-        expect(result.success).toBe(true);
-      });
-
-      it('should reject invalid UUID', () => {
-        const invalidId = {
-          id: 'not-a-uuid',
-        };
-
-        const result = alertIdSchema.safeParse(invalidId);
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject malformed UUID', () => {
-        const malformedId = {
-          id: '550e8400-e29b-41d4-a716',
-        };
-
-        const result = alertIdSchema.safeParse(malformedId);
-        expect(result.success).toBe(false);
-      });
-    });
-  });
-
   describe('Trade Schemas', () => {
     describe('createTradeSchema', () => {
       it('should accept valid trade input', () => {
@@ -550,42 +422,48 @@ describe('Validation Schemas', () => {
 
   describe('Schema Type Safety', () => {
     it('should properly infer types from schemas', () => {
-      const alert = {
+      const trade = {
         symbol: 'SPX',
-        alert_type: 'price_above' as const,
-        target_value: 5500,
+        position_type: 'call' as const,
+        entry_date: '2026-01-15',
+        entry_price: 42.5,
+        quantity: 2,
       };
 
-      const result = alertSchema.safeParse(alert);
+      const result = tradeSchema.safeParse(trade);
       if (result.success) {
-        const { symbol, target_value } = result.data;
+        const { symbol, entry_price } = result.data;
         expect(typeof symbol).toBe('string');
-        expect(typeof target_value).toBe('number');
+        expect(typeof entry_price).toBe('number');
       }
     });
 
     it('should reject extra fields not in schema', () => {
-      const alertWithExtra = {
+      const tradeWithExtra = {
         symbol: 'SPX',
-        alert_type: 'price_above' as const,
-        target_value: 5500,
+        position_type: 'put' as const,
+        entry_date: '2026-01-15',
+        entry_price: 15,
+        quantity: 1,
         maliciousField: 'hack',
       };
 
-      const result = alertSchema.safeParse(alertWithExtra);
+      const result = tradeSchema.safeParse(tradeWithExtra);
       expect(result.success).toBe(true); // Zod strips unknown fields by default
     });
   });
 
   describe('Edge Cases', () => {
     it('should handle special characters in symbol', () => {
-      const alert = {
+      const trade = {
         symbol: 'BRK.B',
-        alert_type: 'price_above' as const,
-        target_value: 300,
+        position_type: 'stock' as const,
+        entry_date: '2026-01-15',
+        entry_price: 300,
+        quantity: 10,
       };
 
-      const result = alertSchema.safeParse(alert);
+      const result = tradeSchema.safeParse(trade);
       expect(result.success).toBe(true);
     });
 

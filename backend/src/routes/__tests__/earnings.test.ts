@@ -14,13 +14,6 @@ jest.mock('../../middleware/requireTier', () => ({
   requireTier: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-const mockFrom = jest.fn() as jest.Mock<any, any>;
-jest.mock('../../config/database', () => ({
-  supabase: {
-    from: (...args: any[]) => mockFrom(...args),
-  },
-}));
-
 jest.mock('../../services/earnings', () => ({
   getEarningsCalendar: jest.fn(),
   getEarningsAnalysis: jest.fn(),
@@ -39,15 +32,6 @@ app.use('/api/earnings', earningsRouter);
 describeWithSockets('Earnings Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFrom.mockReturnValue({
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            order: jest.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-        }),
-      }),
-    });
   });
 
   it('returns earnings calendar for supplied watchlist', async () => {

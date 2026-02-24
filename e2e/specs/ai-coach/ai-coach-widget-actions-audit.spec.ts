@@ -253,23 +253,6 @@ async function setupAICoachActionAuditRoutes(page: Page): Promise<string[]> {
     })
   })
 
-  await page.route('**/api/alerts**', async (route: Route) => {
-    const method = route.request().method()
-    if (method === 'POST') {
-      await fulfillJson(route, {
-        success: true,
-        alert: {
-          id: 'alert-1',
-          symbol: 'AAPL',
-          target: 203.12,
-          status: 'active',
-        },
-      })
-      return
-    }
-    await fulfillJson(route, { alerts: [] })
-  })
-
   await page.route('**/api/positions/live', async (route: Route) => {
     await fulfillJson(route, {
       positions: [],
@@ -286,18 +269,11 @@ async function setupAICoachActionAuditRoutes(page: Page): Promise<string[]> {
     })
   })
 
-  await page.route('**/api/watchlist**', async (route: Route) => {
-    await fulfillJson(route, {
-      watchlists: [],
-      defaultWatchlist: null,
-    })
-  })
-
   return capturedMessages
 }
 
 test.describe('AI Coach - widget action center audit', () => {
-  test('audits beginner + advanced prompts and verifies widget actions drive center views', async ({ page }) => {
+  test('audits beginner + advanced prompts and verifies widget actions drive chart/options/chat', async ({ page }) => {
     await authenticateAsMember(page)
     const capturedMessages = await setupAICoachActionAuditRoutes(page)
 
@@ -305,8 +281,8 @@ test.describe('AI Coach - widget action center audit', () => {
       localStorage.setItem('ai-coach-onboarding-complete', 'true')
     })
 
-    await page.goto(AI_COACH_URL)
-    await page.waitForLoadState('networkidle')
+    await page.goto(AI_COACH_URL, { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('textarea[aria-label="Message the AI coach"]').first()).toBeVisible()
 
     const chatInput = page.locator('textarea[aria-label="Message the AI coach"]').first()
     const sendButton = page.locator('button[aria-label="Send message"]').first()
@@ -344,10 +320,10 @@ test.describe('AI Coach - widget action center audit', () => {
     await expect(page.getByRole('tab', { name: 'Chart' })).toHaveAttribute('aria-selected', 'true')
 
     await currentPriceCard.getByRole('button', { name: /Set Alert/i }).first().click()
-    await expect(page.getByRole('tab', { name: 'Alerts' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tab', { name: 'Chart' })).toHaveAttribute('aria-selected', 'true')
 
     await positionCard.getByRole('button', { name: /^Analyze$/i }).first().click()
-    await expect(page.getByRole('tab', { name: 'Positions' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tab', { name: 'Chart' })).toHaveAttribute('aria-selected', 'true')
 
     await clickCardAction(page, keyLevelsCard, /^Ask AI$/i)
     await expect(
@@ -356,6 +332,8 @@ test.describe('AI Coach - widget action center audit', () => {
 
     expect(capturedMessages.some((message) => message.includes('Beginner prompt'))).toBe(true)
     expect(capturedMessages.some((message) => message.includes('Advanced prompt'))).toBe(true)
+    expect(capturedMessages.some((message) => message.includes('Set a level_approach alert for AAPL at 203.12.'))).toBe(true)
+    expect(capturedMessages.some((message) => message.includes('Analyze NVDA'))).toBe(true)
     expect(capturedMessages.some((message) => message.includes('Summarize SPX key levels'))).toBe(true)
   })
 })

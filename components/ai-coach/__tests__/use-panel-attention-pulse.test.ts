@@ -5,7 +5,7 @@ describe('resolvePanelAttentionLabel', () => {
   it('maps widget and chart events to user-facing labels', () => {
     expect(resolvePanelAttentionLabel('ai-coach-widget-chart')).toBe('Chart updated')
     expect(resolvePanelAttentionLabel('ai-coach-widget-options')).toBe('Options loaded')
-    expect(resolvePanelAttentionLabel('ai-coach-widget-alert')).toBe('Alert panel open')
+    expect(resolvePanelAttentionLabel('ai-coach-widget-alert')).toBe('Alert prompt prepared')
     expect(resolvePanelAttentionLabel('ai-coach-widget-analyze')).toBe('Analyzing position')
     expect(resolvePanelAttentionLabel('ai-coach-widget-view')).toBe('View changed')
     expect(resolvePanelAttentionLabel('ai-coach-show-chart')).toBe('Chart updated')

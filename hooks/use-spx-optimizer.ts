@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { postSPX, useSPXQuery } from '@/hooks/use-spx-api'
 
@@ -62,7 +62,7 @@ export interface SPXOptimizerDataQuality {
   gatePassed: boolean
   reasons: string[]
   warnings: string[]
-  sourceUsed: 'spx_setup_instances' | 'ai_coach_tracked_setups' | 'none' | 'unknown'
+  sourceUsed: 'spx_setup_instances' | 'none' | 'unknown'
   requestedResolution: 'second'
   resolutionUsed: 'second' | 'minute' | 'none' | 'unknown'
   fallbackSessionCount: number
@@ -236,12 +236,54 @@ interface SPXOptimizerRevertResponse {
   message: string
 }
 
+export interface SPXWinRateBacktestAnalytics {
+  dateRange: { from: string; to: string }
+  triggeredCount: number
+  resolvedCount: number
+  t1Wins: number
+  t2Wins: number
+  stopsBeforeT1: number
+  t1WinRatePct: number
+  t2WinRatePct: number
+  failureRatePct: number
+}
+
+export interface SPXWinRateBacktestSnapshot {
+  dateRange: { from: string; to: string }
+  sourceUsed: 'spx_setup_instances' | 'none'
+  setupCount: number
+  evaluatedSetupCount: number
+  skippedSetupCount: number
+  resolutionUsed: 'minute' | 'second' | 'none'
+  profitability: {
+    triggeredCount: number
+    resolvedCount: number
+    withRealizedRCount: number
+    averageRealizedR: number
+    medianRealizedR: number
+    cumulativeRealizedR: number
+    expectancyR: number
+    positiveRealizedRatePct: number
+  }
+  analytics: SPXWinRateBacktestAnalytics
+  notes: string[]
+}
+
+function getYearStartDateEt(now: Date = new Date()): string {
+  const etYear = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+  }).format(now)
+  return `${etYear}-01-01`
+}
+
 export function useSPXOptimizer() {
   const { session } = useMemberAuth()
   const [scanError, setScanError] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [revertError, setRevertError] = useState<string | null>(null)
   const [isReverting, setIsReverting] = useState(false)
+  const ytdFromEt = useMemo(() => getYearStartDateEt(), [])
 
   const scorecardQuery = useSPXQuery<SPXOptimizerScorecard>('/api/spx/analytics/optimizer/scorecard', {
     refreshInterval: 30_000,
@@ -255,6 +297,13 @@ export function useSPXOptimizer() {
     refreshInterval: 45_000,
     revalidateOnFocus: false,
   })
+  const ytdBacktestQuery = useSPXQuery<SPXWinRateBacktestSnapshot>(
+    `/api/spx/analytics/win-rate/backtest?source=spx_setup_instances&resolution=second&from=${ytdFromEt}`,
+    {
+      refreshInterval: 180_000,
+      revalidateOnFocus: false,
+    },
+  )
 
   const runScan = useCallback(async () => {
     const token = session?.access_token
@@ -311,12 +360,16 @@ export function useSPXOptimizer() {
     scorecard: scorecardQuery.data || null,
     schedule: scheduleQuery.data || null,
     history: historyQuery.data?.history || [],
+    ytdBacktest: ytdBacktestQuery.data || null,
+    ytdFromEt,
     isLoading: scorecardQuery.isLoading,
     isScheduleLoading: scheduleQuery.isLoading,
     isHistoryLoading: historyQuery.isLoading,
+    isBacktestLoading: ytdBacktestQuery.isLoading,
     error: scorecardQuery.error,
     scheduleError: scheduleQuery.error,
     historyError: historyQuery.error,
+    backtestError: ytdBacktestQuery.error,
     isScanning,
     scanError,
     isReverting,
@@ -326,5 +379,6 @@ export function useSPXOptimizer() {
     refresh: scorecardQuery.mutate,
     refreshSchedule: scheduleQuery.mutate,
     refreshHistory: historyQuery.mutate,
+    refreshBacktest: ytdBacktestQuery.mutate,
   }
 }

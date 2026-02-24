@@ -11,7 +11,7 @@ import {
   type SetupInstanceRow,
 } from './outcomeTracker';
 
-type InternalBacktestSource = 'spx_setup_instances' | 'ai_coach_tracked_setups';
+type InternalBacktestSource = 'spx_setup_instances';
 
 export type SPXWinRateBacktestSource = 'auto' | InternalBacktestSource;
 export type SPXBacktestPriceResolution = 'auto' | 'minute' | 'second';
@@ -266,10 +266,6 @@ function toEpochMs(value: string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function toSessionDate(value: string): string {
-  return toEasternTime(new Date(value)).dateStr;
-}
-
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -375,32 +371,6 @@ async function loadBacktestPauseFilters(input: {
 
 function normalizeDateInput(value: string): string {
   return value.trim().slice(0, 10);
-}
-
-function nextDate(date: string): string {
-  const base = new Date(`${date}T12:00:00.000Z`);
-  base.setUTCDate(base.getUTCDate() + 1);
-  return base.toISOString().slice(0, 10);
-}
-
-function buildLegacySetupKey(row: {
-  id: string;
-  sessionDate: string;
-  metadata: Record<string, unknown>;
-  trackedAt: string;
-}): string {
-  const detected = typeof row.metadata.detectedSetupId === 'string'
-    ? row.metadata.detectedSetupId.trim()
-    : '';
-  if (detected.length > 0) return `detected:${detected}`;
-
-  const dedupeKey = typeof row.metadata.dedupeKey === 'string'
-    ? row.metadata.dedupeKey.trim()
-    : '';
-  if (dedupeKey.length > 0) return `dedupe:${row.sessionDate}:${dedupeKey}`;
-
-  const trackedMinute = row.trackedAt.slice(0, 16);
-  return `row:${row.id}:${row.sessionDate}:${trackedMinute}`;
 }
 
 async function loadSetupsFromInstances(input: {
@@ -546,121 +516,6 @@ async function loadSetupsFromInstances(input: {
 
   return {
     setups,
-    notes,
-    tableMissing: false,
-  };
-}
-
-async function loadSetupsFromLegacyTrackedSetups(input: {
-  from: string;
-  to: string;
-}): Promise<{ setups: BacktestSetupCandidate[]; notes: string[]; tableMissing: boolean }> {
-  const startIso = `${input.from}T00:00:00.000Z`;
-  const endIso = `${nextDate(input.to)}T00:00:00.000Z`;
-  const pageSize = 500;
-  const allRows: Record<string, unknown>[] = [];
-  let page = 0;
-
-  while (true) {
-    const fromIndex = page * pageSize;
-    const toIndex = fromIndex + pageSize - 1;
-    const { data, error } = await supabase
-      .from('ai_coach_tracked_setups')
-      .select('id,symbol,setup_type,direction,tracked_at,triggered_at,opportunity_data')
-      .eq('symbol', 'SPX')
-      .gte('tracked_at', startIso)
-      .lt('tracked_at', endIso)
-      .order('tracked_at', { ascending: true })
-      .range(fromIndex, toIndex);
-
-    if (error) {
-      const tableMissing = isMissingTableError(error.message);
-      return {
-        setups: [],
-        notes: [tableMissing
-          ? 'ai_coach_tracked_setups table is not available in the connected Supabase project.'
-          : `Failed to load ai_coach_tracked_setups rows: ${error.message}`],
-        tableMissing,
-      };
-    }
-
-    const rows = (Array.isArray(data) ? data : []) as unknown as Record<string, unknown>[];
-    allRows.push(...rows);
-    if (rows.length < pageSize) break;
-    page += 1;
-  }
-
-  const deduped = new Map<string, BacktestSetupCandidate>();
-  let skipped = 0;
-
-  for (const row of allRows) {
-    const trackedAt = typeof row.tracked_at === 'string' ? row.tracked_at : null;
-    const direction = row.direction === 'bullish' || row.direction === 'bearish'
-      ? row.direction
-      : null;
-    const setupType = typeof row.setup_type === 'string' ? row.setup_type : 'unknown';
-    const rowId = typeof row.id === 'string' ? row.id : null;
-    const payload = row.opportunity_data as Record<string, unknown> | null;
-    const metadata = (payload?.metadata as Record<string, unknown> | undefined) || {};
-    const source = typeof metadata.source === 'string' ? metadata.source : '';
-
-    if (!trackedAt || !direction || !rowId || source !== 'setup_detector') {
-      skipped += 1;
-      continue;
-    }
-
-    const sessionDate = toSessionDate(trackedAt);
-    if (sessionDate < input.from || sessionDate > input.to) continue;
-
-    const suggestedTrade = payload?.suggestedTrade as Record<string, unknown> | undefined;
-    const entry = toFiniteNumber(suggestedTrade?.entry);
-    const stopLoss = toFiniteNumber(suggestedTrade?.stopLoss);
-    const target = toFiniteNumber(suggestedTrade?.target);
-
-    if (entry == null || stopLoss == null || target == null) {
-      skipped += 1;
-      continue;
-    }
-
-    const key = buildLegacySetupKey({
-      id: rowId,
-      sessionDate,
-      metadata,
-      trackedAt,
-    });
-
-    const current = deduped.get(key);
-    if (current && (toEpochMs(current.firstSeenAt) || Number.MAX_SAFE_INTEGER) <= (toEpochMs(trackedAt) || 0)) {
-      continue;
-    }
-
-    deduped.set(key, {
-      engineSetupId: key,
-      sessionDate,
-      setupType,
-      direction,
-      regime: null,
-      tier: null,
-      gateStatus: null,
-      entryLow: entry,
-      entryHigh: entry,
-      stopPrice: stopLoss,
-      target1Price: target,
-      target2Price: null,
-      firstSeenAt: trackedAt,
-      triggeredAt: typeof row.triggered_at === 'string' ? row.triggered_at : null,
-      tradeManagement: null,
-    });
-  }
-
-  const notes: string[] = [];
-  if (skipped > 0) {
-    notes.push(`Skipped ${skipped} malformed legacy setup rows during backtest setup load.`);
-  }
-  notes.push('Using legacy ai_coach_tracked_setups source; T2 is unavailable for these setups.');
-
-  return {
-    setups: Array.from(deduped.values()),
     notes,
     tableMissing: false,
   };
@@ -1149,7 +1004,6 @@ export async function runSPXWinRateBacktest(input: {
 }): Promise<SPXWinRateBacktestResult> {
   const from = normalizeDateInput(input.from);
   const to = normalizeDateInput(input.to);
-  const source = input.source || 'spx_setup_instances';
   const resolution = input.resolution || 'second';
   const includeRows = input.includeRows === true;
   const executionModel = resolveExecutionModel(input.executionModel);
@@ -1160,29 +1014,16 @@ export async function runSPXWinRateBacktest(input: {
   let skippedSetupCount = 0;
   let geometryAdjustedCount = 0;
 
-  if (source === 'auto' || source === 'spx_setup_instances') {
-    const instanceLoad = await loadSetupsFromInstances({
-      from,
-      to,
-      includeBlockedSetups: input.includeBlockedSetups,
-      includeHiddenTiers: input.includeHiddenTiers,
-      includePausedSetups: input.includePausedSetups,
-    });
-    notes.push(...instanceLoad.notes);
-
-    if (instanceLoad.setups.length > 0) {
-      selectedSource = 'spx_setup_instances';
-      setups = instanceLoad.setups;
-    } else {
-      selectedSource = 'spx_setup_instances';
-      setups = [];
-    }
-  } else {
-    const legacyLoad = await loadSetupsFromLegacyTrackedSetups({ from, to });
-    notes.push(...legacyLoad.notes);
-    selectedSource = 'ai_coach_tracked_setups';
-    setups = legacyLoad.setups;
-  }
+  const instanceLoad = await loadSetupsFromInstances({
+    from,
+    to,
+    includeBlockedSetups: input.includeBlockedSetups,
+    includeHiddenTiers: input.includeHiddenTiers,
+    includePausedSetups: input.includePausedSetups,
+  });
+  notes.push(...instanceLoad.notes);
+  selectedSource = 'spx_setup_instances';
+  setups = instanceLoad.setups;
 
   if (setups.length === 0) {
     const emptyAnalytics = summarizeSPXWinRateRows([], { from, to });

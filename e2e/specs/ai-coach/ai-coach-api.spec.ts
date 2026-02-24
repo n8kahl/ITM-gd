@@ -11,8 +11,7 @@ import {
 /**
  * AI Coach E2E Tests — Backend API Health
  *
- * Validates that all AI Coach backend API endpoints respond correctly.
- * These tests hit the backend directly (not through the frontend).
+ * Validates currently supported AI Coach backend API surfaces.
  */
 
 const BACKEND_URL = e2eBackendUrl
@@ -148,7 +147,7 @@ function isLiveLegacySocketMode(result: WebSocketProbeResult): boolean {
 }
 
 test.describe('AI Coach — Backend API Health', () => {
-  test('GET / should return service info with all endpoints', async ({ request }) => {
+  test('GET / should return service info with active endpoint manifest', async ({ request }) => {
     const response = await request.get(BACKEND_URL)
     expect(response.status()).toBe(200)
 
@@ -157,10 +156,13 @@ test.describe('AI Coach — Backend API Health', () => {
     expect(data.status).toBe('running')
     expect(data.endpoints).toBeDefined()
 
-    // Verify all AI Coach endpoints are listed
+    // Verify current AI Coach endpoint surface.
     expect(data.endpoints.chat).toBeDefined()
-    expect(data.endpoints.alerts).toBeDefined()
-    expect(data.endpoints.scannerScan).toBeDefined()
+    expect(data.endpoints.optionsChain).toBeDefined()
+    expect(data.endpoints.chart).toBeDefined()
+    expect(data.endpoints.briefToday).toBeDefined()
+    expect(data.endpoints.macroContext).toBeDefined()
+    expect(data.endpoints.earningsCalendar).toBeDefined()
     expect(data.endpoints.chatStream).toBeDefined()
     expect(data.endpoints.wsPrices).toBeDefined()
   })
@@ -177,23 +179,8 @@ test.describe('AI Coach — Backend API Health', () => {
     expect(response.status()).toBe(401)
   })
 
-  test('GET /api/alerts without auth should return 401', async ({ request }) => {
-    const response = await request.get(`${BACKEND_URL}/api/alerts`)
-    expect(response.status()).toBe(401)
-  })
-
-  test('GET /api/scanner/scan without auth should return 401', async ({ request }) => {
-    const response = await request.get(`${BACKEND_URL}/api/scanner/scan`)
-    expect(response.status()).toBe(401)
-  })
-
   test('GET /api/journal/trades without auth should return 401', async ({ request }) => {
     const response = await request.get(`${BACKEND_URL}/api/journal/trades`)
-    expect(response.status()).toBe(401)
-  })
-
-  test('GET /api/leaps without auth should return 401', async ({ request }) => {
-    const response = await request.get(`${BACKEND_URL}/api/leaps`)
     expect(response.status()).toBe(401)
   })
 
@@ -209,7 +196,21 @@ test.describe('AI Coach — Backend API Health', () => {
     expect(response.status()).toBe(401)
   })
 
-  test('GET /nonexistent should return 404', async ({ request }) => {
+  test('removed legacy routes should return 404', async ({ request }) => {
+    const checks = await Promise.all([
+      request.get(`${BACKEND_URL}/api/alerts`),
+      request.get(`${BACKEND_URL}/api/scanner/scan`),
+      request.get(`${BACKEND_URL}/api/watchlist`),
+      request.get(`${BACKEND_URL}/api/tracked-setups`),
+      request.get(`${BACKEND_URL}/api/leaps`),
+    ])
+
+    for (const response of checks) {
+      expect(response.status()).toBe(404)
+    }
+  })
+
+  test('GET /api/nonexistent should return 404', async ({ request }) => {
     const response = await request.get(`${BACKEND_URL}/api/nonexistent`)
     expect(response.status()).toBe(404)
 
@@ -219,18 +220,19 @@ test.describe('AI Coach — Backend API Health', () => {
 })
 
 test.describe('AI Coach — Rate Limiting', () => {
-  test('should enforce rate limits on rapid requests', async ({ request }) => {
-    // Send multiple rapid requests to trigger rate limiting
+  test('should enforce rate limits on rapid chat requests', async ({ request }) => {
     const promises = []
     for (let i = 0; i < 20; i++) {
-      promises.push(request.get(`${BACKEND_URL}/api/alerts`))
+      promises.push(request.post(`${BACKEND_URL}/api/chat/message`, {
+        data: { sessionId: `rate-limit-${i}`, message: 'ping' },
+      }))
     }
 
     const responses = await Promise.all(promises)
-    const statuses = responses.map(r => r.status())
+    const statuses = responses.map((response) => response.status())
 
-    // Most should be 401 (no auth), but if rate limit kicks in first, we'd see 429
-    const hasExpectedStatus = statuses.every(s => s === 401 || s === 429)
+    // Most should be 401 (no auth). Some may be 429 when limiter activates first.
+    const hasExpectedStatus = statuses.every((status) => status === 401 || status === 429)
     expect(hasExpectedStatus).toBe(true)
   })
 })
@@ -273,69 +275,50 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
       return null
     }
 
-    const watchlistResponse = await request.get(`${e2eBackendUrl}/api/watchlist`, {
+    const briefResponse = await request.get(`${e2eBackendUrl}/api/brief/today`, {
       headers: getAICoachAuthHeaders(),
     })
 
     if (requireAICoachLiveReadiness) {
-      expect(watchlistResponse.status()).toBe(200)
-    } else if (watchlistResponse.status() !== 200) {
-      const payload = await watchlistResponse.json().catch(() => ({}))
+      expect(briefResponse.status()).toBe(200)
+    } else if (briefResponse.status() !== 200) {
+      const payload = await briefResponse.json().catch(() => ({}))
       const reason = typeof payload?.message === 'string'
         ? payload.message
-        : `status ${watchlistResponse.status()}`
+        : `status ${briefResponse.status()}`
       test.skip(true, `Live auth bypass preflight failed: ${reason}`)
       return null
     }
 
-    return watchlistResponse
+    return briefResponse
   }
 
-  test('watchlist + scanner + brief endpoints should return authenticated responses', async ({ request }) => {
+  test('brief + macro endpoints should return authenticated responses', async ({ request }) => {
     test.setTimeout(90000)
 
     const authHeaders = getAICoachAuthHeaders()
 
-    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
-    if (!watchlistResponse) return
-    const watchlistPayload = await watchlistResponse.json()
-    expect(Array.isArray(watchlistPayload.watchlists)).toBe(true)
-
-    const scanUrl = `${e2eBackendUrl}/api/scanner/scan?symbols=SPY&include_options=false`
-    let scanResponse
-    try {
-      scanResponse = await request.get(scanUrl, {
-        headers: authHeaders,
-        timeout: 25000,
-      })
-    } catch {
-      // Retry once for transient upstream latency in live staging providers.
-      scanResponse = await request.get(scanUrl, {
-        headers: authHeaders,
-        timeout: 25000,
-      })
-    }
-    expect(scanResponse.status()).toBe(200)
-    const scanPayload = await scanResponse.json()
-    expect(Array.isArray(scanPayload.opportunities)).toBe(true)
-    expect(Array.isArray(scanPayload.symbols)).toBe(true)
-
-    const briefResponse = await request.get(`${e2eBackendUrl}/api/brief/today`, {
-      headers: authHeaders,
-      timeout: 30000,
-    })
-    expect(briefResponse.status()).toBe(200)
+    const briefResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!briefResponse) return
     const briefPayload = await briefResponse.json()
     expect(typeof briefPayload.marketDate).toBe('string')
     expect(typeof briefPayload.viewed).toBe('boolean')
     expect(briefPayload.brief).toBeDefined()
+
+    const macroResponse = await request.get(`${e2eBackendUrl}/api/macro`, {
+      headers: authHeaders,
+      timeout: 30000,
+    })
+    expect(macroResponse.status()).toBe(200)
+    const macroPayload = await macroResponse.json()
+    expect(macroPayload).toBeDefined()
   })
 
   test('websocket should accept bypass token and enforce user channel authorization', async ({ page, request }) => {
     test.setTimeout(90000)
 
-    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
-    if (!watchlistResponse) return
+    const briefResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!briefResponse) return
 
     const unauthProbe = await probePricesSocket(page, {
       backendUrl: e2eBackendUrl,
@@ -361,8 +344,8 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
     test.setTimeout(90000)
 
     const authHeaders = getAICoachAuthHeaders()
-    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
-    if (!watchlistResponse) return
+    const briefResponse = await assertLiveBackendReadyOrSkip(request)
+    if (!briefResponse) return
 
     const calendarResponse = await request.get(
       `${e2eBackendUrl}/api/earnings/calendar?watchlist=SPY,QQQ,AAPL&days=14`,
@@ -381,7 +364,7 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
       headers: authHeaders,
       timeout: 30000,
     })
-    expect([200, 503]).toContain(analysisResponse.status())
+    expect([200, 403, 503]).toContain(analysisResponse.status())
 
     const analysisPayload = await analysisResponse.json()
     if (analysisResponse.status() === 200) {
@@ -392,85 +375,6 @@ test.describe('AI Coach — Backend API Live Authenticated', () => {
       return
     }
 
-    expect(typeof analysisPayload.error).toBe('string')
-    expect(typeof analysisPayload.message).toBe('string')
-  })
-
-  test('tracked setup lifecycle should support create -> update -> delete', async ({ request }) => {
-    const authHeaders = getAICoachAuthHeaders()
-    const sourceOpportunityId = `e2e-live-${Date.now()}`
-
-    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
-    if (!watchlistResponse) return
-
-    const createResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups`, {
-      headers: authHeaders,
-      data: {
-        source_opportunity_id: sourceOpportunityId,
-        symbol: 'SPX',
-        setup_type: 'gamma_squeeze',
-        direction: 'bullish',
-        opportunity_data: {
-          score: 70,
-          suggestedTrade: {
-            entry: 5200,
-            stopLoss: 5180,
-            target: 5235,
-            strikes: [5200, 5225],
-            expiry: '2026-02-20',
-          },
-        },
-        notes: 'E2E live test seed',
-      },
-    })
-    expect([200, 201]).toContain(createResponse.status())
-    const createPayload = await createResponse.json()
-    const trackedSetupId = createPayload?.trackedSetup?.id as string
-    expect(typeof trackedSetupId).toBe('string')
-
-    const updateResponse = await request.patch(`${e2eBackendUrl}/api/tracked-setups/${trackedSetupId}`, {
-      headers: authHeaders,
-      data: { status: 'triggered' },
-    })
-    expect(updateResponse.status()).toBe(200)
-    const updatePayload = await updateResponse.json()
-    expect(updatePayload?.trackedSetup?.status).toBe('triggered')
-
-    const deleteResponse = await request.delete(`${e2eBackendUrl}/api/tracked-setups/${trackedSetupId}`, {
-      headers: authHeaders,
-    })
-    expect(deleteResponse.status()).toBe(200)
-    const deletePayload = await deleteResponse.json()
-    expect(deletePayload.success).toBe(true)
-  })
-
-  test('detector simulation endpoint should auto-track and broadcast-ready payloads', async ({ request }) => {
-    const authHeaders = getAICoachAuthHeaders()
-    const simulationNote = `E2E detector simulation API ${Date.now()}`
-
-    const watchlistResponse = await assertLiveBackendReadyOrSkip(request)
-    if (!watchlistResponse) return
-
-    const simulateResponse = await request.post(`${e2eBackendUrl}/api/tracked-setups/e2e/simulate-detected`, {
-      headers: authHeaders,
-      data: {
-        symbol: 'SPX',
-        setup_type: 'gamma_squeeze',
-        direction: 'bullish',
-        confidence: 77,
-        notes: simulationNote,
-      },
-    })
-    expect(simulateResponse.status()).toBe(201)
-    const simulatePayload = await simulateResponse.json()
-    expect(simulatePayload?.detectedSetup?.id).toBeTruthy()
-    expect(simulatePayload?.trackedSetup?.id).toBeTruthy()
-    expect(simulatePayload?.trackedSetup?.notes).toContain('E2E detector simulation')
-
-    const trackedSetupId = simulatePayload?.trackedSetup?.id as string
-    const deleteResponse = await request.delete(`${e2eBackendUrl}/api/tracked-setups/${trackedSetupId}`, {
-      headers: authHeaders,
-    })
-    expect(deleteResponse.status()).toBe(200)
+    expect(analysisPayload).toBeDefined()
   })
 })

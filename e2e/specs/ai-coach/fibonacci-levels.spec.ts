@@ -106,8 +106,8 @@ test.describe('AI Coach - Fibonacci levels', () => {
       localStorage.setItem('ai-coach-onboarding-complete', 'true')
     })
 
-    await page.goto(AI_COACH_URL)
-    await page.waitForLoadState('networkidle')
+    await page.goto(AI_COACH_URL, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('tab', { name: 'Chart' })).toBeVisible()
 
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent('ai-coach-show-chart', {

@@ -57,39 +57,35 @@ describe('resolveMobileSheetFromWidgetEvent', () => {
     })
   })
 
-  it('maps alert events to alerts sheet payload', () => {
+  it('ignores alert events (chat-only flow)', () => {
     const result = resolveMobileSheetFromWidgetEvent('ai-coach-widget-alert', {
       symbol: 'QQQ',
       alertType: 'price_above',
       price: 530,
     })
 
-    expect(result).toMatchObject({
-      view: 'alerts',
-      symbol: 'QQQ',
-      params: { alertType: 'price_above', price: 530 },
-    })
+    expect(result).toBeNull()
   })
 
-  it('maps analyze events to position sheet payload', () => {
+  it('maps analyze events to chart sheet payload', () => {
     const result = resolveMobileSheetFromWidgetEvent('ai-coach-widget-analyze', {
       setup: { symbol: 'SPX', direction: 'bullish' },
     })
 
     expect(result).toMatchObject({
-      view: 'position',
+      view: 'chart',
       symbol: 'SPX',
     })
   })
 
-  it('maps view events and returns null when view is missing', () => {
+  it('maps legacy view requests to supported mobile sheets', () => {
     const valid = resolveMobileSheetFromWidgetEvent('ai-coach-widget-view', {
       view: 'brief',
       symbol: 'SPX',
     })
     const invalid = resolveMobileSheetFromWidgetEvent('ai-coach-widget-view', { symbol: 'SPX' })
 
-    expect(valid).toMatchObject({ view: 'brief', symbol: 'SPX' })
-    expect(invalid).toBeNull()
+    expect(valid).toMatchObject({ view: 'chart', symbol: 'SPX' })
+    expect(invalid).toMatchObject({ view: 'chart', symbol: 'SPX' })
   })
 })

@@ -31,7 +31,7 @@ export type ScreenshotActionId =
   | 'log_trade'
   | 'analyze_next_steps'
   | 'create_setup'
-  | 'set_alert'
+  | 'suggest_alerts'
   | 'review_journal_context';
 
 export interface SuggestedAction {
@@ -73,7 +73,7 @@ Choose 2-4 suggested action IDs based on what the user should do next:
 - log_trade
 - analyze_next_steps
 - create_setup
-- set_alert
+- suggest_alerts
 - review_journal_context
 
 Respond ONLY with valid JSON in this exact format:
@@ -106,9 +106,9 @@ const ACTION_DETAILS: Record<ScreenshotActionId, { label: string; description: s
     label: 'Create Setup',
     description: 'Convert this into a structured setup with entry/stop/target.',
   },
-  set_alert: {
-    label: 'Set Alert',
-    description: 'Create alerts around key prices or strikes from this screenshot.',
+  suggest_alerts: {
+    label: 'Suggest Alerts',
+    description: 'Generate practical alert levels around key prices or strikes from this screenshot.',
   },
   review_journal_context: {
     label: 'Review Journal Context',
@@ -142,9 +142,9 @@ function defaultActions(intent: ScreenshotIntent, positions: ExtractedPosition[]
     return ['add_to_monitor', 'log_trade', 'analyze_next_steps'];
   }
 
-  if (intent === 'options_chain') return ['create_setup', 'set_alert', 'analyze_next_steps'];
+  if (intent === 'options_chain') return ['create_setup', 'suggest_alerts', 'analyze_next_steps'];
   if (intent === 'pnl_card') return ['log_trade', 'analyze_next_steps', 'review_journal_context'];
-  if (intent === 'chart') return ['create_setup', 'set_alert', 'analyze_next_steps'];
+  if (intent === 'chart') return ['create_setup', 'suggest_alerts', 'analyze_next_steps'];
   return ['analyze_next_steps'];
 }
 
@@ -155,7 +155,12 @@ function normalizeActions(
 ): SuggestedAction[] {
   const parsedIds = Array.isArray(suggestedActions)
     ? suggestedActions
-      .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+      .map((value) => {
+        if (typeof value !== 'string') return '';
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'set_alert') return 'suggest_alerts';
+        return normalized;
+      })
       .filter((value): value is ScreenshotActionId => ALLOWED_ACTIONS.has(value as ScreenshotActionId))
     : [];
 

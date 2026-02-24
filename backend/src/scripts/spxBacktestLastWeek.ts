@@ -28,9 +28,7 @@ async function main() {
   const resolutionArg = (process.argv[3] || 'second').trim().toLowerCase();
   const source: SPXWinRateBacktestSource = sourceArg === 'instances'
     ? 'spx_setup_instances'
-    : sourceArg === 'legacy'
-      ? 'ai_coach_tracked_setups'
-      : 'auto';
+    : 'auto';
   const resolution: SPXBacktestPriceResolution = resolutionArg === 'second'
     ? 'second'
     : resolutionArg === 'minute'

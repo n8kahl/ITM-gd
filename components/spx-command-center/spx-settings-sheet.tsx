@@ -101,12 +101,16 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
     scorecard,
     schedule,
     history,
+    ytdBacktest,
+    ytdFromEt,
     isLoading,
     isScheduleLoading,
     isHistoryLoading,
+    isBacktestLoading,
     error,
     scheduleError,
     historyError,
+    backtestError,
     isScanning,
     scanError,
     isReverting,
@@ -116,11 +120,12 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
     refresh,
     refreshSchedule,
     refreshHistory,
+    refreshBacktest,
   } = useSPXOptimizer()
 
   const loadError = useMemo(
-    () => summarizeError(error) || summarizeError(scheduleError) || summarizeError(historyError),
-    [error, scheduleError, historyError],
+    () => summarizeError(error) || summarizeError(scheduleError) || summarizeError(historyError) || summarizeError(backtestError),
+    [error, scheduleError, historyError, backtestError],
   )
 
   const strategyRows = useMemo(() => {
@@ -206,8 +211,8 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
   }, [runScan])
 
   const handleRefresh = useCallback(async () => {
-    await Promise.all([refresh(), refreshSchedule(), refreshHistory()])
-  }, [refresh, refreshHistory, refreshSchedule])
+    await Promise.all([refresh(), refreshSchedule(), refreshHistory(), refreshBacktest()])
+  }, [refresh, refreshBacktest, refreshHistory, refreshSchedule])
 
   const handleRevert = useCallback(async (historyId: number) => {
     const approved = window.confirm(`Revert optimizer profile using audit entry #${historyId}?`)
@@ -362,6 +367,63 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
           </aside>
 
           <main className="max-h-[calc(100vh-260px)] space-y-3 overflow-y-auto pr-1">
+            <section className="rounded-xl border border-cyan-300/20 bg-cyan-500/[0.06] p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-[0.1em] text-cyan-100">Current YTD Accuracy (Live Backtest)</p>
+                <p className="text-[10px] font-mono text-cyan-100/80">
+                  {ytdBacktest ? `${ytdBacktest.dateRange.from} → ${ytdBacktest.dateRange.to}` : `${ytdFromEt} → --`}
+                </p>
+              </div>
+              {(isBacktestLoading && !ytdBacktest) ? (
+                <p className="text-[11px] text-cyan-50/85">Loading YTD backtest…</p>
+              ) : ytdBacktest ? (
+                <div className="space-y-2 text-[11px] text-cyan-50/90">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded border border-cyan-200/20 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-cyan-100/65">T1 Win Rate</p>
+                      <p className="font-mono">{formatPct(ytdBacktest.analytics.t1WinRatePct)}</p>
+                    </div>
+                    <div className="rounded border border-cyan-200/20 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-cyan-100/65">T2 Win Rate</p>
+                      <p className="font-mono">{formatPct(ytdBacktest.analytics.t2WinRatePct)}</p>
+                    </div>
+                    <div className="rounded border border-cyan-200/20 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-cyan-100/65">Expectancy</p>
+                      <p className="font-mono">{formatR(ytdBacktest.profitability.expectancyR)}</p>
+                    </div>
+                    <div className="rounded border border-cyan-200/20 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-cyan-100/65">Triggered / Resolved</p>
+                      <p className="font-mono">{ytdBacktest.analytics.triggeredCount} / {ytdBacktest.analytics.resolvedCount}</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 xl:grid-cols-2">
+                    <div className="rounded border border-cyan-200/20 bg-black/25 px-2 py-1.5 text-[10px]">
+                      <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5">
+                        <p>Failure rate</p>
+                        <p className="font-mono">{formatPct(ytdBacktest.analytics.failureRatePct)}</p>
+                        <p>Cumulative realized</p>
+                        <p className="font-mono">{formatR(ytdBacktest.profitability.cumulativeRealizedR)}</p>
+                        <p>Positive realized rate</p>
+                        <p className="font-mono">{formatPct(ytdBacktest.profitability.positiveRealizedRatePct)}</p>
+                      </div>
+                    </div>
+                    <div className="rounded border border-cyan-200/20 bg-black/25 px-2 py-1.5 text-[10px]">
+                      <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5">
+                        <p>Source</p>
+                        <p className="font-mono">{ytdBacktest.sourceUsed}</p>
+                        <p>Resolution</p>
+                        <p className="font-mono">{ytdBacktest.resolutionUsed}</p>
+                        <p>Setups evaluated</p>
+                        <p className="font-mono">{ytdBacktest.evaluatedSetupCount} / {ytdBacktest.setupCount}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-cyan-50/80">YTD backtest not available yet.</p>
+              )}
+            </section>
+
             <section className="rounded-xl border border-white/12 bg-black/30 p-3">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-[10px] uppercase tracking-[0.1em] text-white/58">Last Optimization Snapshot</p>

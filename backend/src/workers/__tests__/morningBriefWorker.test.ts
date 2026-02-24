@@ -63,16 +63,9 @@ describe('Morning Brief Worker', () => {
   });
 
   it('generates missing briefs and skips existing users', async () => {
-    const watchlistsSelect = jest.fn().mockReturnValue({
-      limit: jest.fn().mockResolvedValue({
-        data: [{ user_id: 'user-1' }, { user_id: 'user-2' }],
-        error: null,
-      }),
-    });
-
     const usersSelect = jest.fn().mockReturnValue({
       limit: jest.fn().mockResolvedValue({
-        data: [{ user_id: 'user-2' }, { user_id: 'user-3' }],
+        data: [{ user_id: 'user-1' }, { user_id: 'user-2' }, { user_id: 'user-3' }],
         error: null,
       }),
     });
@@ -87,7 +80,6 @@ describe('Morning Brief Worker', () => {
     const briefsInsert = jest.fn().mockResolvedValue({ error: null });
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'ai_coach_watchlists') return { select: watchlistsSelect };
       if (table === 'ai_coach_users') return { select: usersSelect };
       if (table === 'ai_coach_morning_briefs') return { select: briefsSelect, insert: briefsInsert };
       throw new Error(`Unexpected table ${table}`);
@@ -110,16 +102,9 @@ describe('Morning Brief Worker', () => {
   });
 
   it('treats duplicate insert as skipped', async () => {
-    const watchlistsSelect = jest.fn().mockReturnValue({
-      limit: jest.fn().mockResolvedValue({
-        data: [{ user_id: 'user-1' }],
-        error: null,
-      }),
-    });
-
     const usersSelect = jest.fn().mockReturnValue({
       limit: jest.fn().mockResolvedValue({
-        data: [],
+        data: [{ user_id: 'user-1' }],
         error: null,
       }),
     });
@@ -136,7 +121,6 @@ describe('Morning Brief Worker', () => {
     });
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'ai_coach_watchlists') return { select: watchlistsSelect };
       if (table === 'ai_coach_users') return { select: usersSelect };
       if (table === 'ai_coach_morning_briefs') return { select: briefsSelect, insert: briefsInsert };
       throw new Error(`Unexpected table ${table}`);

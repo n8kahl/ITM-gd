@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, RefreshCw, Target } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowDownRight, ArrowUpRight, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getChartData, scanOpportunities, type ScanOpportunity } from '@/lib/api/ai-coach'
+import { getChartData } from '@/lib/api/ai-coach'
 
 interface DesktopContextStripProps {
   accessToken?: string
@@ -52,21 +52,14 @@ export function DesktopContextStrip({ accessToken, onSendPrompt }: DesktopContex
     changePct: null,
     isLoading: true,
   })
-  const [topSetup, setTopSetup] = useState<{
-    opp: ScanOpportunity | null
-    isLoading: boolean
-  }>({
-    opp: null,
-    isLoading: true,
-  })
-  const [tick, setTick] = useState(0)
+  const [, setTick] = useState(0)
 
   useEffect(() => {
     const interval = window.setInterval(() => setTick((value) => value + 1), 60_000)
     return () => window.clearInterval(interval)
   }, [])
 
-  const status = useMemo(() => getMarketStatus(), [tick])
+  const status = getMarketStatus()
 
   const loadSPX = useCallback(async () => {
     if (!accessToken) return
@@ -95,23 +88,6 @@ export function DesktopContextStrip({ accessToken, onSendPrompt }: DesktopContex
     }
   }, [accessToken])
 
-  const loadTopSetup = useCallback(async () => {
-    if (!accessToken) return
-    try {
-      const scan = await scanOpportunities(accessToken, {
-        symbols: ['SPX', 'NDX', 'QQQ', 'SPY'],
-        includeOptions: true,
-      })
-      const best = [...scan.opportunities].sort((a, b) => b.score - a.score)[0] ?? null
-      setTopSetup({
-        opp: best,
-        isLoading: false,
-      })
-    } catch {
-      setTopSetup((prev) => ({ ...prev, isLoading: false }))
-    }
-  }, [accessToken])
-
   useEffect(() => {
     if (!accessToken) return
     void loadSPX()
@@ -120,15 +96,6 @@ export function DesktopContextStrip({ accessToken, onSendPrompt }: DesktopContex
     }, 60_000)
     return () => window.clearInterval(interval)
   }, [accessToken, loadSPX])
-
-  useEffect(() => {
-    if (!accessToken) return
-    void loadTopSetup()
-    const interval = window.setInterval(() => {
-      void loadTopSetup()
-    }, 120_000)
-    return () => window.clearInterval(interval)
-  }, [accessToken, loadTopSetup])
 
   const isPositive = (spx.change ?? 0) >= 0
 
@@ -160,34 +127,15 @@ export function DesktopContextStrip({ accessToken, onSendPrompt }: DesktopContex
 
       <div className="w-px h-4 bg-white/10" />
 
-      {topSetup.isLoading ? (
-        <span className="text-[10px] text-white/30">Scanning...</span>
-      ) : topSetup.opp ? (
-        <button
-          type="button"
-          onClick={() => {
-            onSendPrompt?.(
-              `Expand this setup into a full trade plan: ${topSetup.opp?.symbol} ${topSetup.opp?.setupType} (${topSetup.opp?.direction}). Include entry, stop, target, and invalidation.`,
-            )
-          }}
-          className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/60 hover:text-white hover:border-emerald-500/25 transition-colors"
-        >
-          <Target className="w-3 h-3 text-emerald-400" />
-          {topSetup.opp.symbol} · {topSetup.opp.setupType}
-          <span
-            className={cn(
-              'rounded px-1 py-0.5',
-              topSetup.opp.direction !== 'bearish'
-                ? 'text-emerald-300 bg-emerald-500/15'
-                : 'text-red-300 bg-red-500/15',
-            )}
-          >
-            {Math.round(topSetup.opp.score)}
-          </span>
-        </button>
-      ) : (
-        <span className="text-[10px] text-white/30">No setup found</span>
-      )}
+      <button
+        type="button"
+        onClick={() => {
+          onSendPrompt?.('Give me the full SPX game plan: key levels, GEX profile, expected move, and what setups to watch today. Show the chart.')
+        }}
+        className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/60 hover:text-white hover:border-emerald-500/25 transition-colors"
+      >
+        SPX Game Plan
+      </button>
 
       <div className="flex-1" />
 
@@ -195,7 +143,6 @@ export function DesktopContextStrip({ accessToken, onSendPrompt }: DesktopContex
         type="button"
         onClick={() => {
           void loadSPX()
-          void loadTopSetup()
         }}
         className="text-white/30 hover:text-white/60 transition-colors"
         aria-label="Refresh context strip"

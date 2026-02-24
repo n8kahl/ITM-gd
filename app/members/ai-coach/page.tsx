@@ -23,7 +23,6 @@ import { ChatMessageBubble, TypingIndicator } from '@/components/ai-coach/chat-m
 import { ChatImageUpload, ChatDropOverlay } from '@/components/ai-coach/chat-image-upload'
 import { CenterPanel, type ChartRequest, type CenterView } from '@/components/ai-coach/center-panel'
 import { MobileToolSheet } from '@/components/ai-coach/mobile-tool-sheet'
-import { MobileQuickAccessBar } from '@/components/ai-coach/mobile-quick-access-bar'
 import { MiniChatOverlay } from '@/components/ai-coach/mini-chat-overlay'
 import { AICoachErrorBoundary } from '@/components/ai-coach/error-boundary'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -35,7 +34,6 @@ import {
   type ScreenshotActionId,
   type ScreenshotSuggestedAction,
 } from '@/lib/api/ai-coach'
-import { syncExtractedPositionsToMonitor } from '@/lib/ai-coach/screenshot-monitoring'
 import { useMobileToolSheet, type MobileToolView } from '@/hooks/use-mobile-tool-sheet'
 import { usePanelAttentionPulse } from '@/hooks/use-panel-attention-pulse'
 import { Button } from '@/components/ui/button'
@@ -149,6 +147,7 @@ export default function AICoachPage() {
       return
     }
 
+    if (view !== 'options' && view !== 'journal') return
     openSheet(view)
   }, [chat.chartRequest?.symbol, chat.chartRequest?.timeframe, openSheet])
 
@@ -545,8 +544,6 @@ function ChatArea({
     : usageRatio >= 0.8
       ? 'bg-amber-400'
       : 'bg-emerald-400'
-  const hasActiveChart = messages.some((message) => Boolean(message.chartRequest))
-
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
     const text = inputValue.trim()
@@ -735,7 +732,7 @@ function ChatArea({
       .join(', ')
   }, [])
 
-  const openWorkflowView = useCallback((view: 'tracked' | 'journal' | 'position') => {
+  const openWorkflowView = useCallback((view: 'chart' | 'journal') => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ai-coach-widget-view', {
         detail: { view, label: 'Screenshot next step' },
@@ -747,43 +744,19 @@ function ChatArea({
     }
   }, [onOpenSheet])
 
-  const addPositionsToMonitor = useCallback(async (positions: ExtractedPosition[]) => {
-    if (positions.length === 0) {
-      onAppendAssistantMessage('I did not detect any positions to add. Upload a clearer screenshot and try again.')
-      return
-    }
-
-    if (!session?.access_token) {
-      onAppendAssistantMessage('I detected positions, but I could not save them because your session expired. Refresh and try again.')
-      return
-    }
-
-    try {
-      const result = await syncExtractedPositionsToMonitor(positions, session.access_token)
-      const segments: string[] = []
-      if (result.added > 0) segments.push(`Added ${result.added} position${result.added === 1 ? '' : 's'} to monitoring.`)
-      if (result.duplicate > 0) segments.push(`${result.duplicate} already existed.`)
-      if (result.failed > 0) segments.push(`${result.failed} failed to save.`)
-      onAppendAssistantMessage(
-        segments.length > 0
-          ? `${segments.join(' ')} Opened Tracked Setups so you can manage them now.`
-          : 'No positions were added to monitoring.',
-      )
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      onAppendAssistantMessage(`I could not add these positions to monitoring: ${message}`)
-    }
-  }, [onAppendAssistantMessage, session?.access_token])
-
-  const handleScreenshotAction = useCallback((actionId: ScreenshotActionId) => {
+  const handleScreenshotAction = useCallback((actionId: ScreenshotActionId | 'set_alert') => {
     if (!screenshotActions) return
     Analytics.trackAICoachAction(`action_chip_${actionId}`)
     const summary = compactPositionSummary(screenshotActions.positions)
 
     switch (actionId) {
       case 'add_to_monitor':
-        openWorkflowView('tracked')
-        void addPositionsToMonitor(screenshotActions.positions)
+        openWorkflowView('journal')
+        onSendMessage(
+          summary
+            ? `Build a monitoring checklist for these screenshot positions and include alert levels, invalidation, and next-step management: ${summary}`
+            : 'Build a monitoring checklist from this screenshot with alert levels, invalidation, and next-step management.',
+        )
         break
       case 'log_trade':
         openWorkflowView('journal')
@@ -794,7 +767,7 @@ function ChatArea({
         )
         break
       case 'analyze_next_steps':
-        openWorkflowView('position')
+        openWorkflowView('chart')
         onSendMessage(
           summary
             ? `Analyze next steps for these positions with clear risk-managed actions: ${summary}`
@@ -805,6 +778,7 @@ function ChatArea({
         onSendMessage('Create a structured setup from this screenshot with entry, stop, target, and invalidation.')
         break
       case 'set_alert':
+      case 'suggest_alerts':
         onSendMessage('Create practical alert levels from this screenshot and explain each trigger.')
         break
       case 'review_journal_context':
@@ -814,7 +788,7 @@ function ChatArea({
     }
 
     setScreenshotActions(null)
-  }, [addPositionsToMonitor, compactPositionSummary, onSendMessage, openWorkflowView, screenshotActions])
+  }, [compactPositionSummary, onSendMessage, openWorkflowView, screenshotActions])
 
   return (
     <div className="flex h-full bg-[#0A0A0B]" ref={chatContainerRef}>
@@ -1070,13 +1044,6 @@ function ChatArea({
                 ))}
               </div>
             </div>
-          )}
-
-          {onOpenSheet && (
-            <MobileQuickAccessBar
-              onOpenSheet={onOpenSheet}
-              hasActiveChart={hasActiveChart}
-            />
           )}
 
           <form onSubmit={handleSubmit} className="flex items-end gap-2">

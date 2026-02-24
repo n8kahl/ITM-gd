@@ -708,7 +708,12 @@ function buildHistoricalIndicatorContext(input: {
   } | null;
   avgRecentVolume: number | null;
 } | null {
-  const usable = input.bars.filter((bar) => Number.isFinite(bar.c) && bar.c > 0);
+  const usable = input.bars
+    .filter((bar) => Number.isFinite(bar.c) && bar.c > 0)
+    .map((bar) => ({
+      ...bar,
+      v: Number.isFinite(bar.v) && bar.v > 0 ? bar.v : 0,
+    }));
   if (usable.length < 8) return null;
 
   const closes = usable.map((bar) => bar.c);
@@ -745,18 +750,19 @@ function buildHistoricalIndicatorContext(input: {
   const vwapPosition = vwapPrice != null ? analyzeVWAPPosition(lastClose, vwapPrice) : null;
   const latestBarRaw = usable[usable.length - 1];
   const priorBarRaw = usable.length > 1 ? usable[usable.length - 2] : null;
-  const toTriggerBar = (bar: { t: number; o?: number; h?: number; l?: number; c: number; v: number } | null) => {
+  const toTriggerBar = (bar: { t: number; o?: number; h?: number; l?: number; c: number; v?: number } | null) => {
     if (!bar) return null;
     const open = typeof bar.o === 'number' && Number.isFinite(bar.o) ? bar.o : bar.c;
     const high = typeof bar.h === 'number' && Number.isFinite(bar.h) ? bar.h : Math.max(open, bar.c);
     const low = typeof bar.l === 'number' && Number.isFinite(bar.l) ? bar.l : Math.min(open, bar.c);
+    const volume = Number.isFinite(bar.v) && (bar.v ?? 0) > 0 ? (bar.v as number) : 0;
     return {
       t: bar.t,
       o: round(open, 4),
       h: round(high, 4),
       l: round(low, 4),
       c: round(bar.c, 4),
-      v: Math.max(0, round(bar.v, 2)),
+      v: Math.max(0, round(volume, 2)),
     };
   };
   const recentVolumeBars = usable.slice(-20);
