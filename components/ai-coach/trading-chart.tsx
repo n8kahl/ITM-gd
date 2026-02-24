@@ -87,6 +87,7 @@ export interface PositionOverlay {
   entry: number
   stop?: number
   target?: number
+  targets?: number[]
   label?: string
 }
 
@@ -1196,6 +1197,21 @@ export function TradingChart({
           lineStyle: 'dashed',
           group: 'position',
         })
+      }
+
+      if (Array.isArray(position.targets) && position.targets.length > 0) {
+        const targetLabelOffset = typeof position.target === 'number' ? 2 : 1
+        for (const [index, target] of position.targets.entries()) {
+          if (typeof target !== 'number' || !Number.isFinite(target)) continue
+          derivedLevels.push({
+            price: target,
+            label: `${label} Target ${index + targetLabelOffset}`,
+            color: CHART_COLORS.target,
+            lineWidth: 1,
+            lineStyle: 'dashed',
+            group: 'position',
+          })
+        }
       }
     }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { FileText, ImagePlus, X, Upload, Loader2 } from 'lucide-react'
+import { FileText, Camera, X, Upload, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 
@@ -93,15 +93,21 @@ export function ChatImageUpload({
         onClick={() => fileInputRef.current?.click()}
         disabled={isSending}
         className={cn(
-          'p-2 rounded-lg transition-all',
+          'flex h-[44px] items-center gap-2 rounded-xl border px-3 transition-all',
           stagedPreview || stagedCsvName
-            ? 'text-emerald-400 bg-emerald-500/10'
-            : 'text-white/30 hover:text-white/60 hover:bg-white/5',
+            ? 'border-emerald-400/45 bg-emerald-500/20 text-emerald-200 shadow-[0_10px_24px_rgba(16,185,129,0.2)]'
+            : 'border-emerald-500/30 bg-[linear-gradient(180deg,rgba(16,185,129,0.25),rgba(16,185,129,0.08))] text-emerald-100 hover:border-emerald-400/50 hover:bg-[linear-gradient(180deg,rgba(16,185,129,0.33),rgba(16,185,129,0.12))]',
           isSending && 'opacity-50 cursor-not-allowed'
         )}
         title="Upload screenshot or CSV"
       >
-        <ImagePlus className="w-5 h-5" />
+        <Camera className="h-4 w-4" />
+        <span className="hidden text-xs font-medium tracking-wide sm:inline">
+          Screenshot
+        </span>
+        <span className="hidden text-[10px] text-emerald-100/80 lg:inline">
+          / CSV
+        </span>
       </button>
 
       {/* Thumbnail preview strip (shown above input when image is staged) */}

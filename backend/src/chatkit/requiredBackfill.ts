@@ -24,12 +24,12 @@ function hasSuccessfulCall(functionCalls: FunctionCallRecord[], functionName: st
 
 function buildBackfillArgs(functionName: string, plan: IntentRoutingPlan): Record<string, unknown> | null {
   const symbol = plan.primarySymbol || plan.symbols[0] || null;
+  const chartSymbol = symbol || 'SPX';
 
   switch (functionName) {
     case 'show_chart':
-      if (!symbol) return null;
       return {
-        symbol,
+        symbol: chartSymbol,
         timeframe: plan.preferredChartTimeframe,
       };
     case 'get_current_price':
@@ -48,6 +48,15 @@ function buildBackfillArgs(functionName: string, plan: IntentRoutingPlan): Recor
     case 'get_market_status':
     case 'get_market_breadth':
       return {};
+    case 'scan_opportunities':
+      return symbol
+        ? {
+            symbols: [symbol],
+            include_options: true,
+          }
+        : {
+            include_options: true,
+          };
     case 'get_economic_calendar':
       return {
         days_ahead: 7,
@@ -74,6 +83,7 @@ const BACKFILL_ALLOWED_FUNCTIONS = new Set([
   'get_economic_calendar',
   'get_dividend_info',
   'get_unusual_activity',
+  'scan_opportunities',
 ]);
 
 export async function backfillRequiredFunctionCalls({

@@ -1741,6 +1741,99 @@ async function getDefaultScannerSymbols(userId?: string): Promise<string[]> {
   return sanitizeSymbols([...POPULAR_SYMBOLS], 20);
 }
 
+function dedupeFinite(values: Array<number | null | undefined>, maxItems: number = 3): number[] {
+  const deduped: number[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    const key = value.toFixed(4);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(value);
+    if (deduped.length >= maxItems) break;
+  }
+
+  return deduped;
+}
+
+function normalizeScannerTradePlan(opp: {
+  direction?: string;
+  currentPrice?: number;
+  suggestedTrade?: {
+    strategy?: string;
+    strikes?: number[];
+    expiry?: string;
+    entry?: number | string;
+    stopLoss?: number | string;
+    target?: number | string;
+    targets?: Array<number | string>;
+    estimatedCredit?: number;
+    estimatedDebit?: number;
+    maxProfit?: string;
+    maxLoss?: string;
+    probability?: string;
+  };
+  metadata?: Record<string, unknown>;
+}) {
+  const direction = String(opp.direction || '').toLowerCase();
+  const isBearish = direction === 'bearish';
+  const currentPrice = toFiniteNumber(opp.currentPrice);
+
+  const metadata = asRecord(opp.metadata);
+  const metadataStrike = toFiniteNumber(metadata?.strike);
+  const metadataAtr = toFiniteNumber(metadata?.atr);
+
+  const riskUnit = metadataAtr != null && metadataAtr > 0
+    ? Math.max(metadataAtr * 0.75, currentPrice != null ? currentPrice * 0.002 : 0.5)
+    : currentPrice != null
+      ? Math.max(currentPrice * 0.005, 0.5)
+      : 1;
+
+  const entry = toFiniteNumber(opp.suggestedTrade?.entry) ?? currentPrice ?? metadataStrike;
+  if (entry == null) {
+    return {
+      ...opp.suggestedTrade,
+      targets: [] as number[],
+    };
+  }
+
+  const stopLoss = toFiniteNumber(opp.suggestedTrade?.stopLoss)
+    ?? (isBearish ? entry + riskUnit : entry - riskUnit);
+
+  const directionalRisk = Math.abs(entry - stopLoss) > 0.0001
+    ? Math.abs(entry - stopLoss)
+    : riskUnit;
+
+  const rawTargets = Array.isArray(opp.suggestedTrade?.targets)
+    ? opp.suggestedTrade?.targets.map((value) => toFiniteNumber(value))
+    : [];
+  const fallbackT1 = isBearish
+    ? entry - directionalRisk * 1.5
+    : entry + directionalRisk * 1.5;
+  const fallbackT2 = isBearish
+    ? entry - directionalRisk * 2.5
+    : entry + directionalRisk * 2.5;
+
+  const targets = dedupeFinite([
+    ...rawTargets,
+    toFiniteNumber(opp.suggestedTrade?.target),
+    fallbackT1,
+    fallbackT2,
+  ]);
+
+  const orderedTargets = targets.sort((a, b) => (isBearish ? b - a : a - b));
+  const primaryTarget = orderedTargets[0] ?? null;
+
+  return {
+    ...opp.suggestedTrade,
+    entry,
+    stopLoss,
+    target: primaryTarget ?? undefined,
+    targets: orderedTargets,
+  };
+}
+
 /**
  * Handler: scan_opportunities
  * Scans for trading opportunities across symbols
@@ -1772,7 +1865,12 @@ async function handleScanOpportunities(args: {
         score: opp.score,
         currentPrice: opp.currentPrice,
         description: opp.description,
-        suggestedTrade: opp.suggestedTrade,
+        suggestedTrade: normalizeScannerTradePlan({
+          direction: opp.direction,
+          currentPrice: opp.currentPrice,
+          suggestedTrade: opp.suggestedTrade,
+          metadata: opp.metadata,
+        }),
         metadata: opp.metadata,
       })),
       count: result.opportunities.length,

@@ -149,6 +149,7 @@ export interface ChartRequest {
     entry: number
     stop?: number
     target?: number
+    targets?: number[]
   }>
   eventMarkers?: Array<{
     label: string
@@ -203,6 +204,11 @@ function toSheetChartRequest(value: unknown): ChartRequest | null {
           entry: Number(overlay.entry),
           stop: typeof overlay.stop === 'number' && Number.isFinite(overlay.stop) ? overlay.stop : undefined,
           target: typeof overlay.target === 'number' && Number.isFinite(overlay.target) ? overlay.target : undefined,
+          targets: Array.isArray(overlay.targets)
+            ? overlay.targets
+              .filter((target): target is number => typeof target === 'number' && Number.isFinite(target))
+              .slice(0, 4)
+            : undefined,
         }))
         .slice(0, MAX_POSITION_OVERLAYS)
       : undefined,
@@ -885,6 +891,11 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
         entry: overlay.entry,
         stop: typeof overlay.stop === 'number' && Number.isFinite(overlay.stop) ? overlay.stop : undefined,
         target: typeof overlay.target === 'number' && Number.isFinite(overlay.target) ? overlay.target : undefined,
+        targets: Array.isArray(overlay.targets)
+          ? overlay.targets
+            .filter((target): target is number => typeof target === 'number' && Number.isFinite(target))
+            .slice(0, 4)
+          : undefined,
       }))
       .slice(0, MAX_POSITION_OVERLAYS)
   }, [])

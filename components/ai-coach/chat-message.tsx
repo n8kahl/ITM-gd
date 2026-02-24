@@ -65,15 +65,15 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
       className={cn('flex gap-3 group', isUser ? 'justify-end' : 'justify-start')}
     >
       <div className={cn(
-        'flex gap-3 max-w-[80%]',
+        'flex gap-3 max-w-[84%]',
         isUser ? 'flex-row-reverse' : 'flex-row'
       )}>
         {/* Avatar */}
         <div className={cn(
           'w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1',
           isUser
-            ? 'bg-[rgba(243,229,171,0.15)] ring-1 ring-[rgba(243,229,171,0.25)]'
-            : 'bg-emerald-500/15 ring-1 ring-emerald-500/25'
+            ? 'bg-[linear-gradient(135deg,rgba(243,229,171,0.24),rgba(243,229,171,0.08))] ring-1 ring-[rgba(243,229,171,0.35)] shadow-[0_6px_16px_rgba(243,229,171,0.14)]'
+            : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.28),rgba(16,185,129,0.08))] ring-1 ring-emerald-400/35 shadow-[0_6px_16px_rgba(16,185,129,0.18)]'
         )}>
           {isUser ? (
             <User className="w-4 h-4 text-[#F3E5AB]" />
@@ -87,14 +87,14 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
           {/* Bubble */}
           <div
             className={cn(
-              !isUser && isHighlighted && 'rounded-xl ring-1 ring-emerald-500/35 bg-emerald-500/5 px-3 py-2',
+              !isUser && isHighlighted && 'rounded-2xl ring-1 ring-emerald-400/45 shadow-[0_0_0_1px_rgba(16,185,129,0.18)_inset]',
             )}
           >
             <div className={cn(
-              'rounded-2xl px-4 py-3',
+              'rounded-2xl px-4 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.24)]',
               isUser
-                ? 'bg-gradient-to-br from-slate-700/60 to-slate-800/60 border border-slate-600/30 rounded-tr-md'
-                : 'bg-transparent border-none px-0 py-0 rounded-tl-md',
+                ? 'rounded-tr-md border border-[rgba(243,229,171,0.24)] bg-[linear-gradient(145deg,rgba(243,229,171,0.20),rgba(30,41,59,0.48))]'
+                : 'rounded-tl-md border border-emerald-500/20 bg-[linear-gradient(145deg,rgba(16,185,129,0.13),rgba(255,255,255,0.02))] backdrop-blur-[2px]',
               message.isOptimistic && 'opacity-60'
             )}>
             {/* Streaming status */}
@@ -153,7 +153,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
 
           {/* Footer */}
           <div className={cn(
-            'flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200',
+            'flex items-center gap-2 opacity-70 group-hover:opacity-100 transition-opacity duration-200',
             isUser ? 'justify-end pr-1' : 'justify-start pl-1'
           )}>
             <span className="text-[11px] text-white/30">
@@ -189,10 +189,10 @@ export function TypingIndicator({ streamStatus }: { streamStatus?: string }) {
   return (
     <div className="flex gap-3 justify-start">
       <div className="flex gap-3">
-        <div className="w-8 h-8 rounded-full bg-emerald-500/15 ring-1 ring-emerald-500/25 flex items-center justify-center shrink-0 mt-1">
+        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,rgba(16,185,129,0.28),rgba(16,185,129,0.08))] ring-1 ring-emerald-400/35 shadow-[0_6px_16px_rgba(16,185,129,0.18)]">
           <BrainCircuit className="w-4 h-4 text-emerald-400" />
         </div>
-        <div className="flex items-center gap-2 px-4 py-3">
+        <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-[linear-gradient(145deg,rgba(16,185,129,0.12),rgba(255,255,255,0.02))] px-4 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
           <StatusIcon className="w-3.5 h-3.5 text-emerald-300/80 animate-pulse" />
           <span className="text-xs text-emerald-200/80">{state.label}</span>
           <span

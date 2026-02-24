@@ -11,13 +11,15 @@ describe('intentRouter', () => {
     const plan = buildIntentRoutingPlan('Help with setup on SPY: entry, stop, invalidation and show chart.');
 
     expect(plan.intents).toContain('setup_help');
-    expect(plan.requiredFunctions).toEqual(expect.arrayContaining(['get_key_levels', 'show_chart']));
+    expect(plan.requiredFunctions).toEqual(expect.arrayContaining(['get_key_levels', 'scan_opportunities', 'show_chart']));
     expect(plan.primarySymbol).toBe('SPY');
     expect(plan.requiresChart).toBe(true);
+    expect(plan.requiresSetupPlan).toBe(true);
 
     const directive = buildIntentRoutingDirective(plan);
     expect(directive).toContain('Required tool calls');
     expect(directive).toContain('get_key_levels');
+    expect(directive).toContain('scan_opportunities');
     expect(directive).toContain('show_chart');
   });
 
@@ -31,6 +33,15 @@ describe('intentRouter', () => {
     expect(plan.requiresScenarioProbabilities).toBe(true);
     expect(plan.requiresLiquidityWatchouts).toBe(true);
     expect(plan.primarySymbol).toBe('SPX');
+  });
+
+  it('routes scan prompts to scanner + chart with setup-plan contract', () => {
+    const plan = buildIntentRoutingPlan('Scan for setups on NVDA and show me the best one with levels.');
+
+    expect(plan.intents).toContain('scan_opportunities');
+    expect(plan.requiredFunctions).toEqual(expect.arrayContaining(['scan_opportunities', 'show_chart']));
+    expect(plan.requiresChart).toBe(true);
+    expect(plan.requiresSetupPlan).toBe(true);
   });
 
   it('applies intent precedence for SPX game plan prompts', () => {
@@ -127,6 +138,11 @@ describe('intentRouter', () => {
         },
       },
       {
+        function: 'scan_opportunities',
+        arguments: { symbols: ['SPX'] },
+        result: { opportunities: [{ symbol: 'SPX' }] },
+      },
+      {
         function: 'show_chart',
         arguments: { symbol: 'SPX', timeframe: '15m' },
         result: { symbol: 'SPX', timeframe: '15m' },
@@ -139,6 +155,7 @@ describe('intentRouter', () => {
       [
         'This is not financial advice; this is educational market analysis.',
         'Scenario matrix: bull case 40%, base case 35%, bear case 25%.',
+        'Setup plan: Entry $6012.00, Stop $5998.50, Target $6030.00.',
         'Bull case above $6020.25, bear case below $5981.50. Invalidation on 15m close under $5981.50.',
         'Liquidity watchouts: bid/ask can widen around open and close; account for slippage on market orders.',
       ].join(' '),
@@ -161,6 +178,11 @@ describe('intentRouter', () => {
         arguments: { symbol: 'SPX', timeframe: '15m' },
         result: { symbol: 'SPX', timeframe: '15m' },
       },
+      {
+        function: 'scan_opportunities',
+        arguments: { symbols: ['SPX'] },
+        result: { opportunities: [{ symbol: 'SPX' }] },
+      },
     ];
 
     const audit = evaluateResponseContract(
@@ -173,6 +195,7 @@ describe('intentRouter', () => {
     expect(audit.blockingViolations).toContain('missing_financial_disclaimer');
     expect(audit.blockingViolations).toContain('missing_scenario_probabilities');
     expect(audit.blockingViolations).toContain('missing_liquidity_watchouts');
+    expect(audit.blockingViolations).toContain('missing_setup_plan_levels');
   });
 
   it('does not trigger rewrite for warnings-only audits', () => {

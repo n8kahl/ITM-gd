@@ -233,11 +233,149 @@ export function useAICoachChat() {
       }
     } | undefined
 
+    const scanCall = functionCalls.find(fc => fc.function === 'scan_opportunities')
+    const scanResult = (scanCall?.result || {}) as {
+      error?: unknown
+      opportunities?: Array<{
+        symbol?: string
+        direction?: string
+        currentPrice?: number
+        suggestedTrade?: {
+          entry?: number | string
+          stopLoss?: number | string
+          stop?: number | string
+          target?: number | string
+          target1?: number | string
+          target2?: number | string
+          takeProfit?: number | string
+          targets?: Array<number | string>
+        }
+      }>
+    }
+
+    const dedupeNumbers = (values: Array<number | null>, limit: number = 3): number[] => {
+      const seen = new Set<string>()
+      const deduped: number[] = []
+      for (const value of values) {
+        if (value == null || !Number.isFinite(value)) continue
+        const key = value.toFixed(4)
+        if (seen.has(key)) continue
+        seen.add(key)
+        deduped.push(value)
+        if (deduped.length >= limit) break
+      }
+      return deduped
+    }
+
+    const mergeChartLevels = (
+      primary?: ChartRequest['levels'],
+      secondary?: ChartRequest['levels'],
+    ): ChartRequest['levels'] | undefined => {
+      if (!primary && !secondary) return undefined
+      const mergeBucket = (
+        first: Array<{ name?: string; type?: string; price: number; distance?: string | number }> = [],
+        second: Array<{ name?: string; type?: string; price: number; distance?: string | number }> = [],
+      ) => {
+        const merged: Array<{ name?: string; type?: string; price: number; distance?: string | number }> = []
+        const seen = new Set<string>()
+        for (const level of [...first, ...second]) {
+          if (!level || typeof level.price !== 'number' || !Number.isFinite(level.price)) continue
+          const key = `${level.price.toFixed(4)}|${String(level.name || level.type || '').toLowerCase()}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          merged.push(level)
+        }
+        return merged
+      }
+
+      return {
+        resistance: mergeBucket(primary?.resistance || [], secondary?.resistance || []),
+        support: mergeBucket(primary?.support || [], secondary?.support || []),
+        fibonacci: primary?.fibonacci || secondary?.fibonacci || [],
+        indicators: {
+          ...(secondary?.indicators || {}),
+          ...(primary?.indicators || {}),
+        },
+      }
+    }
+
+    const topScanOpportunity = scanResult.opportunities?.[0]
+    let scanContext: ChartRequest | null = null
+    if (!scanResult.error && topScanOpportunity?.symbol) {
+      const entry = toFiniteNumber(topScanOpportunity.suggestedTrade?.entry)
+      const stopLoss = toFiniteNumber(topScanOpportunity.suggestedTrade?.stopLoss)
+        ?? toFiniteNumber(topScanOpportunity.suggestedTrade?.stop)
+      const targetCandidates = dedupeNumbers([
+        ...(Array.isArray(topScanOpportunity.suggestedTrade?.targets)
+          ? topScanOpportunity.suggestedTrade.targets.map((value) => toFiniteNumber(value))
+          : []),
+        toFiniteNumber(topScanOpportunity.suggestedTrade?.target),
+        toFiniteNumber(topScanOpportunity.suggestedTrade?.target1),
+        toFiniteNumber(topScanOpportunity.suggestedTrade?.target2),
+        toFiniteNumber(topScanOpportunity.suggestedTrade?.takeProfit),
+      ])
+      const primaryTarget = targetCandidates[0] ?? null
+      const additionalTargets = targetCandidates.slice(1)
+      const spot = toFiniteNumber(topScanOpportunity.currentPrice)
+      const direction = String(topScanOpportunity.direction || '').toLowerCase()
+
+      const resistance: Array<{ name: string; price: number }> = []
+      const support: Array<{ name: string; price: number }> = []
+
+      if (entry != null) {
+        if (direction === 'bearish') resistance.push({ name: 'Entry', price: entry })
+        else support.push({ name: 'Entry', price: entry })
+      }
+
+      for (const [idx, target] of targetCandidates.entries()) {
+        const label = targetCandidates.length > 1 ? `Target ${idx + 1}` : 'Target'
+        if (entry != null && target >= entry) resistance.push({ name: label, price: target })
+        else support.push({ name: label, price: target })
+      }
+
+      if (stopLoss != null) {
+        if (entry != null && stopLoss >= entry) resistance.push({ name: 'Stop', price: stopLoss })
+        else support.push({ name: 'Stop', price: stopLoss })
+      }
+
+      if (spot != null) {
+        support.push({ name: 'Spot', price: spot })
+      }
+
+      scanContext = {
+        symbol: topScanOpportunity.symbol,
+        timeframe: '15m',
+        levels: {
+          resistance,
+          support,
+        },
+        positionOverlays: entry != null
+          ? [{
+              label: 'Scanner Setup',
+              entry,
+              stop: stopLoss ?? undefined,
+              target: primaryTarget ?? undefined,
+              targets: additionalTargets.length > 0 ? additionalTargets : undefined,
+            }]
+          : [],
+        contextNotes: toContextNotes([
+          topScanOpportunity.direction ? `Direction: ${topScanOpportunity.direction}` : null,
+          entry != null ? `Entry: ${entry.toFixed(2)}` : null,
+          stopLoss != null ? `Stop: ${stopLoss.toFixed(2)}` : null,
+          targetCandidates.length > 0
+            ? `Take-profits: ${targetCandidates.map((value, idx) => `T${idx + 1} ${value.toFixed(2)}`).join(', ')}`
+            : null,
+        ]),
+      }
+    }
+
     // Priority 1: explicit chart directives or SPX game-plan data.
     if (showChartCall || gexCall || spxGamePlanCall) {
       const symbol = showChartArgs?.symbol || showChartResult?.symbol || gexArgs?.symbol || gexResult?.symbol || spxGamePlanResult?.symbol || fallbackSymbol
       const timeframe = (showChartArgs?.timeframe || showChartResult?.timeframe || '5m') as ChartTimeframe
-      const levels = showChartResult?.levels || spxGamePlanResult?.keyLevels
+      const baseLevels = showChartResult?.levels || spxGamePlanResult?.keyLevels
+      const canMergeScan = scanContext?.symbol?.toUpperCase() === symbol.toUpperCase()
+      const levels = mergeChartLevels(baseLevels, canMergeScan ? scanContext?.levels : undefined)
       const gexProfile = gexResult
         ? {
             symbol: gexResult.symbol || symbol,
@@ -261,6 +399,8 @@ export function useAICoachChat() {
         timeframe,
         levels,
         gexProfile,
+        positionOverlays: canMergeScan ? scanContext?.positionOverlays : undefined,
+        contextNotes: canMergeScan ? scanContext?.contextNotes : undefined,
       }
     }
 
@@ -278,83 +418,21 @@ export function useAICoachChat() {
         }
       }
       if (!result.error) {
+        const symbol = result.symbol || args.symbol || fallbackSymbol
+        const canMergeScan = scanContext?.symbol?.toUpperCase() === symbol.toUpperCase()
         return {
-          symbol: result.symbol || args.symbol || fallbackSymbol,
+          symbol,
           timeframe: '5m',
-          levels: result.levels,
+          levels: mergeChartLevels(result.levels, canMergeScan ? scanContext?.levels : undefined),
+          positionOverlays: canMergeScan ? scanContext?.positionOverlays : undefined,
+          contextNotes: canMergeScan ? scanContext?.contextNotes : undefined,
         }
       }
     }
 
-    // Priority 3: setup scan results should auto-focus chart with entry/stop/target.
-    const scanCall = functionCalls.find(fc => fc.function === 'scan_opportunities')
-    if (scanCall) {
-      const result = (scanCall.result || {}) as {
-        error?: unknown
-        opportunities?: Array<{
-          symbol?: string
-          direction?: string
-          currentPrice?: number
-          suggestedTrade?: {
-            entry?: number | string
-            stopLoss?: number | string
-            target?: number | string
-          }
-        }>
-      }
-      const top = result.opportunities?.[0]
-      if (!result.error && top?.symbol) {
-        const entry = toFiniteNumber(top.suggestedTrade?.entry)
-        const stopLoss = toFiniteNumber(top.suggestedTrade?.stopLoss)
-        const target = toFiniteNumber(top.suggestedTrade?.target)
-        const spot = toFiniteNumber(top.currentPrice)
-        const direction = String(top.direction || '').toLowerCase()
-
-        const resistance: Array<{ name: string; price: number }> = []
-        const support: Array<{ name: string; price: number }> = []
-
-        if (entry != null) {
-          if (direction === 'bearish') {
-            resistance.push({ name: 'Entry', price: entry })
-          } else {
-            support.push({ name: 'Entry', price: entry })
-          }
-        }
-        if (target != null) {
-          if (entry != null && target >= entry) resistance.push({ name: 'Target', price: target })
-          else support.push({ name: 'Target', price: target })
-        }
-        if (stopLoss != null) {
-          if (entry != null && stopLoss >= entry) resistance.push({ name: 'Stop', price: stopLoss })
-          else support.push({ name: 'Stop', price: stopLoss })
-        }
-        if (spot != null) {
-          support.push({ name: 'Spot', price: spot })
-        }
-
-        return {
-          symbol: top.symbol,
-          timeframe: '15m',
-          levels: {
-            resistance,
-            support,
-          },
-          positionOverlays: entry != null
-            ? [{
-                label: 'Scanner Setup',
-                entry,
-                stop: stopLoss ?? undefined,
-                target: target ?? undefined,
-              }]
-            : [],
-          contextNotes: toContextNotes([
-            top.direction ? `Direction: ${top.direction}` : null,
-            entry != null ? `Entry: ${entry.toFixed(2)}` : null,
-            stopLoss != null ? `Stop: ${stopLoss.toFixed(2)}` : null,
-            target != null ? `Target: ${target.toFixed(2)}` : null,
-          ]),
-        }
-      }
+    // Priority 3: setup scan results should auto-focus chart with entry/stop/targets.
+    if (scanContext) {
+      return scanContext
     }
 
     // Priority 4: price/options/position tools provide at least a chart focus line.

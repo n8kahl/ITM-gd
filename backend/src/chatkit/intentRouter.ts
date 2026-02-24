@@ -37,6 +37,7 @@ interface IntentSpec {
   requiresDisclaimer?: boolean;
   requiresScenarioProbabilities?: boolean;
   requiresLiquidityWatchouts?: boolean;
+  requiresSetupPlan?: boolean;
 }
 
 const STOPWORDS = new Set([
@@ -63,7 +64,7 @@ const INTENT_SPECS: IntentSpec[] = [
   {
     id: 'setup_help',
     phrases: ['help with setup', 'trade setup', 'entry stop', 'invalidation', 'scanner idea', 'tracked setup', 'trigger plan', 'setup found'],
-    requiredFunctions: ['get_key_levels', 'show_chart'],
+    requiredFunctions: ['get_key_levels', 'scan_opportunities', 'show_chart'],
     recommendedFunctions: ['get_current_price'],
     requiresChart: true,
     preferredChartTimeframe: '15m',
@@ -72,6 +73,7 @@ const INTENT_SPECS: IntentSpec[] = [
     requiresDisclaimer: true,
     requiresScenarioProbabilities: true,
     requiresLiquidityWatchouts: true,
+    requiresSetupPlan: true,
   },
   {
     id: 'key_levels',
@@ -139,13 +141,16 @@ const INTENT_SPECS: IntentSpec[] = [
   {
     id: 'scan_opportunities',
     phrases: ['scan opportunities', 'scan for setups', 'find setups', 'rank setups', 'best setup today'],
-    requiredFunctions: ['scan_opportunities'],
-    recommendedFunctions: ['show_chart'],
+    requiredFunctions: ['scan_opportunities', 'show_chart'],
+    recommendedFunctions: ['get_key_levels'],
+    requiresChart: true,
+    preferredChartTimeframe: '15m',
     requiresBullBear: true,
     requiresPriceNumbers: true,
     requiresDisclaimer: true,
     requiresScenarioProbabilities: true,
     requiresLiquidityWatchouts: true,
+    requiresSetupPlan: true,
   },
   {
     id: 'earnings_calendar',
@@ -279,6 +284,14 @@ function hasLiquidityWatchouts(text: string): boolean {
   return /(liquidity|slippage|wide spread|bid-ask|bid\/ask|depth|volume dries up|thin market)/i.test(text);
 }
 
+function hasSetupPlanStructure(text: string): boolean {
+  const hasEntry = /\bentry\b/i.test(text);
+  const hasStopOrInvalidation = /\b(stop|invalidation|invalidates?)\b/i.test(text);
+  const hasTarget = /\b(target|take\s?-?profit|tp1|tp2)\b/i.test(text);
+  const hasLevelNumber = /\$?\d{2,5}(?:\.\d{1,2})?/.test(text);
+  return hasEntry && hasStopOrInvalidation && hasTarget && hasLevelNumber;
+}
+
 function isSetAlertCreationPrompt(message: string): boolean {
   const lowered = message.toLowerCase();
   const hasSetAlertLanguage = lowered.includes('set alert') || lowered.includes('alert me') || lowered.includes('notify me');
@@ -370,6 +383,7 @@ export interface IntentRoutingPlan {
   requiresDisclaimer: boolean;
   requiresScenarioProbabilities: boolean;
   requiresLiquidityWatchouts: boolean;
+  requiresSetupPlan: boolean;
 }
 
 export interface ContractViolationAudit {
@@ -481,10 +495,10 @@ export function buildIntentRoutingPlan(message: string, context?: IntentRoutingC
   let recommendedFunctions = dedupe(selectedSpecs.flatMap((spec) => spec.recommendedFunctions || []));
 
   if (effectiveSymbols.length === 0) {
-    const symbolBoundRequired = requiredFunctions.filter((fn) => SYMBOL_SPECIFIC_FUNCTIONS.has(fn));
+    const symbolBoundRequired = requiredFunctions.filter((fn) => SYMBOL_SPECIFIC_FUNCTIONS.has(fn) && fn !== 'show_chart');
     if (symbolBoundRequired.length > 0) {
       recommendedFunctions = dedupe([...recommendedFunctions, ...symbolBoundRequired]);
-      requiredFunctions = requiredFunctions.filter((fn) => !SYMBOL_SPECIFIC_FUNCTIONS.has(fn));
+      requiredFunctions = requiredFunctions.filter((fn) => !SYMBOL_SPECIFIC_FUNCTIONS.has(fn) || fn === 'show_chart');
     }
   }
 
@@ -495,6 +509,7 @@ export function buildIntentRoutingPlan(message: string, context?: IntentRoutingC
   const requiresDisclaimer = selectedSpecs.some((spec) => spec.requiresDisclaimer === true);
   const requiresScenarioProbabilities = selectedSpecs.some((spec) => spec.requiresScenarioProbabilities === true);
   const requiresLiquidityWatchouts = selectedSpecs.some((spec) => spec.requiresLiquidityWatchouts === true);
+  const requiresSetupPlan = selectedSpecs.some((spec) => spec.requiresSetupPlan === true);
   const primarySymbol = selectPrimarySymbol(effectiveSymbols, intents, loweredMessage);
 
   return {
@@ -510,6 +525,7 @@ export function buildIntentRoutingPlan(message: string, context?: IntentRoutingC
     requiresDisclaimer,
     requiresScenarioProbabilities,
     requiresLiquidityWatchouts,
+    requiresSetupPlan,
   };
 }
 
@@ -550,6 +566,9 @@ export function buildIntentRoutingDirective(plan: IntentRoutingPlan): string | n
     plan.requiresLiquidityWatchouts
       ? '- Include liquidity watchouts (bid/ask spread, slippage, thin liquidity windows).'
       : '- Liquidity watchouts are optional.',
+    plan.requiresSetupPlan
+      ? '- Setup responses must include explicit Entry, Stop/Invalidation, and Take-Profit prices.'
+      : '- Setup plan levels are optional unless asked.',
   ].join('\n');
 }
 
@@ -598,6 +617,10 @@ export function evaluateResponseContract(
     blockingViolations.push('missing_liquidity_watchouts');
   }
 
+  if (plan.requiresSetupPlan && !hasSetupPlanStructure(content)) {
+    blockingViolations.push('missing_setup_plan_levels');
+  }
+
   if (!content || content.trim().length < 10) {
     blockingViolations.push('empty_or_too_short_response');
   }
@@ -638,6 +661,7 @@ export function buildContractRepairDirective(plan: IntentRoutingPlan): string {
   if (plan.requiresBullBear) checklist.push('Include both bull and bear paths with explicit invalidation levels.');
   if (plan.requiresPriceNumbers) checklist.push('Include concrete numeric levels and triggers.');
   if (plan.requiresLiquidityWatchouts) checklist.push('Include liquidity risks: bid/ask spread, slippage risk, and thin-liquidity windows.');
+  if (plan.requiresSetupPlan) checklist.push('Include explicit Entry, Stop/Invalidation, and Take-Profit prices.');
 
   return [
     'REPAIR RESPONSE CONTRACT (internal):',

@@ -247,6 +247,7 @@ type ScannerOpportunityLike = {
     entry?: number
     stopLoss?: number
     target?: number
+    targets?: number[]
   }
 }
 
@@ -286,7 +287,17 @@ function openScannerSetupChart(opportunity: ScannerOpportunityLike, timeframe: C
 
   const entry = parseNullableNumeric(opportunity.suggestedTrade?.entry)
   const stopLoss = parseNullableNumeric(opportunity.suggestedTrade?.stopLoss)
-  const target = parseNullableNumeric(opportunity.suggestedTrade?.target)
+  const primaryTarget = parseNullableNumeric(opportunity.suggestedTrade?.target)
+  const additionalTargets = Array.isArray(opportunity.suggestedTrade?.targets)
+    ? opportunity.suggestedTrade.targets
+      .map((target) => parseNullableNumeric(target))
+      .filter((target): target is number => target != null)
+      .slice(0, 3)
+    : []
+  const allTargets = [
+    ...(primaryTarget != null ? [primaryTarget] : []),
+    ...additionalTargets,
+  ]
   const currentPrice = parseNullableNumeric(opportunity.currentPrice)
   const direction = String(opportunity.direction || '').toLowerCase()
 
@@ -295,14 +306,15 @@ function openScannerSetupChart(opportunity: ScannerOpportunityLike, timeframe: C
     else support.push({ name: 'Entry', price: entry })
   }
 
-  if (target != null) {
+  for (const [index, target] of allTargets.entries()) {
+    const label = allTargets.length > 1 ? `Target ${index + 1}` : 'Target'
     if (entry != null) {
-      if (target >= entry) resistance.push({ name: 'Target', price: target })
-      else support.push({ name: 'Target', price: target })
+      if (target >= entry) resistance.push({ name: label, price: target })
+      else support.push({ name: label, price: target })
     } else if (direction === 'bearish') {
-      support.push({ name: 'Target', price: target })
+      support.push({ name: label, price: target })
     } else {
-      resistance.push({ name: 'Target', price: target })
+      resistance.push({ name: label, price: target })
     }
   }
 
@@ -329,6 +341,22 @@ function openScannerSetupChart(opportunity: ScannerOpportunityLike, timeframe: C
         resistance,
         support,
       },
+      positionOverlays: entry != null
+        ? [{
+            label: `${opportunity.symbol} Setup`,
+            entry,
+            stop: stopLoss ?? undefined,
+            target: primaryTarget ?? undefined,
+            targets: additionalTargets.length > 0 ? additionalTargets : undefined,
+          }]
+        : [],
+      contextNotes: [
+        entry != null ? `Entry: ${entry.toFixed(2)}` : null,
+        stopLoss != null ? `Stop: ${stopLoss.toFixed(2)}` : null,
+        allTargets.length > 0
+          ? `Take-profits: ${allTargets.map((target, idx) => `T${idx + 1} ${target.toFixed(2)}`).join(', ')}`
+          : null,
+      ].filter((note): note is string => Boolean(note)),
     },
   }))
 }
@@ -1548,6 +1576,7 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
       entry?: number
       stopLoss?: number
       target?: number
+      targets?: number[]
       strikes?: number[]
       expiry?: string
     }
@@ -1629,12 +1658,40 @@ function ScanResultsCard({ data }: { data: Record<string, unknown> }) {
                   opp.direction === 'bearish' ? 'bg-red-400' : 'bg-white/40'
                 )} />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-white">{opp.symbol}</span>
-                    <span className="text-white/40 capitalize">{opp.setupType}</span>
-                    <span className="ml-auto text-[9px] font-mono text-emerald-400/70">{opp.score}/100</span>
-                  </div>
-                  <p className="text-white/40 truncate">{opp.description}</p>
+                  {(() => {
+                    const entry = parseNullableNumeric(opp.suggestedTrade?.entry)
+                    const stop = parseNullableNumeric(opp.suggestedTrade?.stopLoss)
+                    const targets = [
+                      parseNullableNumeric(opp.suggestedTrade?.target),
+                      ...((opp.suggestedTrade?.targets || [])
+                        .map((target) => parseNullableNumeric(target))
+                        .filter((target): target is number => target != null)),
+                    ]
+                      .filter((target): target is number => target != null)
+                      .slice(0, 3)
+
+                    return (
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-white">{opp.symbol}</span>
+                          <span className="text-white/40 capitalize">{opp.setupType}</span>
+                          <span className="ml-auto text-[9px] font-mono text-emerald-400/70">{opp.score}/100</span>
+                        </div>
+                        <p className="text-white/40 truncate">{opp.description}</p>
+                        {(entry != null || stop != null || targets.length > 0) && (
+                          <p className="mt-0.5 text-[10px] font-mono text-white/65 truncate">
+                            {[
+                              entry != null ? `E ${entry.toFixed(2)}` : null,
+                              stop != null ? `S ${stop.toFixed(2)}` : null,
+                              ...targets.map((target, targetIndex) => `T${targetIndex + 1} ${target.toFixed(2)}`),
+                            ]
+                              .filter(Boolean)
+                              .join(' • ')}
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
               </button>
             </WidgetRowActions>
