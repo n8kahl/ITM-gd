@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { BookOpen, CheckCircle2, TrendingUp } from 'lucide-react'
+import { BookOpen, Flame, Star, Trophy } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { AcademyCard, AcademyShell } from '@/components/academy/academy-shell'
@@ -16,7 +16,6 @@ import {
   fetchAcademyResume,
   fetchRecommendations,
 } from '@/lib/academy-v3/client'
-import { Analytics } from '@/lib/analytics'
 
 type PlanData = Awaited<ReturnType<typeof fetchAcademyPlan>>
 type ProgressSummary = Awaited<ReturnType<typeof fetchAcademyProgressSummary>>
@@ -61,6 +60,17 @@ const GAMIFICATION_PLACEHOLDER: GamificationStats = {
   timeSpentMinutes: 0,
   unlockedAchievements: [],
   totalAchievements: 20,
+}
+
+/** True when gamification data has real activity beyond zero-state defaults. */
+function hasGamificationActivity(stats: GamificationStats): boolean {
+  return (
+    stats.currentStreak > 0 ||
+    stats.totalXp > 0 ||
+    stats.lessonsThisWeek > 0 ||
+    stats.unlockedAchievements.length > 0 ||
+    stats.daysActive.some(Boolean)
+  )
 }
 
 function withResumeQuery(url: string): string {
@@ -111,11 +121,12 @@ export function AcademyDashboard() {
 
   const lessonCount = useMemo(() => summary?.totalLessons || 0, [summary])
 
+  const showGamification = hasGamificationActivity(gamification)
+
   return (
     <AcademyShell
       title="Your Learning Plan"
       description="See where you are, resume quickly, and focus on the highest-impact next step."
-      maxWidthClassName="max-w-5xl"
     >
       {loading ? (
         <div
@@ -173,10 +184,9 @@ export function AcademyDashboard() {
             totalLessons={resume?.totalLessons}
           />
 
-          {/* Two-column grid: left (streak + XP), right (weekly + achievements) */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {/* Left column */}
-            <div className="flex flex-col gap-4">
+          {/* Gamification grid — only rendered when real data is present */}
+          {showGamification ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <AcademyStreakBanner
                 currentStreak={gamification.currentStreak}
                 longestStreak={gamification.longestStreak}
@@ -187,10 +197,6 @@ export function AcademyDashboard() {
                 currentLevel={gamification.currentLevel}
                 recentXpEvents={gamification.recentXpEvents}
               />
-            </div>
-
-            {/* Right column */}
-            <div className="flex flex-col gap-4">
               <AcademyWeeklySummary
                 daysActive={gamification.daysActive}
                 lessonsThisWeek={gamification.lessonsThisWeek}
@@ -202,40 +208,32 @@ export function AcademyDashboard() {
                 totalAchievements={gamification.totalAchievements}
               />
             </div>
-          </div>
-
-          {/* Browse Modules CTA */}
-          <AcademyCard title="Quick Actions">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <Link
-                href="/members/academy/modules"
-                onClick={() => Analytics.trackAcademyAction('browse_modules')}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-200 transition-colors hover:border-emerald-500/35 hover:text-white"
-                data-testid="cta-browse-modules"
-              >
-                <BookOpen className="h-4 w-4" strokeWidth={1.5} />
-                Browse Modules
-              </Link>
-              <Link
-                href="/members/academy/review"
-                onClick={() => Analytics.trackAcademyAction('open_review_queue')}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-200 transition-colors hover:border-emerald-500/35 hover:text-white"
-                data-testid="cta-review-queue"
-              >
-                <CheckCircle2 className="h-4 w-4" strokeWidth={1.5} />
-                Review Queue
-              </Link>
-              <Link
-                href="/members/academy/progress"
-                onClick={() => Analytics.trackAcademyAction('view_progress')}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-200 transition-colors hover:border-emerald-500/35 hover:text-white"
-                data-testid="cta-view-progress"
-              >
-                <TrendingUp className="h-4 w-4" strokeWidth={1.5} />
-                View Progress
-              </Link>
-            </div>
-          </AcademyCard>
+          ) : (
+            <section
+              className="glass-card-heavy rounded-xl border border-white/10 p-5"
+              data-testid="gamification-empty-state"
+            >
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-3 text-zinc-400">
+                  <Flame className="h-5 w-5" strokeWidth={1.5} />
+                  <Star className="h-5 w-5" strokeWidth={1.5} />
+                  <Trophy className="h-5 w-5" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-zinc-300">Start learning to track your streaks, XP, and achievements</p>
+                  <p className="mt-0.5 text-xs text-zinc-500">Complete your first lesson to begin building momentum.</p>
+                </div>
+                <Link
+                  href="/members/academy/modules"
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20"
+                  data-testid="cta-browse-modules"
+                >
+                  <BookOpen className="h-4 w-4" strokeWidth={1.5} />
+                  Browse Modules
+                </Link>
+              </div>
+            </section>
+          )}
         </div>
       )}
     </AcademyShell>

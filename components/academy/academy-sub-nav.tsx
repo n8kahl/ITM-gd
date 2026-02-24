@@ -1,6 +1,6 @@
 'use client'
 
-import { BarChart3, BookOpen, CheckCircle2, Compass } from 'lucide-react'
+import { BarChart3, BookOpen, CheckCircle2, Compass, Trophy } from 'lucide-react'
 
 import { FeatureSubNav, type FeatureSubNavItem } from '@/components/members/feature-sub-nav'
 
@@ -23,6 +23,12 @@ const ITEMS: FeatureSubNavItem[] = [
     href: '/members/academy/review',
     label: 'Review',
     icon: CheckCircle2,
+  },
+  {
+    id: 'achievements',
+    href: '/members/academy/achievements',
+    label: 'Achievements',
+    icon: Trophy,
   },
   {
     id: 'progress',

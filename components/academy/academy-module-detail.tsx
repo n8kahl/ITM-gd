@@ -95,7 +95,7 @@ export function AcademyModuleDetail({ slug }: { slug: string }) {
     <AcademyShell
       title="Module Detail"
       description="Work through lessons in sequence with clear completion and next-up signals."
-      maxWidthClassName="max-w-3xl"
+      maxWidthClassName="max-w-5xl"
     >
       {loading ? (
         <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-zinc-300">Loading module...</div>

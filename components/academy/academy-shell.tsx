@@ -4,20 +4,20 @@ export function AcademyShell({
   title,
   description,
   children,
-  maxWidthClassName = 'max-w-6xl',
 }: {
   title: string
   description: string
   children: ReactNode
+  /** @deprecated No longer constrains width — kept for call-site compat */
   maxWidthClassName?: string
 }) {
   return (
-    <section className="space-y-5">
-      <header className="glass-card-heavy rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-transparent p-6">
-        <h1 className="text-2xl font-semibold text-white">{title}</h1>
-        <p className="mt-2 text-sm text-zinc-300">{description}</p>
+    <section className="space-y-4">
+      <header className="flex flex-col gap-1 px-1">
+        <h1 className="text-xl font-semibold text-white">{title}</h1>
+        <p className="text-sm text-zinc-400">{description}</p>
       </header>
-      <div className={`mx-auto w-full ${maxWidthClassName}`}>{children}</div>
+      <div className="w-full">{children}</div>
     </section>
   )
 }

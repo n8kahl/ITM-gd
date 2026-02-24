@@ -12,6 +12,7 @@ import {
   getAcademyModuleProgressResponseSchema,
   getAcademyLessonAttemptResponseSchema,
   getAcademyProgressSummaryResponseSchema,
+  getAcademyAchievementsResponseSchema,
   submitReviewResponseSchema,
   startLessonResponseSchema,
   completeBlockResponseSchema,
@@ -142,6 +143,12 @@ export async function completeLessonBlock(lessonId: string, body: CompleteBlockR
       body: JSON.stringify(body),
     },
     (value) => completeBlockResponseSchema.parse(value).data
+  )
+}
+
+export async function fetchAcademyAchievements() {
+  return fetchJson('/api/academy-v3/achievements', undefined, (value) =>
+    getAcademyAchievementsResponseSchema.parse(value).data
   )
 }
 

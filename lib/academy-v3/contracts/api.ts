@@ -214,6 +214,31 @@ export const getAcademyProgressSummaryResponseSchema = z.object({
   }),
 })
 
+// ---------------------------------------------------------------------------
+// Achievements
+// ---------------------------------------------------------------------------
+
+export const academyAchievementItemSchema = z.object({
+  key: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  iconUrl: z.string().nullable(),
+  category: z.string().min(1),
+  xpReward: z.number().int().nonnegative(),
+  unlockedAt: z.string().nullable(),
+})
+
+export const getAcademyAchievementsResponseSchema = z.object({
+  data: z.object({
+    achievements: z.array(academyAchievementItemSchema),
+    unlockedCount: z.number().int().nonnegative(),
+    totalCount: z.number().int().nonnegative(),
+  }),
+})
+
+export type AcademyAchievementItem = z.infer<typeof academyAchievementItemSchema>
+export type GetAcademyAchievementsResponse = z.infer<typeof getAcademyAchievementsResponseSchema>
+
 export type ApiErrorResponse = z.infer<typeof academyErrorResponseSchema>
 export type GetAcademyPlanResponse = z.infer<typeof getAcademyPlanResponseSchema>
 export type GetAcademyModuleParams = z.infer<typeof getAcademyModuleParamsSchema>
