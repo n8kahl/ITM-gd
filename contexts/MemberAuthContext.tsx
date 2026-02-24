@@ -231,6 +231,28 @@ function buildRoleTitleMapFromPermissions(rows: any[]): Record<string, string> {
   return roleTitleMap
 }
 
+function isMissingSupabaseRelationError(error: unknown, tableName: string): boolean {
+  const code = typeof (error as { code?: unknown })?.code === 'string'
+    ? String((error as { code: string }).code).toUpperCase()
+    : ''
+  const message = typeof (error as { message?: unknown })?.message === 'string'
+    ? String((error as { message: string }).message).toLowerCase()
+    : ''
+
+  if (code === '42P01' || code === 'PGRST205' || code === 'PGRST116') {
+    return true
+  }
+
+  if (!message) return false
+  if (!message.includes(tableName.toLowerCase())) return false
+
+  return (
+    message.includes('does not exist')
+    || message.includes('could not find')
+    || message.includes('not found')
+  )
+}
+
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const [state, setState] = useState<MemberAuthState>({
@@ -270,6 +292,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Cross-tab sync channel
   const authChannelRef = useRef<BroadcastChannel | null>(null)
+  const discordGuildRolesTableMissingRef = useRef(false)
 
   // Fetch role mapping and tab configurations from config APIs on mount
   useEffect(() => {
@@ -605,17 +628,23 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         const permissionRows = Array.isArray(userPermissions) ? userPermissions : []
         const roleTitleMap = buildRoleTitleMapFromPermissions(permissionRows)
 
-        if (roleIds.length > 0) {
-          const { data: guildRoleRows } = await supabase
+        if (roleIds.length > 0 && !discordGuildRolesTableMissingRef.current) {
+          const { data: guildRoleRows, error: guildRoleError } = await supabase
             .from('discord_guild_roles')
             .select('discord_role_id, discord_role_name')
             .in('discord_role_id', roleIds)
 
-          for (const row of guildRoleRows || []) {
-            const roleId = typeof (row as any)?.discord_role_id === 'string' ? (row as any).discord_role_id : null
-            const roleName = typeof (row as any)?.discord_role_name === 'string' ? (row as any).discord_role_name : null
-            if (roleId && roleName && !roleTitleMap[roleId]) {
-              roleTitleMap[roleId] = roleName
+          if (guildRoleError) {
+            if (isMissingSupabaseRelationError(guildRoleError, 'discord_guild_roles')) {
+              discordGuildRolesTableMissingRef.current = true
+            }
+          } else {
+            for (const row of guildRoleRows || []) {
+              const roleId = typeof (row as any)?.discord_role_id === 'string' ? (row as any).discord_role_id : null
+              const roleName = typeof (row as any)?.discord_role_name === 'string' ? (row as any).discord_role_name : null
+              if (roleId && roleName && !roleTitleMap[roleId]) {
+                roleTitleMap[roleId] = roleName
+              }
             }
           }
         }

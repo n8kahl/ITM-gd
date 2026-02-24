@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { postSPX, useSPXQuery } from '@/hooks/use-spx-api'
+import { postSPX, SPXRequestError, useSPXQuery } from '@/hooks/use-spx-api'
 
 export type TradierExecutionMode = 'off' | 'manual' | 'auto'
 
@@ -45,6 +45,41 @@ export interface TradierBrokerStatus {
   }
 }
 
+const TRADIER_STATUS_BASE_REFRESH_MS = 15_000
+const TRADIER_STATUS_MAX_BACKOFF_MS = 5 * 60 * 1000
+const TRADIER_STATUS_MISSING_ENDPOINT_BACKOFF_MS = 20 * 60 * 1000
+
+let tradierStatusConsecutiveFailures = 0
+let tradierStatusCooldownUntilMs = 0
+
+function getTradierStatusRefreshInterval(): number {
+  const now = Date.now()
+  if (tradierStatusCooldownUntilMs > now) {
+    return Math.max(tradierStatusCooldownUntilMs - now, TRADIER_STATUS_BASE_REFRESH_MS)
+  }
+  return TRADIER_STATUS_BASE_REFRESH_MS
+}
+
+function markTradierStatusFailure(error: Error): void {
+  if (error instanceof SPXRequestError && (error.status === 404 || error.status === 405)) {
+    tradierStatusConsecutiveFailures = 0
+    tradierStatusCooldownUntilMs = Date.now() + TRADIER_STATUS_MISSING_ENDPOINT_BACKOFF_MS
+    return
+  }
+
+  tradierStatusConsecutiveFailures = Math.min(tradierStatusConsecutiveFailures + 1, 6)
+  const delay = Math.min(
+    TRADIER_STATUS_BASE_REFRESH_MS * (2 ** Math.max(tradierStatusConsecutiveFailures - 1, 0)),
+    TRADIER_STATUS_MAX_BACKOFF_MS,
+  )
+  tradierStatusCooldownUntilMs = Date.now() + delay
+}
+
+function clearTradierStatusFailureState(): void {
+  tradierStatusConsecutiveFailures = 0
+  tradierStatusCooldownUntilMs = 0
+}
+
 export function useTradierBroker() {
   const { session } = useMemberAuth()
   const [modeError, setModeError] = useState<string | null>(null)
@@ -53,8 +88,11 @@ export function useTradierBroker() {
   const [isKilling, setIsKilling] = useState(false)
 
   const statusQuery = useSPXQuery<TradierBrokerStatus>('/api/spx/broker/tradier/status', {
-    refreshInterval: 15_000,
+    refreshInterval: () => getTradierStatusRefreshInterval(),
     revalidateOnFocus: false,
+    errorRetryCount: 0,
+    onError: markTradierStatusFailure,
+    onSuccess: clearTradierStatusFailureState,
   })
 
   const status = statusQuery.data || null

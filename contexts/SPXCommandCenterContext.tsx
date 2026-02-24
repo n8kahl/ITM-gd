@@ -221,6 +221,32 @@ function toEpoch(value: string | null | undefined): number {
   return Number.isFinite(epoch) ? epoch : 0
 }
 
+function parseContractResponseMessage(payload: string): string {
+  if (!payload) return ''
+  try {
+    const parsed = JSON.parse(payload) as { message?: unknown; error?: unknown }
+    if (typeof parsed.message === 'string' && parsed.message.trim().length > 0) {
+      return parsed.message
+    }
+    if (typeof parsed.error === 'string' && parsed.error.trim().length > 0) {
+      return parsed.error
+    }
+  } catch {
+    // Payload might be plain text/HTML. Fall back below.
+  }
+  return payload
+}
+
+function isContractEndpointUnavailableMessage(message: string): boolean {
+  const normalized = message.toLowerCase()
+  if (!normalized) return false
+  if (normalized.includes('missing spx endpoint path')) return true
+  if (normalized.includes('unable to reach spx backend endpoint')) return true
+  return normalized.includes('contract-select')
+    && normalized.includes('route')
+    && normalized.includes('not found')
+}
+
 function rankSetups(setups: Setup[]): Setup[] {
   return [...setups].sort((a, b) => {
     const statusDelta = SETUP_STATUS_PRIORITY[a.status] - SETUP_STATUS_PRIORITY[b.status]
@@ -2179,6 +2205,25 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
       if (!response.ok) {
         if (response.status === 404) {
+          const responseMessage = parseContractResponseMessage(await response.text())
+          if (isContractEndpointUnavailableMessage(responseMessage)) {
+            contractEndpointModeRef.current = 'unavailable'
+            contractEndpointUnavailableUntilRef.current = Date.now() + CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS
+            const durationMs = stopTimer({
+              setupId,
+              result: 'endpoint_not_found',
+              status: response.status,
+            })
+            trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.CONTRACT_RESULT, {
+              setupId,
+              result: 'endpoint_not_found',
+              status: response.status,
+              durationMs,
+              backoffMs: CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS,
+            }, { level: 'warning', persist: true })
+            return setup.recommendedContract || null
+          }
+
           contractSetupUnavailableUntilRef.current[setupId] = Date.now() + CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS
           const durationMs = stopTimer({
             setupId,
@@ -2211,6 +2256,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
             backoffMs: CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS,
           }, { level: 'warning', persist: true })
           return setup.recommendedContract || null
+        }
+
+        if (response.status >= 500) {
+          contractEndpointUnavailableUntilRef.current = Date.now() + CONTRACT_ENDPOINT_UNAVAILABLE_BACKOFF_MS
         }
 
         const durationMs = stopTimer({

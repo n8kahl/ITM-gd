@@ -9,12 +9,14 @@ describe('loadConfidenceModelWeights', () => {
   const previousUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const previousBucket = process.env.SPX_ML_CONFIDENCE_BUCKET
   const previousPath = process.env.SPX_ML_CONFIDENCE_MODEL_PATH
+  const previousRefreshMs = process.env.SPX_ML_CONFIDENCE_REFRESH_MS
 
   beforeEach(() => {
     resetConfidenceModelCacheForTest()
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
     process.env.SPX_ML_CONFIDENCE_BUCKET = 'ml-models'
     process.env.SPX_ML_CONFIDENCE_MODEL_PATH = 'confidence/latest.json'
+    process.env.SPX_ML_CONFIDENCE_REFRESH_MS = '60000'
   })
 
   afterEach(() => {
@@ -28,6 +30,9 @@ describe('loadConfidenceModelWeights', () => {
 
     if (previousPath == null) delete process.env.SPX_ML_CONFIDENCE_MODEL_PATH
     else process.env.SPX_ML_CONFIDENCE_MODEL_PATH = previousPath
+
+    if (previousRefreshMs == null) delete process.env.SPX_ML_CONFIDENCE_REFRESH_MS
+    else process.env.SPX_ML_CONFIDENCE_REFRESH_MS = previousRefreshMs
   })
 
   it('loads confidence model weights from Supabase storage URL', async () => {
@@ -71,5 +76,28 @@ describe('loadConfidenceModelWeights', () => {
     })
 
     expect(model).toBeNull()
+  })
+
+  it('backs off after a failed fetch and avoids immediate refetch loops', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({}),
+    } as Response)
+
+    const firstAttempt = await loadConfidenceModelWeights({
+      forceRefresh: true,
+      fetchImpl: fetchMock,
+      nowMs: 1_000,
+    })
+    const secondAttempt = await loadConfidenceModelWeights({
+      fetchImpl: fetchMock,
+      nowMs: 2_000,
+    })
+
+    expect(firstAttempt).toBeNull()
+    expect(secondAttempt).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

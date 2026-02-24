@@ -10,6 +10,18 @@ const SPX_REQUEST_TIMEOUT_MS = 20_000
 const SPX_SNAPSHOT_REQUEST_TIMEOUT_MS = 55_000
 const SPX_STREAM_TIMEOUT_MS = 25_000
 
+export class SPXRequestError extends Error {
+  readonly status: number
+  readonly endpoint: string
+
+  constructor(message: string, status: number, endpoint: string) {
+    super(message)
+    this.name = 'SPXRequestError'
+    this.status = status
+    this.endpoint = endpoint
+  }
+}
+
 function parseSSEDataBlocks<T>(raw: string): T[] {
   const events = raw
     .split(/\n\n+/)
@@ -225,7 +237,11 @@ const fetcher = async <T>(key: SPXKey): Promise<T> => {
   if (!response.ok) {
     const text = await response.text()
     const contentType = response.headers.get('content-type') || ''
-    throw new Error(parseSPXErrorMessage(response.status, contentType, text))
+    throw new SPXRequestError(
+      parseSPXErrorMessage(response.status, contentType, text),
+      response.status,
+      url,
+    )
   }
 
   const payload = await response.json() as Record<string, unknown>
@@ -303,7 +319,11 @@ export async function postSPX<T>(endpoint: string, token: string, body: Record<s
   if (!response.ok) {
     const text = await response.text()
     const contentType = response.headers.get('content-type') || ''
-    throw new Error(parseSPXErrorMessage(response.status, contentType, text))
+    throw new SPXRequestError(
+      parseSPXErrorMessage(response.status, contentType, text),
+      response.status,
+      endpoint,
+    )
   }
 
   const contentType = response.headers.get('content-type') || ''
@@ -355,7 +375,11 @@ export async function postSPXStream<T>(endpoint: string, token: string, body: Re
   if (!response.ok) {
     const text = await response.text()
     const contentType = response.headers.get('content-type') || ''
-    throw new Error(parseSPXErrorMessage(response.status, contentType, text))
+    throw new SPXRequestError(
+      parseSPXErrorMessage(response.status, contentType, text),
+      response.status,
+      endpoint,
+    )
   }
 
   const contentType = response.headers.get('content-type') || ''
