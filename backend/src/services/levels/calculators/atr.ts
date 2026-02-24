@@ -1,6 +1,18 @@
 import { logger } from '../../../lib/logger';
 import { MassiveAggregate } from '../../../config/massive';
 
+const VOLATILITY_THRESHOLDS: Record<string, { low: number; moderate: number; high: number }> = {
+  SPX: { low: 30, moderate: 50, high: 70 },
+  NDX: { low: 40, moderate: 70, high: 90 },
+  SPY: { low: 3, moderate: 5, high: 7 },
+  QQQ: { low: 4, moderate: 7, high: 10 },
+};
+
+function getVolatilityThresholds(symbol?: string): { low: number; moderate: number; high: number } {
+  if (!symbol) return VOLATILITY_THRESHOLDS.SPX;
+  return VOLATILITY_THRESHOLDS[symbol.toUpperCase()] || VOLATILITY_THRESHOLDS.SPX;
+}
+
 /**
  * Calculate True Range for a single period
  *
@@ -98,7 +110,8 @@ export function calculateATRTargets(
  */
 export function analyzeVolatility(
   atr14: number | null,
-  atr7: number | null
+  atr7: number | null,
+  symbol: string = 'SPX',
 ): {
   level: 'low' | 'moderate' | 'high' | 'extreme';
   expanding: boolean;
@@ -112,13 +125,15 @@ export function analyzeVolatility(
     };
   }
 
-  // Determine volatility level (these thresholds are for SPX/NDX)
+  const thresholds = getVolatilityThresholds(symbol);
+
+  // Determine volatility level using symbol-aware thresholds.
   let level: 'low' | 'moderate' | 'high' | 'extreme';
-  if (atr14 < 30) {
+  if (atr14 < thresholds.low) {
     level = 'low';
-  } else if (atr14 < 50) {
+  } else if (atr14 < thresholds.moderate) {
     level = 'moderate';
-  } else if (atr14 < 70) {
+  } else if (atr14 < thresholds.high) {
     level = 'high';
   } else {
     level = 'extreme';

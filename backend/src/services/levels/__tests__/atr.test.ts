@@ -1,4 +1,4 @@
-import { calculateATR } from '../calculators/atr';
+import { analyzeVolatility, calculateATR } from '../calculators/atr';
 import { MassiveAggregate } from '../../../config/massive';
 
 describe('ATR Calculator', () => {
@@ -97,5 +97,40 @@ describe('ATR Calculator', () => {
       const decimalPlaces = (atr.toString().split('.')[1] || '').length;
       expect(decimalPlaces).toBeLessThanOrEqual(2);
     }
+  });
+
+  describe('analyzeVolatility', () => {
+    it('uses SPX thresholds by default', () => {
+      expect(analyzeVolatility(25, 25).level).toBe('low');
+      expect(analyzeVolatility(40, 40).level).toBe('moderate');
+      expect(analyzeVolatility(60, 60).level).toBe('high');
+      expect(analyzeVolatility(75, 75).level).toBe('extreme');
+    });
+
+    it('uses NDX thresholds when symbol is NDX', () => {
+      expect(analyzeVolatility(35, 35, 'NDX').level).toBe('low');
+      expect(analyzeVolatility(50, 50, 'NDX').level).toBe('moderate');
+      expect(analyzeVolatility(80, 80, 'NDX').level).toBe('high');
+      expect(analyzeVolatility(100, 100, 'NDX').level).toBe('extreme');
+    });
+
+    it('uses SPY thresholds when symbol is SPY', () => {
+      expect(analyzeVolatility(2.5, 2.5, 'SPY').level).toBe('low');
+      expect(analyzeVolatility(4, 4, 'SPY').level).toBe('moderate');
+      expect(analyzeVolatility(6, 6, 'SPY').level).toBe('high');
+      expect(analyzeVolatility(8, 8, 'SPY').level).toBe('extreme');
+    });
+
+    it('uses QQQ thresholds when symbol is QQQ', () => {
+      expect(analyzeVolatility(3, 3, 'QQQ').level).toBe('low');
+      expect(analyzeVolatility(6, 6, 'QQQ').level).toBe('moderate');
+      expect(analyzeVolatility(9, 9, 'QQQ').level).toBe('high');
+      expect(analyzeVolatility(11, 11, 'QQQ').level).toBe('extreme');
+    });
+
+    it('falls back to SPX thresholds for unknown symbols', () => {
+      expect(analyzeVolatility(40, 40, 'RUT').level).toBe('moderate');
+      expect(analyzeVolatility(72, 72, 'UNKNOWN').level).toBe('extreme');
+    });
   });
 });
