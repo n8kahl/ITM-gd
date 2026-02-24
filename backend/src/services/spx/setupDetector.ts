@@ -176,15 +176,15 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
     maxFirstSeenMinuteEt: 330,
   },
   orb_breakout: {
-    // S7: Relaxed ORB gates to increase trigger rate from 0% baseline
-    minConfluenceScore: 3, // Was 4
+    // A6: Restore ORB quality gates while retaining early-session EMA grace.
+    minConfluenceScore: 3.5,
     minPWinCalibrated: 0.56, // Was 0.61
     minEvR: 0.24, // Was 0.3
     requireFlowConfirmation: true,
-    minAlignmentPct: 45, // Was 55
-    requireEmaAlignment: false, // S7: EMA alignment grace during ORB window
+    minAlignmentPct: 52,
+    requireEmaAlignment: true,
     requireVolumeRegimeAlignment: true,
-    maxFirstSeenMinuteEt: 165,
+    maxFirstSeenMinuteEt: 120,
   },
   trend_pullback: {
     minConfluenceScore: 3,
