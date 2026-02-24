@@ -25,12 +25,33 @@ export interface OptionsSetup {
   metadata: Record<string, any>;
 }
 
+const SCANNER_TIMEOUT_MS = 5000;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeout: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 /**
  * Scan for high implied volatility (use with caution for long premium)
  */
 export async function scanHighIV(symbol: string): Promise<OptionsSetup | null> {
   try {
-    const chain = await fetchOptionsChain(symbol, undefined, 5);
+    const chain = await withTimeout(
+      fetchOptionsChain(symbol, undefined, 5),
+      SCANNER_TIMEOUT_MS,
+      `scanHighIV chain ${symbol}`,
+    );
     if (!chain.options.calls.length && !chain.options.puts.length) return null;
 
     // Calculate average IV across ATM options
@@ -88,7 +109,11 @@ export async function scanHighIV(symbol: string): Promise<OptionsSetup | null> {
  */
 export async function scanUnusualActivity(symbol: string): Promise<OptionsSetup | null> {
   try {
-    const chain = await fetchOptionsChain(symbol, undefined, 10);
+    const chain = await withTimeout(
+      fetchOptionsChain(symbol, undefined, 10),
+      SCANNER_TIMEOUT_MS,
+      `scanUnusualActivity chain ${symbol}`,
+    );
     if (!chain.options.calls.length && !chain.options.puts.length) return null;
 
     const allOptions = [...chain.options.calls, ...chain.options.puts];

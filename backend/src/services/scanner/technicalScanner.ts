@@ -25,6 +25,22 @@ export interface TechnicalSetup {
 
 const PROXIMITY_THRESHOLD_PCT = 0.5;
 const STALE_PDC_SKIP_DISTANCE_PCT = 0.01;
+const SCANNER_TIMEOUT_MS = 5000;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeout: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 function logScannerFailure(scanner: string, symbol: string, error: unknown): void {
   logger.warn(`Scanner failed: ${scanner}`, {
@@ -101,7 +117,11 @@ function pickNearestProximityLevel(
  */
 export async function scanSupportBounce(symbol: string): Promise<TechnicalSetup | null> {
   try {
-    const levelsData = await calculateLevels(symbol, 'intraday');
+    const levelsData = await withTimeout(
+      calculateLevels(symbol, 'intraday'),
+      SCANNER_TIMEOUT_MS,
+      `scanSupportBounce levels ${symbol}`,
+    );
     const { currentPrice, levels } = levelsData;
     const atr = levels.indicators.atr14 || 0;
     const marketStatus = levelsData.marketContext?.marketStatus;
@@ -153,7 +173,11 @@ export async function scanSupportBounce(symbol: string): Promise<TechnicalSetup 
  */
 export async function scanResistanceRejection(symbol: string): Promise<TechnicalSetup | null> {
   try {
-    const levelsData = await calculateLevels(symbol, 'intraday');
+    const levelsData = await withTimeout(
+      calculateLevels(symbol, 'intraday'),
+      SCANNER_TIMEOUT_MS,
+      `scanResistanceRejection levels ${symbol}`,
+    );
     const { currentPrice, levels } = levelsData;
     const atr = levels.indicators.atr14 || 0;
     const marketStatus = levelsData.marketContext?.marketStatus;
@@ -205,7 +229,11 @@ export async function scanResistanceRejection(symbol: string): Promise<Technical
  */
 export async function scanVolumeSpike(symbol: string): Promise<TechnicalSetup | null> {
   try {
-    const intradayData = await fetchIntradayData(symbol);
+    const intradayData = await withTimeout(
+      fetchIntradayData(symbol),
+      SCANNER_TIMEOUT_MS,
+      `scanVolumeSpike intraday ${symbol}`,
+    );
     if (intradayData.length < 20) return null;
 
     // Calculate average volume over last 20 bars
@@ -247,7 +275,11 @@ export async function scanVolumeSpike(symbol: string): Promise<TechnicalSetup | 
  */
 export async function scanBreakout(symbol: string): Promise<TechnicalSetup | null> {
   try {
-    const levelsData = await calculateLevels(symbol, 'intraday');
+    const levelsData = await withTimeout(
+      calculateLevels(symbol, 'intraday'),
+      SCANNER_TIMEOUT_MS,
+      `scanBreakout levels ${symbol}`,
+    );
     const { currentPrice, levels } = levelsData;
     const atr = levels.indicators.atr14 || 0;
 
@@ -297,7 +329,11 @@ export async function scanBreakout(symbol: string): Promise<TechnicalSetup | nul
  */
 export async function scanBreakdown(symbol: string): Promise<TechnicalSetup | null> {
   try {
-    const levelsData = await calculateLevels(symbol, 'intraday');
+    const levelsData = await withTimeout(
+      calculateLevels(symbol, 'intraday'),
+      SCANNER_TIMEOUT_MS,
+      `scanBreakdown levels ${symbol}`,
+    );
     const { currentPrice, levels } = levelsData;
     const atr = levels.indicators.atr14 || 0;
 
@@ -376,7 +412,11 @@ function calculateRSI(data: MassiveAggregate[], period: number = 14): number | n
  */
 export async function scanMACrossover(symbol: string): Promise<TechnicalSetup | null> {
   try {
-    const dailyData = await fetchDailyData(symbol, 30);
+    const dailyData = await withTimeout(
+      fetchDailyData(symbol, 30),
+      SCANNER_TIMEOUT_MS,
+      `scanMACrossover daily ${symbol}`,
+    );
     if (dailyData.length < 22) return null;
 
     const sma9 = calculateSMA(dailyData, 9);
@@ -439,7 +479,11 @@ export async function scanMACrossover(symbol: string): Promise<TechnicalSetup | 
  */
 export async function scanRSIDivergence(symbol: string): Promise<TechnicalSetup | null> {
   try {
-    const dailyData = await fetchDailyData(symbol, 30);
+    const dailyData = await withTimeout(
+      fetchDailyData(symbol, 30),
+      SCANNER_TIMEOUT_MS,
+      `scanRSIDivergence daily ${symbol}`,
+    );
     if (dailyData.length < 16) return null;
 
     const rsi = calculateRSI(dailyData, 14);

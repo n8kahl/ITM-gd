@@ -1,6 +1,6 @@
 import { scanOpportunities } from '../index';
-import { runTechnicalScan, scanResistanceRejection } from '../technicalScanner';
-import { runOptionsScan } from '../optionsScanner';
+import { runTechnicalScan, scanResistanceRejection, scanVolumeSpike } from '../technicalScanner';
+import { runOptionsScan, scanHighIV } from '../optionsScanner';
 import * as technicalScannerModule from '../technicalScanner';
 import * as optionsScannerModule from '../optionsScanner';
 
@@ -115,6 +115,21 @@ describe('Opportunity Scanner', () => {
 
       const setups = await runTechnicalScan('SPX');
       expect(setups).toEqual([]);
+    });
+
+    it('returns null when intraday fetch exceeds scanner timeout', async () => {
+      jest.useFakeTimers();
+      mockFetchIntradayData.mockImplementation(() => new Promise(() => {
+        // Intentionally unresolved to force timeout path.
+      }));
+
+      try {
+        const pending = scanVolumeSpike('SPX');
+        await jest.advanceTimersByTimeAsync(5001);
+        await expect(pending).resolves.toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('skips stale PDC proximity setups outside regular session', async () => {
@@ -237,6 +252,21 @@ describe('Opportunity Scanner', () => {
 
       const setups = await runOptionsScan('SPX');
       expect(setups).toEqual([]);
+    });
+
+    it('returns null when options chain fetch exceeds scanner timeout', async () => {
+      jest.useFakeTimers();
+      mockFetchOptionsChain.mockImplementation(() => new Promise(() => {
+        // Intentionally unresolved to force timeout path.
+      }));
+
+      try {
+        const pending = scanHighIV('SPX');
+        await jest.advanceTimersByTimeAsync(5001);
+        await expect(pending).resolves.toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 
