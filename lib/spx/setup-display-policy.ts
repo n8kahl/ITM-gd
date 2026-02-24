@@ -43,12 +43,24 @@ function shouldEnableCompressionFilter(input: BuildSetupDisplayPolicyInput, dire
   if (!directionalBias) return false
   if (input.regime !== 'compression') return false
 
+  const selectedSetupConfidence = input.selectedSetup
+    ? (
+      (typeof input.selectedSetup.pWinCalibrated === 'number'
+        ? input.selectedSetup.pWinCalibrated
+        : (input.selectedSetup.probability / 100))
+      * 100
+    )
+    : 0
+  if (selectedSetupConfidence >= REGIME_CONFLICT_CONFIDENCE_THRESHOLD) {
+    return true
+  }
+
   const predictionConfidence = input.prediction?.confidence ?? 0
   if (predictionConfidence >= REGIME_CONFLICT_CONFIDENCE_THRESHOLD) {
     return true
   }
 
-  return Boolean(input.selectedSetup && (input.selectedSetup.status === 'ready' || input.selectedSetup.status === 'triggered'))
+  return false
 }
 
 export function buildSetupDisplayPolicy(input: BuildSetupDisplayPolicyInput): BuildSetupDisplayPolicyResult {
