@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { enrichSPXSetupWithDecisionEngine, evaluateSPXSetupDecision } from '@/lib/spx/decision-engine'
+import {
+  enrichSPXSetupWithDecisionEngine,
+  evaluateSPXSetupDecision,
+  regimeCompatibility,
+} from '@/lib/spx/decision-engine'
 import type { FlowEvent, Setup } from '@/lib/types/spx-command-center'
 
 function buildSetup(partial?: Partial<Setup>): Setup {
@@ -51,6 +55,14 @@ function buildFlow(direction: FlowEvent['direction'], id: string): FlowEvent {
 }
 
 describe('decision engine', () => {
+  it('scores regime compatibility across aligned, adjacent, mild, and strong conflicts', () => {
+    expect(regimeCompatibility('trending', null)).toBe(0.5)
+    expect(regimeCompatibility('trending', 'trending')).toBe(1)
+    expect(regimeCompatibility('trending', 'breakout')).toBe(0.65)
+    expect(regimeCompatibility('trending', 'compression')).toBe(0.3)
+    expect(regimeCompatibility('trending', 'ranging')).toBe(0.15)
+  })
+
   it('produces stronger alignment/confidence for aligned bullish signals', () => {
     const setup = buildSetup()
     const result = evaluateSPXSetupDecision(setup, {
@@ -153,6 +165,94 @@ describe('decision engine', () => {
     expect(result.alignmentScore).toBeLessThan(50)
     expect(result.confidenceTrend).toBe('down')
     expect(result.risks.some((risk) => /regime mismatch|flow/i.test(risk))).toBe(true)
+  })
+
+  it('scales regime conflict penalties across aligned, mild, and strong conflict levels', () => {
+    const setup = buildSetup()
+
+    const aligned = evaluateSPXSetupDecision(setup, {
+      regime: 'trending',
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    })
+    const mildConflict = evaluateSPXSetupDecision(setup, {
+      regime: 'compression',
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    })
+    const strongConflict = evaluateSPXSetupDecision(setup, {
+      regime: 'ranging',
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    })
+
+    expect(aligned.confidence).toBeGreaterThan(mildConflict.confidence)
+    expect(mildConflict.confidence).toBeGreaterThan(strongConflict.confidence)
+    expect(aligned.confidence).toBeCloseTo(88.41, 2)
+    expect(mildConflict.confidence).toBeCloseTo(62.26, 2)
+    expect(strongConflict.confidence).toBeCloseTo(53.23, 2)
+  })
+
+  it('keeps bearish fade confidence below 45% in a trending counter-regime', () => {
+    const setup = buildSetup({
+      type: 'fade_at_wall',
+      direction: 'bearish',
+      regime: 'ranging',
+      confluenceScore: 2,
+      probability: 50,
+    })
+
+    const result = evaluateSPXSetupDecision(setup, {
+      regime: 'trending',
+      prediction: {
+        regime: 'trending',
+        direction: { bullish: 84, bearish: 10, neutral: 6 },
+        magnitude: { small: 25, medium: 45, large: 30 },
+        timingWindow: { description: 'Immediate', actionable: true },
+        nextTarget: {
+          upside: { price: 6042, zone: 'call_wall' },
+          downside: { price: 6022, zone: 'put_wall' },
+        },
+        probabilityCone: [],
+        confidence: 74,
+      },
+      basis: {
+        current: 0.8,
+        trend: 'expanding',
+        leading: 'SPX',
+        ema5: 0.5,
+        ema20: 0.2,
+        zscore: 0.9,
+      },
+      gex: {
+        netGex: 1500,
+        flipPoint: 6025,
+        callWall: 6050,
+        putWall: 6000,
+        zeroGamma: 6025,
+        gexByStrike: [],
+        keyLevels: [],
+        expirationBreakdown: {},
+        timestamp: '2026-02-21T15:00:00.000Z',
+      },
+      flowEvents: [
+        buildFlow('bullish', 'f1'),
+        buildFlow('bullish', 'f2'),
+        buildFlow('bullish', 'f3'),
+      ],
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    })
+
+    expect(result.confidence).toBeLessThan(45)
   })
 
   it('enriches setup with deterministic decision fields', () => {

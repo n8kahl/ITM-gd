@@ -46,7 +46,7 @@ function toEpoch(value: string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function regimeCompatibility(setupRegime: Regime, activeRegime: Regime | null): number {
+export function regimeCompatibility(setupRegime: Regime, activeRegime: Regime | null): number {
   if (!activeRegime) return 0.5
   if (setupRegime === activeRegime) return 1
   if (
@@ -57,7 +57,21 @@ function regimeCompatibility(setupRegime: Regime, activeRegime: Regime | null): 
   ) {
     return 0.65
   }
+  if (
+    (setupRegime === 'trending' && activeRegime === 'ranging')
+    || (setupRegime === 'ranging' && activeRegime === 'trending')
+    || (setupRegime === 'breakout' && activeRegime === 'compression')
+    || (setupRegime === 'compression' && activeRegime === 'breakout')
+  ) {
+    return 0.15
+  }
   return 0.3
+}
+
+function regimePenaltyFromScore(regimeScore: number): number {
+  if (regimeScore < 0.3) return 18
+  if (regimeScore < 0.45) return 12
+  return 0
 }
 
 function directionalPredictionScore(
@@ -248,7 +262,7 @@ export function evaluateSPXSetupDecision(
   const confluenceComponent = (setup.confluenceScore / 5) * 22
   const probabilityComponent = clamp(setup.probability, 0, 100) * 0.2
   const flowComponent = flowBias * 8
-  const regimePenalty = regimeScore < 0.45 ? 6 : 0
+  const regimePenalty = regimePenaltyFromScore(regimeScore)
 
   const confidence = round(clamp(
     20
