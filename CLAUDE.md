@@ -400,6 +400,17 @@ When context compacts mid-session, the agent must preserve:
           "type": "command",
           "command": "bash -c 'INPUT=$(cat); FILE=$(echo $INPUT | jq -r \".tool_input.file_path // empty\"); if echo \"$FILE\" | grep -qE \"\\.(ts|tsx)$\"; then pnpm exec eslint \"$FILE\" --fix 2>/dev/null || true; fi'"
         }]
+      },
+      {
+        // TypeScript type-check agent: runs tsc --noEmit after every git commit.
+        // Only reports errors in files that were part of the commit (ignores pre-existing errors).
+        // If committed files have TS errors, the hook fails (exit 1) and the agent must fix them.
+        // Script: .claude/tsc-check-commit.sh
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "bash -c 'INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r \".tool_input.command // empty\"); if echo \"$CMD\" | grep -qE \"git commit\"; then /home/user/ITM-gd/.claude/tsc-check-commit.sh; fi; exit 0'"
+        }]
       }
     ]
   }
