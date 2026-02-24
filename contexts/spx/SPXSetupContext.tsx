@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext } from 'react'
-import type { ContractRecommendation, LevelCategory, Setup } from '@/lib/types/spx-command-center'
+import type { ContractRecommendation, LevelCategory, Setup, SPXStandbyGuidance } from '@/lib/types/spx-command-center'
 
 type TradeMode = 'scan' | 'in_trade'
 
@@ -40,6 +40,7 @@ export interface SPXActiveTradePlan {
 
 export interface SPXSetupContextState {
   activeSetups: Setup[]
+  standbyGuidance: SPXStandbyGuidance | null
   selectedSetup: Setup | null
   tradeMode: TradeMode
   inTradeSetup: Setup | null

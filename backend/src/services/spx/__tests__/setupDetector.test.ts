@@ -1,4 +1,4 @@
-import { __resetSetupDetectorStateForTests, detectActiveSetups } from '../setupDetector';
+import { __resetSetupDetectorStateForTests, detectActiveSetups, getLatestSetupEnvironmentState } from '../setupDetector';
 import { getMergedLevels } from '../levelEngine';
 import { computeUnifiedGEXLandscape } from '../gexEngine';
 import { getFibLevels } from '../fibEngine';
@@ -371,5 +371,420 @@ describe('spx/setupDetector', () => {
     expect(sameSetup?.status).toBe('invalidated');
     expect(sameSetup?.invalidationReason).toBe('ttl_expired');
     expect(sameSetup?.ttlExpiresAt).toBeNull();
+  });
+
+  it('demotes actionable setups and exposes standby guidance when environment gate is blocked', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+    process.env.SPX_ENVIRONMENT_GATE_ENABLED = 'true';
+
+    const blockedGate = {
+      passed: false,
+      reason: 'VIX 34 above actionable cap (30)',
+      reasons: ['VIX 34 above actionable cap (30)'],
+      vixRegime: 'extreme' as const,
+      dynamicReadyThreshold: 3.8,
+      caution: false,
+      breakdown: {
+        vixRegime: {
+          passed: false,
+          regime: 'extreme' as const,
+          value: 34,
+          reason: 'VIX 34 above actionable cap (30)',
+        },
+        expectedMoveConsumption: {
+          passed: true,
+          value: 42,
+          expectedMovePoints: 12,
+        },
+        macroCalendar: {
+          passed: true,
+          caution: false,
+          nextEvent: null,
+        },
+        sessionTime: {
+          passed: true,
+          minuteEt: 620,
+          minutesUntilClose: 340,
+          source: 'local' as const,
+        },
+        compression: {
+          passed: true,
+          realizedVolPct: 16,
+          impliedVolPct: 34,
+          spreadPct: 18,
+        },
+      },
+    };
+
+    const setups = await detectActiveSetups({
+      forceRefresh: true,
+      environmentGateOverride: blockedGate,
+    });
+    const actionableCount = setups.filter((setup) => setup.status === 'ready' || setup.status === 'triggered').length;
+
+    expect(actionableCount).toBe(0);
+    expect(setups.some((setup) => setup.gateReasons?.some((reason) => reason.startsWith('environment_gate:')))).toBe(true);
+
+    const environmentState = await getLatestSetupEnvironmentState({ forceRefresh: true });
+    expect(environmentState?.gate?.passed).toBe(false);
+    expect(environmentState?.standbyGuidance?.status).toBe('STANDBY');
+  });
+
+  it('uses flow window signal to confirm setups when local flow is sparse', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+
+    const setups = await detectActiveSetups({
+      forceRefresh: true,
+      flowEvents: [
+        {
+          id: 'flow-1',
+          type: 'sweep',
+          symbol: 'SPX',
+          strike: 150,
+          expiry: '2026-02-20',
+          size: 120,
+          direction: 'bullish',
+          premium: 220_000,
+          timestamp: '2026-02-20T15:29:00.000Z',
+        },
+      ],
+      flowAggregationOverride: {
+        generatedAt: '2026-02-20T15:30:00.000Z',
+        source: 'computed',
+        directionalBias: 'bullish',
+        primaryWindow: '5m',
+        latestEventAt: '2026-02-20T15:29:00.000Z',
+        windows: {
+          '5m': {
+            window: '5m',
+            startAt: '2026-02-20T15:25:00.000Z',
+            endAt: '2026-02-20T15:30:00.000Z',
+            eventCount: 3,
+            sweepCount: 2,
+            blockCount: 1,
+            bullishPremium: 280_000,
+            bearishPremium: 70_000,
+            totalPremium: 350_000,
+            flowScore: 80,
+            bias: 'bullish',
+          },
+          '15m': {
+            window: '15m',
+            startAt: '2026-02-20T15:15:00.000Z',
+            endAt: '2026-02-20T15:30:00.000Z',
+            eventCount: 4,
+            sweepCount: 2,
+            blockCount: 2,
+            bullishPremium: 320_000,
+            bearishPremium: 120_000,
+            totalPremium: 440_000,
+            flowScore: 72.73,
+            bias: 'bullish',
+          },
+          '30m': {
+            window: '30m',
+            startAt: '2026-02-20T15:00:00.000Z',
+            endAt: '2026-02-20T15:30:00.000Z',
+            eventCount: 6,
+            sweepCount: 3,
+            blockCount: 3,
+            bullishPremium: 430_000,
+            bearishPremium: 190_000,
+            totalPremium: 620_000,
+            flowScore: 69.35,
+            bias: 'bullish',
+          },
+        },
+      },
+    });
+
+    expect(setups.length).toBeGreaterThan(0);
+    expect(setups[0].flowConfirmed).toBe(true);
+    expect(setups[0].decisionDrivers?.some((driver) => driver.includes('Flow window 5m aligned'))).toBe(true);
+  });
+
+  it('adds multi-timeframe confluence metadata when enabled', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+    process.env.SPX_MULTI_TF_CONFLUENCE_ENABLED = 'true';
+
+    const setups = await detectActiveSetups({
+      forceRefresh: true,
+      multiTFConfluenceOverride: {
+        asOf: '2026-02-20T15:30:00.000Z',
+        source: 'computed',
+        tf1m: {
+          timeframe: '1m',
+          ema21: 101.2,
+          ema55: 100.9,
+          slope21: 0.06,
+          latestClose: 101.4,
+          trend: 'up',
+          swingHigh: 101.8,
+          swingLow: 100.7,
+          bars: [],
+        },
+        tf5m: {
+          timeframe: '5m',
+          ema21: 101.6,
+          ema55: 100.8,
+          slope21: 0.08,
+          latestClose: 101.9,
+          trend: 'up',
+          swingHigh: 102.5,
+          swingLow: 100.4,
+          bars: [],
+        },
+        tf15m: {
+          timeframe: '15m',
+          ema21: 101.4,
+          ema55: 100.7,
+          slope21: 0.05,
+          latestClose: 101.6,
+          trend: 'up',
+          swingHigh: 103.0,
+          swingLow: 99.5,
+          bars: [],
+        },
+        tf1h: {
+          timeframe: '1h',
+          ema21: 102.0,
+          ema55: 100.6,
+          slope21: 0.11,
+          latestClose: 102.2,
+          trend: 'up',
+          swingHigh: 104.5,
+          swingLow: 98.8,
+          bars: [],
+        },
+      },
+    });
+
+    expect(setups.length).toBeGreaterThan(0);
+    expect(setups[0].multiTFConfluence).toBeTruthy();
+    expect(setups[0].multiTFConfluence?.aligned).toBe(true);
+    expect(setups[0].confluenceSources).toContain('multi_tf_alignment');
+    expect(setups[0].decisionDrivers?.some((driver) => driver.includes('Multi-TF aligned'))).toBe(true);
+  });
+
+  it('adds weighted confluence breakdown when weighted model is enabled', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+    process.env.SPX_MULTI_TF_CONFLUENCE_ENABLED = 'true';
+    process.env.SPX_WEIGHTED_CONFLUENCE_ENABLED = 'true';
+
+    const setups = await detectActiveSetups({
+      forceRefresh: true,
+      multiTFConfluenceOverride: {
+        asOf: '2026-02-20T15:30:00.000Z',
+        source: 'computed',
+        tf1m: {
+          timeframe: '1m',
+          ema21: 101.2,
+          ema55: 100.9,
+          slope21: 0.06,
+          latestClose: 101.4,
+          trend: 'up',
+          swingHigh: 101.8,
+          swingLow: 100.7,
+          bars: [],
+        },
+        tf5m: {
+          timeframe: '5m',
+          ema21: 101.6,
+          ema55: 100.8,
+          slope21: 0.08,
+          latestClose: 101.9,
+          trend: 'up',
+          swingHigh: 102.5,
+          swingLow: 100.4,
+          bars: [],
+        },
+        tf15m: {
+          timeframe: '15m',
+          ema21: 101.4,
+          ema55: 100.7,
+          slope21: 0.05,
+          latestClose: 101.6,
+          trend: 'up',
+          swingHigh: 103.0,
+          swingLow: 99.5,
+          bars: [],
+        },
+        tf1h: {
+          timeframe: '1h',
+          ema21: 102.0,
+          ema55: 100.6,
+          slope21: 0.11,
+          latestClose: 102.2,
+          trend: 'up',
+          swingHigh: 104.5,
+          swingLow: 98.8,
+          bars: [],
+        },
+      },
+    });
+
+    expect(setups.length).toBeGreaterThan(0);
+    expect(setups[0].confluenceBreakdown).toBeTruthy();
+    expect(setups[0].confluenceBreakdown?.composite).toBeGreaterThan(0);
+    expect(setups[0].confluenceBreakdown?.threshold).toBeGreaterThan(0);
+    expect(setups[0].confluenceSources).toContain('weighted_confluence');
+    expect(setups[0].decisionDrivers?.some((driver) => driver.includes('Weighted confluence'))).toBe(true);
+  });
+
+  it('uses adaptive EV model when enabled', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValueOnce(null as never);
+    process.env.SPX_ADAPTIVE_EV_ENABLED = 'true';
+    process.env.SPX_EV_SLIPPAGE_R = '0.07';
+
+    const setups = await detectActiveSetups({
+      forceRefresh: true,
+      indicatorContext: {
+        emaFast: 101.2,
+        emaSlow: 100.8,
+        emaFastSlope: 0.04,
+        emaSlowSlope: 0.02,
+        atr14: 1.4,
+        volumeTrend: 'rising',
+        sessionOpenPrice: 100.2,
+        orbHigh: 102.3,
+        orbLow: 99.6,
+        minutesSinceOpen: 320,
+        sessionOpenTimestamp: '2026-02-20T14:30:00.000Z',
+        asOfTimestamp: '2026-02-20T19:40:00.000Z',
+        vwapPrice: 100.9,
+        vwapDeviation: 0.2,
+        latestBar: null,
+        priorBar: null,
+        avgRecentVolume: null,
+      },
+    });
+
+    expect(setups.length).toBeGreaterThan(0);
+    expect(setups[0].evContext).toBeTruthy();
+    expect(setups[0].evContext?.model).toBe('adaptive');
+    expect(setups[0].evContext?.slippageR).toBe(0.07);
+    expect(setups[0].decisionDrivers?.some((driver) => driver.includes('Adaptive EV'))).toBe(true);
+  });
+
+  it('keeps stable setup identity and records morph history when zone IDs shift', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValue(null as never);
+
+    const initial = await detectActiveSetups({
+      forceRefresh: true,
+      previousSetups: [],
+    });
+
+    expect(initial.length).toBeGreaterThan(0);
+    expect(initial[0].stableIdHash).toBeTruthy();
+
+    mockGetMergedLevels.mockResolvedValue({
+      levels: [],
+      clusters: [
+        {
+          id: 'cluster-2',
+          priceLow: 100.4,
+          priceHigh: 102.4,
+          clusterScore: 4.25,
+          type: 'defended',
+          sources: [],
+          testCount: 2,
+          lastTestAt: '2026-02-15T14:45:00.000Z',
+          held: true,
+          holdRate: 71,
+        },
+      ],
+      generatedAt: '2026-02-15T14:45:00.000Z',
+    });
+
+    const shifted = await detectActiveSetups({
+      forceRefresh: true,
+      previousSetups: initial,
+    });
+
+    expect(shifted.length).toBeGreaterThan(0);
+    expect(shifted[0].stableIdHash).toBe(initial[0].stableIdHash);
+    expect(shifted[0].id).toBe(initial[0].id);
+    expect((shifted[0].morphHistory || []).length).toBeGreaterThan(0);
+    expect(shifted.some((setup) => setup.status === 'expired' && setup.id === initial[0].id)).toBe(false);
+  });
+
+  it('captures trigger bar context and updates trigger latency on subsequent refreshes', async () => {
+    buildBaseMocks(101);
+    mockCacheGet.mockResolvedValue(null as never);
+
+    const nowMs = Date.now();
+    const firstEvalIso = new Date(nowMs).toISOString();
+    const secondEvalIso = new Date(nowMs + (65 * 1000)).toISOString();
+    const priorBarTs = nowMs - (2 * 60 * 1000);
+    const latestBarTs = nowMs - (60 * 1000);
+
+    const indicatorContext = {
+      emaFast: 101.0,
+      emaSlow: 100.9,
+      emaFastSlope: 0.01,
+      emaSlowSlope: 0.01,
+      atr14: 1.6,
+      volumeTrend: 'flat' as const,
+      sessionOpenPrice: 100.4,
+      orbHigh: 102.4,
+      orbLow: 99.9,
+      minutesSinceOpen: 250,
+      sessionOpenTimestamp: new Date(nowMs - (250 * 60 * 1000)).toISOString(),
+      asOfTimestamp: firstEvalIso,
+      vwapPrice: null,
+      vwapDeviation: null,
+      latestBar: {
+        t: latestBarTs,
+        o: 100.7,
+        h: 102.5,
+        l: 100.3,
+        c: 102.2,
+        v: 1800,
+      },
+      priorBar: {
+        t: priorBarTs,
+        o: 101.8,
+        h: 102.0,
+        l: 100.6,
+        c: 100.9,
+        v: 1200,
+      },
+      avgRecentVolume: 950,
+    };
+
+    const first = await detectActiveSetups({
+      forceRefresh: true,
+      indicatorContext,
+      asOfTimestamp: firstEvalIso,
+    });
+
+    expect(first.length).toBeGreaterThan(0);
+    const firstTriggered = first.find((setup) => setup.status === 'triggered') || first[0];
+    expect(firstTriggered.triggerContext).toBeTruthy();
+    expect(firstTriggered.triggerContext?.triggerBarPatternType).toBe('engulfing_bull');
+    expect(firstTriggered.triggerContext?.triggerBarVolume).toBe(1800);
+
+    const second = await detectActiveSetups({
+      forceRefresh: true,
+      previousSetups: first,
+      indicatorContext: {
+        ...indicatorContext,
+        asOfTimestamp: secondEvalIso,
+      },
+      asOfTimestamp: secondEvalIso,
+    });
+
+    expect(second.length).toBeGreaterThan(0);
+    const secondMatched = second.find((setup) => setup.id === firstTriggered.id) || second[0];
+    expect(secondMatched.triggerContext).toBeTruthy();
+    expect(secondMatched.triggerContext?.triggerBarPatternType).toBe(firstTriggered.triggerContext?.triggerBarPatternType);
+    expect(secondMatched.triggerContext?.triggerBarTimestamp).toBe(firstTriggered.triggerContext?.triggerBarTimestamp);
+    expect((secondMatched.triggerContext?.triggerLatencyMs || 0)).toBeGreaterThanOrEqual(firstTriggered.triggerContext?.triggerLatencyMs || 0);
   });
 });

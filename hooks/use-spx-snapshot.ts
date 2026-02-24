@@ -7,11 +7,14 @@ import type {
   CoachMessage,
   FibLevel,
   FlowEvent,
+  FlowWindowAggregation,
   GEXProfile,
   PredictionState,
   Regime,
   SpyImpactState,
+  SPXEnvironmentGateDecision,
   Setup,
+  SPXStandbyGuidance,
   SPXLevel,
 } from '@/lib/types/spx-command-center'
 
@@ -41,7 +44,10 @@ interface SPXSnapshotResponse {
   regime: SPXSnapshotRegimeState
   prediction: PredictionState
   flow: FlowEvent[]
+  flowAggregation?: FlowWindowAggregation | null
   coachMessages: CoachMessage[]
+  environmentGate?: SPXEnvironmentGateDecision | null
+  standbyGuidance?: SPXStandbyGuidance | null
   generatedAt: string
 }
 

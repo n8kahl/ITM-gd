@@ -40,11 +40,13 @@ import type {
   ContractRecommendation,
   FibLevel,
   FlowEvent,
+  FlowWindowAggregation,
   GEXProfile,
   LevelCategory,
   PredictionState,
   Regime,
   Setup,
+  SPXStandbyGuidance,
   SpyImpactState,
   SPXLevel,
 } from '@/lib/types/spx-command-center'
@@ -136,6 +138,7 @@ interface SPXCommandCenterState {
   fibLevels: FibLevel[]
   gexProfile: { spx: GEXProfile; spy: GEXProfile; combined: GEXProfile } | null
   activeSetups: Setup[]
+  standbyGuidance: SPXStandbyGuidance | null
   coachMessages: CoachMessage[]
   coachDecision: CoachDecisionBrief | null
   coachDecisionStatus: 'idle' | 'loading' | 'ready' | 'error'
@@ -159,6 +162,7 @@ interface SPXCommandCenterState {
   showSPYDerived: boolean
   chartAnnotations: ChartAnnotation[]
   flowEvents: FlowEvent[]
+  flowAggregation: FlowWindowAggregation | null
   latestMicrobar: RealtimeMicrobar | null
   isLoading: boolean
   error: Error | null
@@ -2525,10 +2529,12 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
   const liveFlowState = useMemo<SPXFlowContextState>(() => ({
     flowEvents,
-  }), [flowEvents])
+    flowAggregation: snapshotData?.flowAggregation || null,
+  }), [flowEvents, snapshotData?.flowAggregation])
 
   const liveSetupState = useMemo<SPXSetupContextState>(() => ({
     activeSetups,
+    standbyGuidance: snapshotData?.standbyGuidance || null,
     selectedSetup,
     tradeMode,
     inTradeSetup,
@@ -2577,6 +2583,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     tradePnlDollars,
     tradePnlPoints,
     visibleLevelCategories,
+    snapshotData?.standbyGuidance,
   ])
 
   const livePriceState = useMemo<SPXPriceContextState>(() => ({
@@ -2674,6 +2681,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     fibLevels: legacyAnalyticsState.fibLevels,
     gexProfile: legacyAnalyticsState.gexProfile,
     activeSetups: legacySetupState.activeSetups,
+    standbyGuidance: legacySetupState.standbyGuidance,
     coachMessages: legacyCoachState.coachMessages,
     coachDecision: legacyCoachState.coachDecision,
     coachDecisionStatus: legacyCoachState.coachDecisionStatus,
@@ -2697,6 +2705,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     showSPYDerived: legacySetupState.showSPYDerived,
     chartAnnotations: legacySetupState.chartAnnotations,
     flowEvents: legacyFlowState.flowEvents,
+    flowAggregation: legacyFlowState.flowAggregation,
     latestMicrobar: legacyPriceState.latestMicrobar,
     isLoading: legacyAnalyticsState.isLoading,
     error: legacyAnalyticsState.error,

@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { useSPXFlowContext } from '@/contexts/spx/SPXFlowContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
+import type { FlowWindowRange, FlowWindowSummary } from '@/lib/types/spx-command-center'
 import { SPX_SHORTCUT_EVENT } from '@/lib/spx/shortcut-events'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 
@@ -28,9 +29,70 @@ function relativeAge(timestamp: string): string {
   return `${Math.floor(seconds / 60)}m`
 }
 
+type FlowWindowBias = 'bullish' | 'bearish' | 'neutral'
+
+const WINDOW_MINUTES: Record<FlowWindowRange, number> = {
+  '5m': 5,
+  '15m': 15,
+  '30m': 30,
+}
+
+function inferBias(flowScore: number, totalPremium: number): FlowWindowBias {
+  if (totalPremium < 25_000) return 'neutral'
+  if (flowScore >= 57) return 'bullish'
+  if (flowScore <= 43) return 'bearish'
+  return 'neutral'
+}
+
+function summarizeFlowWindows(flowEvents: ReturnType<typeof useSPXFlowContext>['flowEvents']): Record<FlowWindowRange, FlowWindowSummary> {
+  const nowMs = Date.now()
+  const validEvents = flowEvents
+    .map((event) => {
+      const eventMs = Date.parse(event.timestamp)
+      if (!Number.isFinite(eventMs)) return null
+      return { ...event, eventMs }
+    })
+    .filter((event): event is (typeof flowEvents[number] & { eventMs: number }) => Boolean(event))
+
+  return (['5m', '15m', '30m'] as FlowWindowRange[]).reduce((acc, window) => {
+    const windowMs = WINDOW_MINUTES[window] * 60_000
+    const cutoff = nowMs - windowMs
+    const scoped = validEvents.filter((event) => event.eventMs >= cutoff && event.eventMs <= nowMs)
+    const bullishPremium = scoped
+      .filter((event) => event.direction === 'bullish')
+      .reduce((sum, event) => sum + event.premium, 0)
+    const bearishPremium = scoped
+      .filter((event) => event.direction === 'bearish')
+      .reduce((sum, event) => sum + event.premium, 0)
+    const totalPremium = bullishPremium + bearishPremium
+    const flowScore = totalPremium > 0 ? (bullishPremium / totalPremium) * 100 : 50
+
+    acc[window] = {
+      window,
+      startAt: new Date(cutoff).toISOString(),
+      endAt: new Date(nowMs).toISOString(),
+      flowScore,
+      bias: inferBias(flowScore, totalPremium),
+      eventCount: scoped.length,
+      sweepCount: scoped.filter((event) => event.type === 'sweep').length,
+      blockCount: scoped.filter((event) => event.type === 'block').length,
+      bullishPremium,
+      bearishPremium,
+      totalPremium,
+    }
+    return acc
+  }, {} as Record<FlowWindowRange, FlowWindowSummary>)
+}
+
+function selectPrimaryWindow(windows: Record<FlowWindowRange, FlowWindowSummary>): FlowWindowRange {
+  if (windows['5m'].eventCount >= 2 || windows['5m'].totalPremium >= 50_000) return '5m'
+  if (windows['15m'].eventCount >= 2 || windows['15m'].totalPremium >= 50_000) return '15m'
+  return '30m'
+}
+
 export function FlowTicker() {
   const { selectedSetup } = useSPXSetupContext()
-  const { flowEvents } = useSPXFlowContext()
+  const { flowEvents, flowAggregation } = useSPXFlowContext()
   const { spxPrice } = useSPXPriceContext()
   const [expanded, setExpanded] = useState(false)
 
@@ -64,6 +126,12 @@ export function FlowTicker() {
       .sort((a, b) => b.score - a.score)
       .slice(0, 8)
   }, [flowEvents])
+  const windows = useMemo(() => (
+    flowAggregation?.windows || summarizeFlowWindows(flowEvents)
+  ), [flowAggregation?.windows, flowEvents])
+  const primaryWindow = useMemo(() => (
+    flowAggregation?.primaryWindow || selectPrimaryWindow(windows)
+  ), [flowAggregation?.primaryWindow, windows])
 
   // Flow conviction: does flow align with the selected setup direction?
   const conviction = useMemo(() => {
@@ -100,6 +168,7 @@ export function FlowTicker() {
   const grossPremium = bullishPremium + bearishPremium
   const bullishShare = grossPremium > 0 ? (bullishPremium / grossPremium) * 100 : 50
   const topEvent = ranked[0] ?? null
+  const primarySummary = windows[primaryWindow]
   const entryMid =
     selectedSetup
       ? (selectedSetup.entryZone.low + selectedSetup.entryZone.high) / 2
@@ -116,7 +185,9 @@ export function FlowTicker() {
   return (
     <div className="rounded-xl border border-white/10 bg-gradient-to-r from-white/[0.025] to-white/[0.01] px-3 py-2.5" data-testid="spx-flow-ticker">
       <div className="flex items-center gap-2.5">
-        <span className="shrink-0 text-[10px] uppercase tracking-[0.1em] text-white/45">Flow</span>
+        <span className="shrink-0 text-[10px] uppercase tracking-[0.1em] text-white/45">
+          Flow ({primaryWindow})
+        </span>
         <div className="flex-1">
           <div className="h-2 overflow-hidden rounded-full bg-white/10">
             <div className="h-full rounded-full bg-emerald-400/75 transition-[width] duration-500" style={{ width: `${Math.max(5, Math.min(95, bullishShare))}%` }} />
@@ -145,6 +216,39 @@ export function FlowTicker() {
         )}
       </div>
 
+      <div className="mt-1.5 grid grid-cols-3 gap-1.5 text-[9px] font-mono">
+        {(['5m', '15m', '30m'] as FlowWindowRange[]).map((window) => {
+          const summary = windows[window]
+          const institutional = summary.sweepCount + summary.blockCount
+          return (
+            <div
+              key={window}
+              className={cn(
+                'rounded border px-1.5 py-1',
+                window === primaryWindow
+                  ? 'border-emerald-300/35 bg-emerald-500/[0.09]'
+                  : 'border-white/12 bg-white/[0.02]',
+              )}
+            >
+              <div className="flex items-center justify-between text-white/60">
+                <span>{window}</span>
+                <span>{summary.flowScore.toFixed(0)}</span>
+              </div>
+              <div className={cn(
+                'mt-0.5 text-[8px] uppercase tracking-[0.08em]',
+                summary.bias === 'bullish'
+                  ? 'text-emerald-200'
+                  : summary.bias === 'bearish'
+                    ? 'text-rose-200'
+                    : 'text-amber-200',
+              )}>
+                {summary.bias} · {institutional} inst
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
       <div className="mt-2 flex items-center justify-between gap-2">
         {topEvent ? (
           <div
@@ -167,6 +271,12 @@ export function FlowTicker() {
           </div>
         ) : (
           <span className="text-[10px] text-white/45">No ranked event.</span>
+        )}
+
+        {primarySummary && (
+          <span className="hidden rounded border border-white/15 bg-white/[0.03] px-2 py-1 text-[9px] font-mono text-white/65 md:inline">
+            {primarySummary.eventCount} ev · {formatPremium(primarySummary.totalPremium)}
+          </span>
         )}
 
         <button

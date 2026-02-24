@@ -26,7 +26,7 @@ import {
   type SPXWinRateBacktestSource,
 } from '../services/spx/winRateBacktest';
 import { classifyCurrentRegime } from '../services/spx/regimeClassifier';
-import { detectActiveSetups, getSetupById } from '../services/spx/setupDetector';
+import { detectActiveSetups, getLatestSetupEnvironmentState, getSetupById } from '../services/spx/setupDetector';
 import type { CoachDecisionRequest, Setup } from '../services/spx/types';
 import { toEasternTime } from '../services/marketHours';
 import { TradierClient } from '../services/broker/tradier/client';
@@ -326,9 +326,12 @@ router.get('/gex/history', async (req: Request, res: Response) => {
 router.get('/setups', async (req: Request, res: Response) => {
   try {
     const setups = await detectActiveSetups({ forceRefresh: parseBoolean(req.query.forceRefresh) });
+    const environment = await getLatestSetupEnvironmentState();
     return res.json({
       setups,
       count: setups.length,
+      environmentGate: environment?.gate || null,
+      standbyGuidance: environment?.standbyGuidance || null,
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {

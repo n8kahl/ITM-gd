@@ -1,3 +1,5 @@
+import type { SPXFlowWindowAggregation } from './flowAggregator';
+
 export type LevelCategory = 'structural' | 'tactical' | 'intraday' | 'options' | 'spy_derived' | 'fibonacci';
 
 export type LevelStrength = 'strong' | 'moderate' | 'weak' | 'dynamic' | 'critical';
@@ -18,6 +20,14 @@ export type SetupStatus = 'forming' | 'ready' | 'triggered' | 'invalidated' | 'e
 export type Regime = 'trending' | 'ranging' | 'compression' | 'breakout';
 
 export type SetupTier = 'sniper_primary' | 'sniper_secondary' | 'watchlist' | 'hidden';
+
+export type SetupTriggerPattern =
+  | 'engulfing_bull'
+  | 'engulfing_bear'
+  | 'doji'
+  | 'hammer'
+  | 'inverted_hammer'
+  | 'none';
 
 export type SetupInvalidationReason =
   | 'stop_breach_confirmed'
@@ -172,6 +182,7 @@ export interface ContractRecommendation {
 
 export interface Setup {
   id: string;
+  stableIdHash?: string;
   type: SetupType;
   direction: 'bullish' | 'bearish';
   entryZone: { low: number; high: number };
@@ -180,6 +191,18 @@ export interface Setup {
   target2: { price: number; label: string };
   confluenceScore: number;
   confluenceSources: string[];
+  confluenceBreakdown?: {
+    flow: number;
+    ema: number;
+    zone: number;
+    gex: number;
+    regime: number;
+    multiTF: number;
+    memory: number;
+    composite: number;
+    legacyEquivalent: number;
+    threshold: number;
+  };
   clusterZone: ClusterZone;
   regime: Regime;
   status: SetupStatus;
@@ -195,8 +218,49 @@ export interface Setup {
   confidenceTrend?: 'up' | 'flat' | 'down';
   decisionDrivers?: string[];
   decisionRisks?: string[];
+  zoneQualityScore?: number;
+  zoneQualityComponents?: {
+    fortressScore: number;
+    structureScore: number;
+    touchHistoryScore: number;
+    compositeScore: number;
+  };
+  morphHistory?: Array<{
+    timestamp: string;
+    priorStop: number;
+    newStop: number;
+    priorTarget: number;
+    newTarget: number;
+  }>;
+  triggerContext?: {
+    triggerBarTimestamp: string;
+    triggerBarPatternType: SetupTriggerPattern;
+    triggerBarVolume: number;
+    penetrationDepth: number;
+    triggerLatencyMs: number;
+  };
+  memoryContext?: {
+    tests: number;
+    resolved: number;
+    wins: number;
+    losses: number;
+    winRatePct: number | null;
+    confidence: number;
+    score: number;
+    lookbackSessions: number;
+    tolerancePoints: number;
+  };
   pWinCalibrated?: number;
   evR?: number;
+  evContext?: {
+    model: 'adaptive';
+    adjustedPWin: number;
+    expectedLossR: number;
+    blendedWinR: number;
+    t1Weight: number;
+    t2Weight: number;
+    slippageR: number;
+  };
   tier?: SetupTier;
   rank?: number;
   statusUpdatedAt?: string;
@@ -212,6 +276,15 @@ export interface Setup {
   flowRecentDirectionalPremium?: number;
   flowLocalDirectionalEvents?: number;
   flowLocalDirectionalPremium?: number;
+  multiTFConfluence?: {
+    score: number;
+    aligned: boolean;
+    tf1hStructureAligned: number;
+    tf15mSwingProximity: number;
+    tf5mMomentumAlignment: number;
+    tf1mMicrostructure: number;
+    contextSource?: 'computed' | 'cached' | 'fallback';
+  };
   volumeTrend?: 'rising' | 'flat' | 'falling';
   minutesSinceOpen?: number;
   emaFastSlope?: number;
@@ -331,6 +404,99 @@ export interface RegimeState {
   timestamp: string;
 }
 
+export type SPXVixRegime = 'normal' | 'elevated' | 'extreme' | 'unknown';
+
+export interface SPXEnvironmentGateBreakdownItem {
+  passed: boolean;
+  reason?: string;
+  value?: number | null;
+}
+
+export interface SPXEnvironmentGateDecision {
+  passed: boolean;
+  reason: string | null;
+  reasons: string[];
+  vixRegime: SPXVixRegime;
+  dynamicReadyThreshold: number;
+  caution: boolean;
+  breakdown: {
+    vixRegime: SPXEnvironmentGateBreakdownItem & {
+      regime: SPXVixRegime;
+      value: number | null;
+    };
+    expectedMoveConsumption: SPXEnvironmentGateBreakdownItem & {
+      value: number | null;
+      expectedMovePoints: number | null;
+    };
+    macroCalendar: SPXEnvironmentGateBreakdownItem & {
+      caution: boolean;
+      nextEvent: {
+        event: string;
+        at: string;
+        minutesUntil: number;
+      } | null;
+    };
+    sessionTime: SPXEnvironmentGateBreakdownItem & {
+      minuteEt: number;
+      minutesUntilClose: number | null;
+      source: 'local' | 'massive' | 'cached';
+    };
+    compression: SPXEnvironmentGateBreakdownItem & {
+      realizedVolPct: number | null;
+      impliedVolPct: number | null;
+      spreadPct: number | null;
+    };
+    eventRisk?: SPXEnvironmentGateBreakdownItem & {
+      caution: boolean;
+      blackout: boolean;
+      riskScore: number;
+      source: 'none' | 'macro' | 'news' | 'combined';
+      nextEvent: {
+        event: string;
+        at: string;
+        minutesUntil: number;
+      } | null;
+      newsSentimentScore: number | null;
+      marketMovingArticleCount: number;
+      recentHighImpactCount: number;
+      latestArticleAt: string | null;
+    };
+  };
+}
+
+export interface SPXStandbyNearestSetup {
+  setupId: string;
+  setupType: SetupType;
+  direction: Setup['direction'];
+  entryLevel: number;
+  stop: number;
+  target1: number;
+  target2: number;
+  estimatedProbability: number;
+  conditionsNeeded: string[];
+}
+
+export interface SPXStandbyWatchZone {
+  level: number;
+  direction: Setup['direction'];
+  reason: string;
+  confluenceRequired: number;
+}
+
+export interface SPXStandbyGuidance {
+  status: 'STANDBY';
+  reason: string;
+  waitingFor: string[];
+  nearestSetup: SPXStandbyNearestSetup | null;
+  watchZones: SPXStandbyWatchZone[];
+  nextCheckTime: string;
+  environment: {
+    vixRegime: SPXVixRegime;
+    dynamicReadyThreshold: number;
+    caution: boolean;
+  };
+}
+
 export interface SPXFlowEvent {
   id: string;
   type: 'sweep' | 'block';
@@ -360,6 +526,9 @@ export interface SPXSnapshot {
   regime: RegimeState;
   prediction: PredictionState;
   flow: SPXFlowEvent[];
+  flowAggregation?: SPXFlowWindowAggregation | null;
   coachMessages: CoachMessage[];
+  environmentGate?: SPXEnvironmentGateDecision | null;
+  standbyGuidance?: SPXStandbyGuidance | null;
   generatedAt: string;
 }

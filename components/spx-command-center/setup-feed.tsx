@@ -29,7 +29,7 @@ export function SetupFeed({
   readOnly?: boolean
   suppressLocalPrimaryCta?: boolean
 }) {
-  const { uxFlags } = useSPXCommandCenter()
+  const { uxFlags, standbyGuidance } = useSPXCommandCenter()
   const { regime, prediction } = useSPXAnalyticsContext()
   const {
     activeSetups,
@@ -67,6 +67,7 @@ export function SetupFeed({
   const hiddenByTradeFocusCount = inTradeSetup ? Math.max(policy.actionableVisibleCount - 1, 0) : 0
   const forming = inTradeSetup ? [] : policy.forming
   const selectedEnterable = Boolean(selectedSetup && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'))
+  const standbyActive = tradeMode !== 'in_trade' && standbyGuidance?.status === 'STANDBY'
   const localPrimaryCtaEnabled = !readOnly && !suppressLocalPrimaryCta
   const oneClickEntryEnabled = uxFlags.oneClickEntry && localPrimaryCtaEnabled
 
@@ -172,6 +173,38 @@ export function SetupFeed({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {standbyActive && standbyGuidance && (
+        <div className="relative z-10 mt-2 rounded-lg border border-amber-300/30 bg-amber-500/[0.07] px-2.5 py-2.5">
+          <p className="text-[10px] uppercase tracking-[0.1em] text-amber-100">Market Standby</p>
+          <p className="mt-1 text-xs text-amber-50/90">{standbyGuidance.reason}</p>
+          {standbyGuidance.waitingFor.length > 0 && (
+            <p className="mt-1 text-[10px] text-amber-100/85">
+              Waiting for: {standbyGuidance.waitingFor.join(' · ')}
+            </p>
+          )}
+          {standbyGuidance.nearestSetup && (
+            <div className="mt-1 rounded border border-amber-200/15 bg-amber-500/[0.05] px-2 py-1.5">
+              <p className="text-[10px] text-amber-100/85">
+                Nearest: {standbyGuidance.nearestSetup.setupType} @ {standbyGuidance.nearestSetup.entryLevel.toFixed(2)}
+              </p>
+              {standbyGuidance.nearestSetup.conditionsNeeded.length > 0 && (
+                <p className="mt-0.5 text-[10px] text-amber-100/70">
+                  Activate on: {standbyGuidance.nearestSetup.conditionsNeeded.slice(0, 3).join(' · ')}
+                </p>
+              )}
+            </div>
+          )}
+          {standbyGuidance.watchZones.length > 0 && (
+            <p className="mt-1 text-[10px] text-amber-100/70">
+              Watch zones: {standbyGuidance.watchZones.map((zone) => zone.level.toFixed(2)).join(', ')}
+            </p>
+          )}
+          <p className="mt-1 text-[10px] text-amber-100/65">
+            Next check: {new Date(standbyGuidance.nextCheckTime).toLocaleTimeString()}
+          </p>
         </div>
       )}
 

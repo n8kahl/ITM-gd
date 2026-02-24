@@ -608,3 +608,9 @@ export function getTradierExecutionRuntimeStatus(): {
     trackedTrades: stateByUserSetup.size,
   };
 }
+
+export function __resetExecutionEngineStateForTests(): void {
+  stateByUserSetup.clear();
+  rehydrated = false;
+  cachedCredentials = null;
+}

@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'https://www.tradeinthemoney.com').split(',')
 const MAX_CONVERSATION_TOKEN_LENGTH = 256
 const MAX_SYNC_MESSAGES = 200
-const ALLOW_BOOTSTRAP_WITH_VISITOR_ID = Deno.env.get('CHAT_SYNC_ALLOW_BOOTSTRAP') !== 'false'
+const ALLOW_BOOTSTRAP_WITH_VISITOR_ID = Deno.env.get('CHAT_SYNC_ALLOW_BOOTSTRAP') === 'true'
 
 function corsHeaders(origin: string | null) {
   const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]

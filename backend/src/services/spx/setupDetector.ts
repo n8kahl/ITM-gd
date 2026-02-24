@@ -3,14 +3,40 @@ import { getMinuteAggregates } from '../../config/massive';
 import { calculateVWAP, analyzeVWAPPosition } from '../levels/calculators/vwap';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
+import { calculateAtrFromBars } from './atrService';
 import { getFibLevels } from './fibEngine';
+import {
+  deriveFlowWindowSignal,
+  getFlowWindowAggregation,
+  type SPXFlowWindowAggregation,
+  type SPXFlowWindowSignal,
+} from './flowAggregator';
 import { getFlowEvents } from './flowEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
+import {
+  applyEnvironmentGateToSetups,
+  buildStandbyGuidance,
+  evaluateEnvironmentGate,
+} from './environmentGate';
+import { calculateAdaptiveEV } from './evCalculator';
 import { getMergedLevels } from './levelEngine';
+import { getLevelMemoryContext } from './memoryEngine';
+import {
+  getMultiTFConfluenceContext,
+  scoreMultiTFConfluence,
+  type SPXMultiTFConfluenceContext,
+} from './multiTFConfluence';
 import { getActiveSPXOptimizationProfile, type SPXGeometryPolicyEntry } from './optimizer';
+import { buildTriggerContext as buildTriggerContextFromPriceAction } from './priceActionEngine';
 import { getWorkingMicrobar } from './microbarAggregator';
 import { persistSetupInstancesForWinRate } from './outcomeTracker';
 import { classifyCurrentRegime } from './regimeClassifier';
+import { calculateAdaptiveStop, deriveNearestGEXDistanceBp } from './stopEngine';
+import {
+  minZoneQualityThreshold,
+  selectBestZonesForEntry,
+  type ZoneQualityScore,
+} from './zoneQualityEngine';
 import type {
   ClusterZone,
   FibLevel,
@@ -20,13 +46,17 @@ import type {
   SetupInvalidationReason,
   SetupTier,
   SetupType,
+  SPXEnvironmentGateDecision,
   SPXFlowEvent,
+  SPXStandbyGuidance,
   SPXLevel,
+  SPXVixRegime,
   UnifiedGEXLandscape,
 } from './types';
 import { ema, round, stableId } from './utils';
 
 const SETUPS_CACHE_KEY = 'spx_command_center:setups';
+const SETUPS_ENV_STATE_CACHE_KEY = 'spx_command_center:setups:environment_gate';
 const SETUPS_CACHE_TTL_SECONDS = 10;
 let setupsInFlight: Promise<Setup[]> | null = null;
 const FLOW_CONFIRMATION_WINDOW_MS = 20 * 60 * 1000;
@@ -122,6 +152,9 @@ const DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE: Record<string, number> = {
   trend_pullback: 360,
   flip_reclaim: 360,
 };
+const STABLE_SETUP_PRICE_BUCKET = 1;
+const STABLE_SETUP_MORPH_ENTRY_TOLERANCE = 1.5;
+const MAX_MORPH_HISTORY_ITEMS = 12;
 interface SetupSpecificGateFloor {
   minConfluenceScore?: number;
   minPWinCalibrated?: number;
@@ -209,6 +242,7 @@ interface SetupIndicatorContext {
   emaSlow: number;
   emaFastSlope: number;
   emaSlowSlope: number;
+  atr14?: number | null;
   volumeTrend: 'rising' | 'flat' | 'falling';
   sessionOpenPrice: number;
   orbHigh: number;
@@ -218,6 +252,23 @@ interface SetupIndicatorContext {
   asOfTimestamp: string;
   vwapPrice: number | null;
   vwapDeviation: number | null;
+  latestBar: {
+    t: number;
+    o: number;
+    h: number;
+    l: number;
+    c: number;
+    v: number;
+  } | null;
+  priorBar: {
+    t: number;
+    o: number;
+    h: number;
+    l: number;
+    c: number;
+    v: number;
+  } | null;
+  avgRecentVolume: number | null;
 }
 
 interface FlowQualitySummary {
@@ -228,12 +279,33 @@ interface FlowQualitySummary {
   localDirectionalPremium: number;
 }
 
+interface WeightedConfluenceBreakdown {
+  flow: number;
+  ema: number;
+  zone: number;
+  gex: number;
+  regime: number;
+  multiTF: number;
+  memory: number;
+  composite: number;
+  legacyEquivalent: number;
+}
+
 interface SetupContextState {
   regimeConflictStreak: number;
   flowDivergenceStreak: number;
   stopBreachStreak: number;
   updatedAtMs: number;
 }
+
+export interface SetupEnvironmentStateSnapshot {
+  asOf: string;
+  gate: SPXEnvironmentGateDecision | null;
+  standbyGuidance: SPXStandbyGuidance | null;
+}
+
+let latestSetupEnvironmentState: SetupEnvironmentStateSnapshot | null = null;
+
 const setupContextStateById = new Map<string, SetupContextState>();
 type LevelData = {
   levels: SPXLevel[];
@@ -818,21 +890,67 @@ function calculateConfluence(input: {
   };
 }
 
-function pickCandidateZones(zones: ClusterZone[], currentPrice: number): ClusterZone[] {
-  return [...zones]
-    .map((zone) => {
-      const center = (zone.priceLow + zone.priceHigh) / 2;
-      return {
-        zone,
-        distance: Math.abs(center - currentPrice),
-      };
-    })
-    .sort((a, b) => {
-      if (a.distance !== b.distance) return a.distance - b.distance;
-      return b.zone.clusterScore - a.zone.clusterScore;
-    })
-    .slice(0, 8)
-    .map((item) => item.zone);
+function calculateWeightedConfluence(input: {
+  flowQualityScore: number;
+  flowConfirmed: boolean;
+  emaAligned: boolean;
+  emaFastSlope: number | null | undefined;
+  zoneQualityScore: number;
+  gexAligned: boolean;
+  regimeAligned: boolean;
+  regimeConflict: boolean;
+  multiTFComposite: number | null | undefined;
+  memoryScoreBoost: number;
+}): WeightedConfluenceBreakdown {
+  const flow = clamp(input.flowQualityScore + (input.flowConfirmed ? 8 : -12));
+  const ema = clamp((input.emaAligned ? 68 : 34) + ((input.emaFastSlope || 0) * 22));
+  const zone = clamp(input.zoneQualityScore);
+  const gex = input.gexAligned ? 82 : 38;
+  const regime = clamp((input.regimeAligned ? 80 : 34) - (input.regimeConflict ? 12 : 0));
+  const multiTF = clamp(input.multiTFComposite ?? 50);
+  const memory = clamp(50 + (input.memoryScoreBoost * 7), 20, 95);
+
+  const weighted = (
+    (flow * 0.24)
+    + (ema * 0.18)
+    + (zone * 0.20)
+    + (gex * 0.14)
+    + (regime * 0.10)
+    + (multiTF * 0.10)
+    + (memory * 0.04)
+  );
+  const composite = round(zone < 40 ? Math.min(50, weighted) : weighted, 2);
+  const legacyEquivalent = Math.max(1, Math.min(5, Math.round(composite / 20)));
+
+  return {
+    flow: round(flow, 2),
+    ema: round(ema, 2),
+    zone: round(zone, 2),
+    gex: round(gex, 2),
+    regime: round(regime, 2),
+    multiTF: round(multiTF, 2),
+    memory: round(memory, 2),
+    composite,
+    legacyEquivalent,
+  };
+}
+
+function pickCandidateZones(input: {
+  zones: ClusterZone[];
+  currentPrice: number;
+  regime: Regime;
+  vixRegime: SPXVixRegime;
+}): Array<{ zone: ClusterZone; quality: ZoneQualityScore }> {
+  const maxZones = parseIntEnv(process.env.SPX_SETUP_MAX_CANDIDATE_ZONES, 3);
+  const selected = selectBestZonesForEntry({
+    zones: input.zones,
+    currentPrice: input.currentPrice,
+    regime: input.regime,
+    vixRegime: input.vixRegime,
+    maxZones: Math.max(1, Math.min(8, maxZones)),
+  });
+
+  return selected;
 }
 
 function isRecentFlowEvent(event: SPXFlowEvent, nowMs: number): boolean {
@@ -921,6 +1039,61 @@ function flowAlignmentPercent(input: {
   return (alignedPremium / totalPremium) * 100;
 }
 
+function blendFlowAlignmentPercent(input: {
+  eventAlignmentPct: number | null;
+  windowAlignmentPct: number | null;
+}): number | null {
+  if (input.eventAlignmentPct == null && input.windowAlignmentPct == null) return null;
+  if (input.eventAlignmentPct == null) return input.windowAlignmentPct;
+  if (input.windowAlignmentPct == null) return input.eventAlignmentPct;
+  return round((input.eventAlignmentPct * 0.65) + (input.windowAlignmentPct * 0.35), 2);
+}
+
+function applyFlowWindowQualityBoost(input: {
+  flowQuality: FlowQualitySummary;
+  flowWindowSignal: SPXFlowWindowSignal;
+}): FlowQualitySummary {
+  if (!input.flowWindowSignal.confirmed) {
+    return input.flowQuality;
+  }
+
+  const scoreBoost = Math.min(18, Math.max(4, input.flowWindowSignal.strength * 0.12));
+  return {
+    score: round(clamp(input.flowQuality.score + scoreBoost), 2),
+    recentDirectionalEvents: Math.max(
+      input.flowQuality.recentDirectionalEvents,
+      input.flowWindowSignal.eventCount,
+    ),
+    recentDirectionalPremium: round(Math.max(
+      input.flowQuality.recentDirectionalPremium,
+      input.flowWindowSignal.totalPremium,
+    ), 2),
+    localDirectionalEvents: input.flowQuality.localDirectionalEvents,
+    localDirectionalPremium: input.flowQuality.localDirectionalPremium,
+  };
+}
+
+function buildTriggerContext(input: {
+  previous: Setup | null;
+  setupStatus: Setup['status'];
+  triggeredAt: string | null;
+  evaluationTimestamp: string;
+  direction: Setup['direction'];
+  zone: ClusterZone;
+  indicatorContext: SetupIndicatorContext | null;
+}): Setup['triggerContext'] | undefined {
+  return buildTriggerContextFromPriceAction({
+    previous: input.previous?.triggerContext,
+    setupStatus: input.setupStatus,
+    triggeredAt: input.triggeredAt,
+    evaluationTimestamp: input.evaluationTimestamp,
+    direction: input.direction,
+    zone: input.zone,
+    latestBar: input.indicatorContext?.latestBar || null,
+    priorBar: input.indicatorContext?.priorBar || null,
+  });
+}
+
 function volumeTrendFromBars(bars: Array<{ v: number }>): 'rising' | 'flat' | 'falling' {
   if (bars.length < 15) return 'flat';
   const last = bars.slice(-5).reduce((sum, bar) => sum + bar.v, 0) / 5;
@@ -989,12 +1162,34 @@ function buildIndicatorContextFromBars(input: {
   const vwapPrice = calculateVWAP(vwapBars);
   const lastClose = closes[closes.length - 1];
   const vwapPosition = vwapPrice != null ? analyzeVWAPPosition(lastClose, vwapPrice) : null;
+  const atr14 = calculateAtrFromBars(sortedBars, 14);
+  const latestBarRaw = sortedBars[sortedBars.length - 1];
+  const priorBarRaw = sortedBars.length > 1 ? sortedBars[sortedBars.length - 2] : null;
+  const toTriggerBar = (bar: { t: number; o?: number; h?: number; l?: number; c: number; v: number } | null) => {
+    if (!bar) return null;
+    const open = typeof bar.o === 'number' && Number.isFinite(bar.o) ? bar.o : bar.c;
+    const high = typeof bar.h === 'number' && Number.isFinite(bar.h) ? bar.h : Math.max(open, bar.c);
+    const low = typeof bar.l === 'number' && Number.isFinite(bar.l) ? bar.l : Math.min(open, bar.c);
+    return {
+      t: bar.t,
+      o: round(open, 4),
+      h: round(high, 4),
+      l: round(low, 4),
+      c: round(bar.c, 4),
+      v: Math.max(0, round(bar.v, 2)),
+    };
+  };
+  const recentVolumeBars = sortedBars.slice(-20);
+  const avgRecentVolume = recentVolumeBars.length > 0
+    ? round(recentVolumeBars.reduce((sum, bar) => sum + bar.v, 0) / recentVolumeBars.length, 2)
+    : null;
 
   return {
     emaFast: round(emaFast, 2),
     emaSlow: round(emaSlow, 2),
     emaFastSlope: round(emaFast - emaFastPrior, 4),
     emaSlowSlope: round(emaSlow - emaSlowPrior, 4),
+    atr14: atr14 != null ? round(atr14, 4) : null,
     volumeTrend: volumeTrendFromBars(sortedBars),
     sessionOpenPrice: round(sessionOpenPrice, 2),
     orbHigh: round(Number.isFinite(orbHigh) ? orbHigh : sessionOpenPrice, 2),
@@ -1004,6 +1199,9 @@ function buildIndicatorContextFromBars(input: {
     asOfTimestamp: input.asOfTimestamp,
     vwapPrice: vwapPrice != null ? round(vwapPrice, 2) : null,
     vwapDeviation: vwapPosition != null ? round(vwapPosition.distancePct, 4) : null,
+    latestBar: toTriggerBar(latestBarRaw),
+    priorBar: toTriggerBar(priorBarRaw),
+    avgRecentVolume,
   };
 }
 
@@ -1514,12 +1712,6 @@ function resolveSetupGeometryPolicy(input: {
   return mergeGeometryPolicy(mergeGeometryPolicy(byType, byRegime), byRegimeBucket);
 }
 
-// GEX-adaptive stop scaling: positive GEX = dealer support → tighten stops 10%;
-// negative GEX = amplified moves → widen stops 10% for mean-reversion families.
-const GEX_STOP_TIGHTEN_FACTOR = 0.90;
-const GEX_STOP_WIDEN_FACTOR = 1.10;
-const GEX_MEAN_REVERSION_FAMILIES = new Set<string>(['mean_reversion', 'fade_at_wall', 'flip_reclaim']);
-
 function applyStopGeometryPolicy(input: {
   direction: 'bullish' | 'bearish';
   entryLow: number;
@@ -1528,27 +1720,47 @@ function applyStopGeometryPolicy(input: {
   geometryPolicy: SPXGeometryPolicyEntry;
   netGex?: number;
   setupType?: string;
+  atr14?: number | null;
+  vixRegime?: SPXVixRegime | null;
+  gexCallWall?: number;
+  gexPutWall?: number;
+  gexFlipPoint?: number;
 }): number {
+  const atrStopFloorEnabled = parseBooleanEnv(process.env.SPX_SETUP_ATR_STOP_FLOOR_ENABLED, true);
+  const atrStopMultiplier = clamp(
+    parseFloatEnv(process.env.SPX_SETUP_ATR_STOP_MULTIPLIER, 0.9, 0.1),
+    0.1,
+    3,
+  );
+  const vixStopScalingEnabled = parseBooleanEnv(process.env.SPX_SETUP_VIX_STOP_SCALING_ENABLED, true);
+  const gexMagnitudeScalingEnabled = parseBooleanEnv(
+    process.env.SPX_SETUP_GEX_MAGNITUDE_STOP_SCALING_ENABLED,
+    true,
+  );
   const entryMid = (input.entryLow + input.entryHigh) / 2;
-  const risk = Math.max(0.35, Math.abs(entryMid - input.baseStop));
+  const gexDistanceBp = deriveNearestGEXDistanceBp({
+    referencePrice: entryMid,
+    callWall: input.gexCallWall,
+    putWall: input.gexPutWall,
+    flipPoint: input.gexFlipPoint,
+  });
 
-  // Apply GEX-adaptive stop modifier
-  let gexStopMultiplier = 1;
-  if (input.netGex != null && Number.isFinite(input.netGex)) {
-    if (input.netGex > 0) {
-      // Positive GEX: dealer hedging creates support → tighten stops
-      gexStopMultiplier = GEX_STOP_TIGHTEN_FACTOR;
-    } else if (input.netGex < 0 && GEX_MEAN_REVERSION_FAMILIES.has(input.setupType ?? '')) {
-      // Negative GEX + mean-reversion: moves overshoot → widen stops
-      gexStopMultiplier = GEX_STOP_WIDEN_FACTOR;
-    }
-  }
-
-  const scaledRisk = Math.max(0.35, risk * input.geometryPolicy.stopScale * gexStopMultiplier);
-  const stop = input.direction === 'bullish'
-    ? entryMid - scaledRisk
-    : entryMid + scaledRisk;
-  return round(stop, 2);
+  return calculateAdaptiveStop({
+    direction: input.direction,
+    entryLow: input.entryLow,
+    entryHigh: input.entryHigh,
+    baseStop: input.baseStop,
+    geometryStopScale: input.geometryPolicy.stopScale,
+    atr14: input.atr14,
+    atrStopFloorEnabled,
+    atrStopMultiplier,
+    netGex: input.netGex,
+    setupType: input.setupType,
+    vixRegime: input.vixRegime,
+    vixStopScalingEnabled,
+    gexDistanceBp,
+    gexMagnitudeScalingEnabled,
+  }).stop;
 }
 
 function maxFirstSeenMinuteForSetup(
@@ -1776,6 +1988,97 @@ function evaluateOptimizationGate(input: {
   return reasons;
 }
 
+function bucketPrice(value: number, bucket = STABLE_SETUP_PRICE_BUCKET): number {
+  if (!Number.isFinite(value)) return 0;
+  const safeBucket = bucket > 0 ? bucket : 0.5;
+  return round(Math.round(value / safeBucket) * safeBucket, 2);
+}
+
+function hashStableSetupId(input: {
+  sessionDate: string;
+  setupType: SetupType;
+  direction: Setup['direction'];
+  entryMid: number;
+  geometryBucket: SetupGeometryBucket;
+}): string {
+  const seed = [
+    input.sessionDate,
+    input.setupType,
+    input.direction,
+    bucketPrice(input.entryMid),
+    input.geometryBucket,
+  ].join('|');
+  return stableId('stable_setup', seed).replace('stable_setup_', '');
+}
+
+function deriveStableIdHashFromExistingSetup(setup: Setup): string {
+  if (typeof setup.stableIdHash === 'string' && setup.stableIdHash.length > 0) {
+    return setup.stableIdHash;
+  }
+
+  const createdDate = Date.parse(setup.createdAt);
+  const sessionDate = Number.isFinite(createdDate)
+    ? toEasternTime(new Date(createdDate)).dateStr
+    : toEasternTime(new Date()).dateStr;
+  const firstSeenMinuteEt = toSessionMinuteEt(setup.createdAt);
+  const geometryBucket = toGeometryBucket(firstSeenMinuteEt);
+  const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2;
+
+  return hashStableSetupId({
+    sessionDate,
+    setupType: setup.type,
+    direction: setup.direction,
+    entryMid,
+    geometryBucket,
+  });
+}
+
+function pickMorphCandidate(input: {
+  candidates: Setup[];
+  entryMid: number;
+}): Setup | null {
+  if (input.candidates.length === 0) return null;
+  const sorted = [...input.candidates]
+    .map((candidate) => ({
+      candidate,
+      entryMid: (candidate.entryZone.low + candidate.entryZone.high) / 2,
+    }))
+    .sort((a, b) => Math.abs(a.entryMid - input.entryMid) - Math.abs(b.entryMid - input.entryMid));
+
+  const nearest = sorted[0];
+  if (!nearest) return null;
+  if (Math.abs(nearest.entryMid - input.entryMid) > STABLE_SETUP_MORPH_ENTRY_TOLERANCE) return null;
+  return nearest.candidate;
+}
+
+function buildMorphHistory(input: {
+  previous: Setup | null;
+  nextStop: number;
+  nextTarget2: number;
+  timestamp: string;
+}): Setup['morphHistory'] {
+  const priorHistory = Array.isArray(input.previous?.morphHistory)
+    ? input.previous?.morphHistory
+    : [];
+  if (!input.previous) return priorHistory;
+
+  const stopChanged = Math.abs((input.previous.stop || 0) - input.nextStop) >= 0.05;
+  const targetChanged = Math.abs((input.previous.target2?.price || 0) - input.nextTarget2) >= 0.1;
+  if (!stopChanged && !targetChanged) {
+    return priorHistory;
+  }
+
+  const nextRecord = {
+    timestamp: input.timestamp,
+    priorStop: round(input.previous.stop, 2),
+    newStop: round(input.nextStop, 2),
+    priorTarget: round(input.previous.target2.price, 2),
+    newTarget: round(input.nextTarget2, 2),
+  };
+
+  return [...priorHistory, nextRecord].slice(-MAX_MORPH_HISTORY_ITEMS);
+}
+
 function setupSemanticKey(setup: Setup): string {
   return [
     setup.type,
@@ -1926,6 +2229,51 @@ const SETUP_TIER_SORT_ORDER: Record<SetupTier, number> = {
   hidden: 3,
 };
 
+function emptyEnvironmentState(asOf: string): SetupEnvironmentStateSnapshot {
+  return {
+    asOf,
+    gate: null,
+    standbyGuidance: null,
+  };
+}
+
+async function loadCachedEnvironmentState(): Promise<SetupEnvironmentStateSnapshot | null> {
+  const cached = await cacheGet<SetupEnvironmentStateSnapshot>(SETUPS_ENV_STATE_CACHE_KEY);
+  if (!cached || typeof cached !== 'object') return null;
+  if (typeof cached.asOf !== 'string') return null;
+
+  return {
+    asOf: cached.asOf,
+    gate: cached.gate || null,
+    standbyGuidance: cached.standbyGuidance || null,
+  };
+}
+
+async function persistEnvironmentState(input: {
+  state: SetupEnvironmentStateSnapshot;
+  shouldUseCache: boolean;
+}): Promise<void> {
+  latestSetupEnvironmentState = input.state;
+  if (!input.shouldUseCache) return;
+  await cacheSet(SETUPS_ENV_STATE_CACHE_KEY, input.state, SETUPS_CACHE_TTL_SECONDS);
+}
+
+export async function getLatestSetupEnvironmentState(options?: {
+  forceRefresh?: boolean;
+}): Promise<SetupEnvironmentStateSnapshot | null> {
+  if (!options?.forceRefresh && latestSetupEnvironmentState) {
+    return latestSetupEnvironmentState;
+  }
+
+  const cached = await loadCachedEnvironmentState();
+  if (cached) {
+    latestSetupEnvironmentState = cached;
+    return cached;
+  }
+
+  return latestSetupEnvironmentState;
+}
+
 export async function detectActiveSetups(options?: {
   forceRefresh?: boolean;
   asOfTimestamp?: string;
@@ -1935,14 +2283,19 @@ export async function detectActiveSetups(options?: {
   fibLevels?: FibLevel[];
   regimeState?: RegimeState;
   flowEvents?: SPXFlowEvent[];
+  flowAggregationOverride?: SPXFlowWindowAggregation | null;
+  multiTFConfluenceOverride?: SPXMultiTFConfluenceContext | null;
   indicatorContext?: SetupIndicatorContext | null;
   previousSetups?: Setup[];
+  environmentGateOverride?: SPXEnvironmentGateDecision | null;
 }): Promise<Setup[]> {
   const levelData = options?.levelData;
   const gexLandscape = options?.gexLandscape;
   const fibLevelsProvided = options?.fibLevels;
   const regimeStateProvided = options?.regimeState;
   const flowEventsProvided = options?.flowEvents;
+  const flowAggregationOverride = options?.flowAggregationOverride;
+  const multiTFConfluenceOverride = options?.multiTFConfluenceOverride;
   const indicatorContextProvided = options?.indicatorContext;
   const hasHistoricalTimestamp = typeof options?.asOfTimestamp === 'string' && options.asOfTimestamp.trim().length > 0;
   const forceRefresh = options?.forceRefresh === true || hasHistoricalTimestamp;
@@ -1969,9 +2322,13 @@ export async function detectActiveSetups(options?: {
 
   const run = async (): Promise<Setup[]> => {
   if (shouldUseCache && !forceRefresh && !hasPrecomputedDependencies) {
-    const cached = await cacheGet<Setup[]>(SETUPS_CACHE_KEY);
-    if (cached) {
-      return cached;
+    const [cachedSetups, cachedEnvironment] = await Promise.all([
+      cacheGet<Setup[]>(SETUPS_CACHE_KEY),
+      loadCachedEnvironmentState(),
+    ]);
+    if (cachedSetups) {
+      latestSetupEnvironmentState = cachedEnvironment || emptyEnvironmentState(evaluationIso);
+      return cachedSetups;
     }
   }
 
@@ -1980,6 +2337,14 @@ export async function detectActiveSetups(options?: {
   const previousById = new Map<string, Setup>(
     (previousSetups || []).map((setup) => [setup.id, setup]),
   );
+  const previousByStableHash = new Map<string, Setup[]>();
+  for (const previousSetup of previousSetups || []) {
+    const stableHash = deriveStableIdHashFromExistingSetup(previousSetup);
+    const existing = previousByStableHash.get(stableHash) || [];
+    existing.push(previousSetup);
+    previousByStableHash.set(stableHash, existing);
+  }
+  const matchedPreviousSetupIds = new Set<string>();
 
   const [levels, gex, fibLevels, regimeState, flowEvents, indicatorContext] = await Promise.all([
     levelData
@@ -2004,9 +2369,57 @@ export async function detectActiveSetups(options?: {
         asOfTimestamp: hasHistoricalTimestamp ? evaluationIso : undefined,
       }),
   ]);
+  const flowAggregation = flowAggregationOverride
+    || await getFlowWindowAggregation({
+      forceRefresh,
+      flowEvents,
+      asOf: evaluationDate,
+    });
 
   const currentPrice = gex.spx.spotPrice;
-  const candidateZones = pickCandidateZones(levels.clusters, currentPrice);
+  const environmentGateEnabled = parseBooleanEnv(process.env.SPX_ENVIRONMENT_GATE_ENABLED, false);
+  const environmentGate = environmentGateEnabled
+    ? (
+      options?.environmentGateOverride
+      || await evaluateEnvironmentGate({
+        evaluationDate,
+        currentPrice,
+        sessionOpenPrice: indicatorContext?.sessionOpenPrice ?? null,
+        atr14: indicatorContext?.atr14 ?? null,
+        regime: regimeState.regime,
+        regimeState,
+        vixValue: null,
+        disableMacroCalendar: hasHistoricalTimestamp,
+      })
+    )
+    : null;
+  const candidateZones = pickCandidateZones({
+    zones: levels.clusters,
+    currentPrice,
+    regime: regimeState.regime,
+    vixRegime: environmentGate?.vixRegime || 'unknown',
+  });
+  const zoneQualityThreshold = minZoneQualityThreshold({
+    regime: regimeState.regime,
+    vixRegime: environmentGate?.vixRegime || 'unknown',
+  });
+  const multiTFConfluenceEnabled = (
+    parseBooleanEnv(process.env.SPX_MULTI_TF_CONFLUENCE_ENABLED, false)
+    || multiTFConfluenceOverride != null
+  );
+  const multiTFConfluenceContext = multiTFConfluenceEnabled
+    ? (
+      multiTFConfluenceOverride
+      || await getMultiTFConfluenceContext({
+        forceRefresh,
+        evaluationDate,
+      })
+    )
+    : null;
+  const memoryEngineEnabled = parseBooleanEnv(process.env.SPX_MEMORY_ENGINE_ENABLED, false);
+  const weightedConfluenceEnabled = parseBooleanEnv(process.env.SPX_WEIGHTED_CONFLUENCE_ENABLED, false);
+  const adaptiveEvEnabled = parseBooleanEnv(process.env.SPX_ADAPTIVE_EV_ENABLED, false);
+  const adaptiveEvSlippageR = parseFloatEnv(process.env.SPX_EV_SLIPPAGE_R, 0.05, 0);
   const nowMs = evaluationDate.getTime();
   const lifecycleConfig = getSetupLifecycleConfig();
   const scoringConfig = getSetupScoringConfig();
@@ -2021,7 +2434,7 @@ export async function detectActiveSetups(options?: {
 
   const sessionDate = toEasternTime(evaluationDate).dateStr;
 
-  const setups: Setup[] = candidateZones.map((zone) => {
+  const setups: Setup[] = await Promise.all(candidateZones.map(async ({ zone, quality }) => {
     const direction = setupDirection(zone, currentPrice);
     const zoneCenter = (zone.priceLow + zone.priceHigh) / 2;
     const regimeConflict = hasRegimeConflict(
@@ -2029,10 +2442,18 @@ export async function detectActiveSetups(options?: {
       regimeState,
       lifecycleConfig.regimeConflictConfidenceThreshold,
     );
-    const alignmentPct = flowAlignmentPercent({
+    const eventAlignmentPct = flowAlignmentPercent({
       flowEvents,
       direction,
       nowMs,
+    });
+    const flowWindowSignal = deriveFlowWindowSignal({
+      aggregation: flowAggregation,
+      direction,
+    });
+    const alignmentPct = blendFlowAlignmentPercent({
+      eventAlignmentPct,
+      windowAlignmentPct: flowWindowSignal.alignmentPct,
     });
     const flowDivergence = alignmentPct != null
       && alignmentPct < lifecycleConfig.flowDivergenceAlignmentThreshold;
@@ -2047,18 +2468,28 @@ export async function detectActiveSetups(options?: {
       regime: regimeState.regime,
       indicatorContext,
     });
-    const flowConfirmed = hasFlowConfirmation({
+    const flowConfirmedFromEvents = hasFlowConfirmation({
       flowEvents,
       direction,
       zoneCenter,
       nowMs,
     });
-    const flowQuality = evaluateFlowQuality({
-      flowEvents,
-      direction,
-      zoneCenter,
-      nowMs,
+    const flowConfirmed = flowConfirmedFromEvents || flowWindowSignal.confirmed;
+    const flowQuality = applyFlowWindowQualityBoost({
+      flowQuality: evaluateFlowQuality({
+        flowEvents,
+        direction,
+        zoneCenter,
+        nowMs,
+      }),
+      flowWindowSignal,
     });
+    const flowWindowDriver = flowWindowSignal.confirmed && flowWindowSignal.window
+      ? `Flow window ${flowWindowSignal.window} aligned (${round(flowWindowSignal.alignmentPct ?? 0, 1)}%)`
+      : null;
+    const flowWindowRisk = (!flowConfirmedFromEvents && flowWindowSignal.confirmed)
+      ? 'Local flow weaker than global window signal'
+      : null;
     const setupType = inferSetupTypeForZone({
       regime: regimeState.regime,
       direction,
@@ -2069,7 +2500,46 @@ export async function detectActiveSetups(options?: {
       emaAligned,
       volumeRegimeAligned,
     });
+    const memoryContext = memoryEngineEnabled
+      ? await getLevelMemoryContext({
+        sessionDate,
+        setupType,
+        direction,
+        entryMid: zoneCenter,
+      })
+      : null;
+    const memoryScoreBoost = memoryContext
+      ? clamp((memoryContext.score - 50) * 0.08, -4, 7)
+      : 0;
+    const memoryPWinAdjustment = memoryContext
+      ? clamp(((memoryContext.score - 50) / 100) * 0.08 * Math.max(0.2, memoryContext.confidence), -0.04, 0.06)
+      : 0;
+    const hasMemoryEdge = Boolean(
+      memoryContext
+      && memoryContext.resolved >= 3
+      && memoryContext.winRatePct != null
+      && memoryContext.winRatePct >= 58,
+    );
+    const memoryWeakness = Boolean(
+      memoryContext
+      && memoryContext.resolved >= 3
+      && memoryContext.winRatePct != null
+      && memoryContext.winRatePct <= 45,
+    );
+    const memoryDriver = hasMemoryEdge && memoryContext?.winRatePct != null
+      ? `Cross-session memory ${memoryContext.wins}/${memoryContext.resolved} wins (${round(memoryContext.winRatePct, 1)}%)`
+      : null;
+    const memoryRisk = memoryWeakness && memoryContext?.winRatePct != null
+      ? `Cross-session memory weak (${round(memoryContext.winRatePct, 1)}% win rate)`
+      : null;
     const regimeAligned = isRegimeAligned(setupType, regimeState.regime);
+    const multiTFConfluence = multiTFConfluenceEnabled
+      ? scoreMultiTFConfluence({
+        context: multiTFConfluenceContext,
+        direction,
+        currentPrice,
+      })
+      : null;
 
     const confluence = calculateConfluence({
       zone,
@@ -2085,19 +2555,63 @@ export async function detectActiveSetups(options?: {
       vwapPrice: indicatorContext?.vwapPrice ?? null,
       vwapDeviation: indicatorContext?.vwapDeviation ?? null,
     });
+    let confluenceScore = hasMemoryEdge ? Math.min(5, confluence.score + 1) : confluence.score;
+    let confluenceSources = hasMemoryEdge && !confluence.sources.includes('cross_session_memory')
+      ? [...confluence.sources, 'cross_session_memory']
+      : confluence.sources;
+    const gexAligned = confluence.sources.includes('gex_alignment');
+    const weightedConfluence = calculateWeightedConfluence({
+      flowQualityScore: flowQuality.score,
+      flowConfirmed,
+      emaAligned,
+      emaFastSlope: indicatorContext?.emaFastSlope,
+      zoneQualityScore: quality.compositeScore,
+      gexAligned,
+      regimeAligned,
+      regimeConflict,
+      multiTFComposite: multiTFConfluence?.composite ?? null,
+      memoryScoreBoost,
+    });
+    if (multiTFConfluence?.aligned && !confluenceSources.includes('multi_tf_alignment')) {
+      confluenceSources = [...confluenceSources, 'multi_tf_alignment'];
+      confluenceScore = Math.min(5, confluenceScore + 1);
+    }
+    if (weightedConfluenceEnabled) {
+      confluenceScore = Math.max(confluenceScore, weightedConfluence.legacyEquivalent);
+      if (!confluenceSources.includes('weighted_confluence')) {
+        confluenceSources = [...confluenceSources, 'weighted_confluence'];
+      }
+    }
 
     const fallbackDistance = Math.max(6, Math.abs(gex.combined.callWall - gex.combined.putWall) / 4);
     const entryLow = round(zone.priceLow, 2);
     const entryHigh = round(zone.priceHigh, 2);
-    const setupIdSeed = [
+    const entryMid = (entryLow + entryHigh) / 2;
+    const stableIdHash = hashStableSetupId({
       sessionDate,
       setupType,
-      zone.id,
-      round(zone.priceLow, 2),
-      round(zone.priceHigh, 2),
-    ].join('|');
-    const setupId = stableId('spx_setup', setupIdSeed);
-    const previous = previousById.get(setupId) || null;
+      direction,
+      entryMid,
+      geometryBucket: toGeometryBucket(toSessionMinuteEt(evaluationIso)),
+    });
+    const generatedSetupId = stableId('spx_setup', stableIdHash);
+    const previous = previousById.get(generatedSetupId)
+      || pickMorphCandidate({
+        candidates: previousByStableHash.get(stableIdHash) || [],
+        entryMid,
+      })
+      || pickMorphCandidate({
+        candidates: (previousSetups || []).filter((setup) => (
+          setup.status === 'triggered' || setup.status === 'ready'
+        )),
+        entryMid,
+      })
+      || null;
+    if (previous) {
+      matchedPreviousSetupIds.add(previous.id);
+    }
+    const setupId = previous?.id || generatedSetupId;
+    const resolvedStableIdHash = previous?.stableIdHash || stableIdHash;
     const createdAt = previous?.createdAt || evaluationIso;
     const firstSeenMinuteEt = toSessionMinuteEt(createdAt);
     const geometryPolicy = resolveSetupGeometryPolicy({
@@ -2125,6 +2639,11 @@ export async function detectActiveSetups(options?: {
       geometryPolicy,
       netGex: gex.combined.netGex,
       setupType,
+      atr14: indicatorContext?.atr14 ?? null,
+      vixRegime: environmentGate?.vixRegime ?? null,
+      gexCallWall: gex.combined.callWall,
+      gexPutWall: gex.combined.putWall,
+      gexFlipPoint: gex.combined.flipPoint,
     });
     const baseTargets = getTargetPrice(levels.clusters, zoneCenter, direction, fallbackDistance);
     const tunedTargets = adjustTargetsForSetupType({
@@ -2142,13 +2661,23 @@ export async function detectActiveSetups(options?: {
     const target1 = tunedTargets.target1;
     const target2 = tunedTargets.target2;
 
-    const readyConfluenceThreshold = (
+    const setupReadyFloor = (
       setupType === 'flip_reclaim'
       && regimeState.regime === 'ranging'
     )
       ? 2
       : 3;
-    let computedStatus: Setup['status'] = confluence.score >= readyConfluenceThreshold ? 'ready' : 'forming';
+    const readyConfluenceThreshold = environmentGate
+      ? Math.max(setupReadyFloor, environmentGate.dynamicReadyThreshold)
+      : setupReadyFloor;
+    const readyConfluenceThresholdScore = clamp(readyConfluenceThreshold * 20, 20, 95);
+    let computedStatus: Setup['status'] = weightedConfluenceEnabled
+      ? weightedConfluence.composite >= readyConfluenceThresholdScore
+        ? 'ready'
+        : 'forming'
+      : confluenceScore >= readyConfluenceThreshold
+        ? 'ready'
+        : 'forming';
     if (isPriceInsideEntry({ entryZone: { low: entryLow, high: entryHigh } }, currentPrice)) {
       computedStatus = 'triggered';
     }
@@ -2219,12 +2748,11 @@ export async function detectActiveSetups(options?: {
       invalidationReason,
       config: lifecycleConfig,
     });
-    const entryMid = (entryLow + entryHigh) / 2;
     const riskToStop = Math.max(Math.abs(entryMid - stop), 0.25);
     const rewardToTarget1 = Math.abs(target1 - entryMid);
     const rewardToTarget2 = Math.abs(target2 - entryMid);
     const inEntryZone = isPriceInsideEntry({ entryZone: { low: entryLow, high: entryHigh } }, currentPrice);
-    const normalizedConfluence = clamp((confluence.score / 5) * 100);
+    const normalizedConfluence = clamp((confluenceScore / 5) * 100);
     const zoneTypeBonus = zone.type === 'fortress'
       ? 20
       : zone.type === 'defended'
@@ -2234,7 +2762,7 @@ export async function detectActiveSetups(options?: {
           : 0;
     const structureQuality = clamp(((zone.clusterScore / 5) * 60) + (normalizedConfluence * 0.4) + zoneTypeBonus);
     const flowAlignment = alignmentPct == null ? (flowConfirmed ? 58 : 44) : clamp(alignmentPct + (flowConfirmed ? 6 : 0));
-    const gexAlignment = confluence.sources.includes('gex_alignment') ? 82 : 42;
+    const gexAlignment = confluenceSources.includes('gex_alignment') ? 82 : 42;
     const emaTrendScore = emaAligned
       ? clamp(68 + (indicatorContext?.emaFastSlope || 0) * 20)
       : 38;
@@ -2250,9 +2778,10 @@ export async function detectActiveSetups(options?: {
     const proximityRatio = 1 - Math.min(1, proximityDistance / Math.max(2, fallbackDistance * 1.25));
     const proximityUrgency = clamp(35 + (proximityRatio * 65));
     const microTriggerQuality = microTriggerFeature(lifecycle.status, inEntryZone);
+    const multiTFComposite = multiTFConfluence?.composite ?? 50;
 
     const weights = regimeWeights(regimeState.regime);
-    const scoreRaw = (
+    const scoreRawBase = (
       (weights.structure * (structureQuality / 100))
       + (weights.flow * (flowAlignment / 100))
       + (weights.gex * (gexAlignment / 100))
@@ -2260,22 +2789,43 @@ export async function detectActiveSetups(options?: {
       + (weights.proximity * (proximityUrgency / 100))
       + (weights.microTrigger * (microTriggerQuality / 100))
     );
+    const scoreRaw = multiTFConfluence
+      ? (scoreRawBase * 0.88) + ((multiTFComposite / 100) * 0.12)
+      : scoreRawBase;
     const indicatorBlend = (0.65 * emaTrendScore) + (0.35 * volumeContextScore);
     const stalePenalty = Math.min(12, (contextState.regimeConflictStreak + contextState.flowDivergenceStreak) * 3);
     const contradictionPenalty = (regimeConflict ? 8 : 0) + (flowDivergence ? 7 : 0);
     const lifecyclePenalty = lifecycle.status === 'forming' ? 6 : lifecycle.status === 'invalidated' ? 90 : lifecycle.status === 'expired' ? 95 : 0;
+    const blendedRawScore = weightedConfluenceEnabled
+      ? ((scoreRaw * 100) * 0.70) + (weightedConfluence.composite * 0.30)
+      : (scoreRaw * 100);
     const finalScore = scoringConfig.evTieringEnabled
-      ? clamp((scoreRaw * 100) - stalePenalty - contradictionPenalty - lifecyclePenalty + ((indicatorBlend - 50) * 0.1))
-      : normalizedConfluence;
+      ? clamp(blendedRawScore - stalePenalty - contradictionPenalty - lifecyclePenalty + ((indicatorBlend - 50) * 0.1) + memoryScoreBoost)
+      : clamp(normalizedConfluence + Math.max(0, memoryScoreBoost * 0.35));
+    const confluenceBreakdown = weightedConfluenceEnabled
+      ? {
+        flow: weightedConfluence.flow,
+        ema: weightedConfluence.ema,
+        zone: weightedConfluence.zone,
+        gex: weightedConfluence.gex,
+        regime: weightedConfluence.regime,
+        multiTF: weightedConfluence.multiTF,
+        memory: weightedConfluence.memory,
+        composite: weightedConfluence.composite,
+        legacyEquivalent: weightedConfluence.legacyEquivalent,
+        threshold: round(readyConfluenceThresholdScore, 2),
+      }
+      : undefined;
 
-    const baselineWin = (WIN_RATE_BY_SCORE[confluence.score] || 32) / 100;
+    const baselineWin = (WIN_RATE_BY_SCORE[confluenceScore] || 32) / 100;
     const scoreAdjustment = (finalScore - 50) / 220;
     const flowAdjustment = alignmentPct == null ? 0 : ((alignmentPct - 50) / 240);
     const pWinCalibrated = clamp(
       baselineWin
         + scoreAdjustment
         + (regimeAligned ? 0.03 : -0.04)
-        + flowAdjustment,
+        + flowAdjustment
+        + memoryPWinAdjustment,
       0.05,
       0.95,
     );
@@ -2283,7 +2833,20 @@ export async function detectActiveSetups(options?: {
     const rTarget2 = rewardToTarget2 / riskToStop;
     const rBlended = (0.65 * rTarget1) + (0.35 * rTarget2);
     const costR = 0.08 + (flowConfirmed ? 0 : 0.03) + (lifecycle.status === 'forming' ? 0.05 : 0);
-    const evR = (pWinCalibrated * rBlended) - ((1 - pWinCalibrated) * 1.0) - costR;
+    const baselineEvR = (pWinCalibrated * rBlended) - ((1 - pWinCalibrated) * 1.0) - costR;
+    const adaptiveEv = adaptiveEvEnabled
+      ? calculateAdaptiveEV({
+        pWin: pWinCalibrated,
+        target1R: rTarget1,
+        target2R: rTarget2,
+        vixValue: environmentGate?.breakdown.vixRegime.value ?? null,
+        minutesSinceOpen: indicatorContext?.minutesSinceOpen ?? null,
+        slippageR: adaptiveEvSlippageR,
+        partialAtT1Pct: optimizationProfile.tradeManagement.partialAtT1Pct,
+      })
+      : null;
+    const effectivePWinCalibrated = adaptiveEv?.adjustedPWin ?? pWinCalibrated;
+    const evR = adaptiveEv?.evR ?? baselineEvR;
     const flowAlignmentPct = alignmentPct == null ? null : round(alignmentPct, 2);
     const gateReasons = evaluateOptimizationGate({
       status: lifecycle.status,
@@ -2291,8 +2854,8 @@ export async function detectActiveSetups(options?: {
       setupType,
       regime: regimeState.regime,
       firstSeenAtIso: createdAt,
-      confluenceScore: confluence.score,
-      pWinCalibrated,
+      confluenceScore,
+      pWinCalibrated: effectivePWinCalibrated,
       evR,
       flowConfirmed,
       flowAlignmentPct,
@@ -2327,7 +2890,7 @@ export async function detectActiveSetups(options?: {
       ? deriveSetupTier({
         status: gatedStatus,
         score: finalScore,
-        pWinCalibrated,
+        pWinCalibrated: effectivePWinCalibrated,
         evR,
         config: scoringConfig,
       })
@@ -2340,21 +2903,72 @@ export async function detectActiveSetups(options?: {
     const tradeManagementPolicy = resolveTradeManagementForSetup({
       setupType,
       regime: regimeState.regime,
-      confluenceScore: confluence.score,
+      confluenceScore,
       flowConfirmed,
       basePolicy: optimizationProfile.tradeManagement,
     });
+    const morphHistory = buildMorphHistory({
+      previous,
+      nextStop: stop,
+      nextTarget2: target2,
+      timestamp: evaluationIso,
+    });
+    const morphCount = Array.isArray(morphHistory) ? morphHistory.length : 0;
+    const zoneQualityDriver = quality.compositeScore >= zoneQualityThreshold
+      ? `Zone quality ${round(quality.compositeScore, 1)}`
+      : null;
+    const zoneQualityRisk = quality.compositeScore < zoneQualityThreshold
+      ? `Zone quality below target (${round(quality.compositeScore, 1)} < ${zoneQualityThreshold})`
+      : null;
+    const multiTFDriver = multiTFConfluence?.aligned
+      ? `Multi-TF aligned (${Math.round(multiTFConfluence.composite)} score)`
+      : null;
+    const multiTFRisk = multiTFConfluence && !multiTFConfluence.aligned
+      ? `Multi-TF weak (${Math.round(multiTFConfluence.composite)} score)`
+      : null;
+    const weightedConfluenceDriver = weightedConfluenceEnabled
+      ? `Weighted confluence ${round(weightedConfluence.composite, 1)} / ${round(readyConfluenceThresholdScore, 1)}`
+      : null;
+    const weightedConfluenceRisk = (
+      weightedConfluenceEnabled
+      && weightedConfluence.composite < readyConfluenceThresholdScore
+    )
+      ? `Weighted confluence below ready threshold (${round(weightedConfluence.composite, 1)} < ${round(readyConfluenceThresholdScore, 1)})`
+      : null;
+    const adaptiveEvDriver = adaptiveEv
+      ? `Adaptive EV ${round(adaptiveEv.evR, 2)}R (T1/T2 ${Math.round(adaptiveEv.t1Weight * 100)}/${Math.round(adaptiveEv.t2Weight * 100)})`
+      : null;
+    const adaptiveEvRisk = adaptiveEv && adaptiveEv.adjustedPWin < pWinCalibrated
+      ? `EV pWin decayed to ${round(adaptiveEv.adjustedPWin * 100, 1)}%`
+      : null;
+    const morphDriver = morphCount > 0 ? `Setup morphed ${morphCount}x` : null;
+    const finalTriggeredAt = gatedLifecycle.status === 'triggered' || gatedLifecycle.status === 'invalidated' || gatedLifecycle.status === 'expired'
+      ? gatedTriggeredAt
+      : null;
+    const triggerContext = buildTriggerContext({
+      previous,
+      setupStatus: gatedLifecycle.status,
+      triggeredAt: finalTriggeredAt,
+      evaluationTimestamp: evaluationIso,
+      direction,
+      zone,
+      indicatorContext,
+    });
+    const triggerDriver = triggerContext && gatedLifecycle.status === 'triggered'
+      ? `Trigger ${triggerContext.triggerBarPatternType} ${Math.round(triggerContext.triggerLatencyMs / 1000)}s ago`
+      : null;
 
     return {
       id: setupId,
+      stableIdHash: resolvedStableIdHash,
       type: setupType,
       direction,
       entryZone: { low: entryLow, high: entryHigh },
       stop,
       target1: { price: target1, label: 'Target 1' },
       target2: { price: target2, label: 'Target 2' },
-      confluenceScore: confluence.score,
-      confluenceSources: confluence.sources,
+      confluenceScore,
+      confluenceSources,
       clusterZone: zone,
       regime: regimeState.regime,
       status: gatedLifecycle.status,
@@ -2367,33 +2981,73 @@ export async function detectActiveSetups(options?: {
       decisionDrivers: [
         ...(emaAligned ? ['EMA trend alignment'] : []),
         ...(volumeRegimeAligned ? ['Volume trend aligned with regime'] : []),
+        ...(flowWindowDriver ? [flowWindowDriver] : []),
+        ...(memoryDriver ? [memoryDriver] : []),
+        ...(multiTFDriver ? [multiTFDriver] : []),
+        ...(weightedConfluenceDriver ? [weightedConfluenceDriver] : []),
+        ...(adaptiveEvDriver ? [adaptiveEvDriver] : []),
+        ...(zoneQualityDriver ? [zoneQualityDriver] : []),
+        ...(morphDriver ? [morphDriver] : []),
+        ...(triggerDriver ? [triggerDriver] : []),
       ],
       decisionRisks: [
         ...(!emaAligned ? ['EMA trend misalignment'] : []),
         ...(!volumeRegimeAligned ? ['Volume trend not confirming regime'] : []),
+        ...(flowWindowRisk ? [flowWindowRisk] : []),
+        ...(memoryRisk ? [memoryRisk] : []),
+        ...(multiTFRisk ? [multiTFRisk] : []),
+        ...(weightedConfluenceRisk ? [weightedConfluenceRisk] : []),
+        ...(adaptiveEvRisk ? [adaptiveEvRisk] : []),
+        ...(zoneQualityRisk ? [zoneQualityRisk] : []),
       ],
+      zoneQualityScore: quality.compositeScore,
+      zoneQualityComponents: quality,
+      morphHistory,
       gateStatus,
       gateReasons,
       tradeManagement: tradeManagementPolicy,
-      pWinCalibrated: round(pWinCalibrated, 4),
+      pWinCalibrated: round(effectivePWinCalibrated, 4),
       evR: round(evR, 3),
+      evContext: adaptiveEv
+        ? {
+          model: 'adaptive',
+          adjustedPWin: round(adaptiveEv.adjustedPWin, 4),
+          expectedLossR: round(adaptiveEv.expectedLossR, 4),
+          blendedWinR: round(adaptiveEv.blendedWinR, 4),
+          t1Weight: round(adaptiveEv.t1Weight, 4),
+          t2Weight: round(adaptiveEv.t2Weight, 4),
+          slippageR: round(adaptiveEv.slippageR, 4),
+        }
+        : undefined,
       tier: gatedTier,
       rank: undefined,
       statusUpdatedAt: gatedLifecycle.statusUpdatedAt,
       ttlExpiresAt: gatedLifecycle.ttlExpiresAt,
       invalidationReason: gatedLifecycle.invalidationReason,
-      probability: WIN_RATE_BY_SCORE[confluence.score] || 32,
+      probability: WIN_RATE_BY_SCORE[confluenceScore] || 32,
       recommendedContract: null,
       createdAt,
-      triggeredAt: gatedLifecycle.status === 'triggered' || gatedLifecycle.status === 'invalidated' || gatedLifecycle.status === 'expired'
-        ? gatedTriggeredAt
-        : null,
+      triggeredAt: finalTriggeredAt,
+      triggerContext,
       // Telemetry for optimizer learning (P16-S7)
       flowQualityScore: flowQuality.score,
       flowRecentDirectionalEvents: flowQuality.recentDirectionalEvents,
       flowRecentDirectionalPremium: flowQuality.recentDirectionalPremium,
       flowLocalDirectionalEvents: flowQuality.localDirectionalEvents,
       flowLocalDirectionalPremium: flowQuality.localDirectionalPremium,
+      confluenceBreakdown,
+      multiTFConfluence: multiTFConfluence
+        ? {
+          score: round(multiTFConfluence.composite, 2),
+          aligned: multiTFConfluence.aligned,
+          tf1hStructureAligned: multiTFConfluence.tf1hStructureAligned,
+          tf15mSwingProximity: multiTFConfluence.tf15mSwingProximity,
+          tf5mMomentumAlignment: multiTFConfluence.tf5mMomentumAlignment,
+          tf1mMicrostructure: multiTFConfluence.tf1mMicrostructure,
+          contextSource: multiTFConfluenceContext?.source,
+        }
+        : undefined,
+      memoryContext: memoryContext || undefined,
       volumeTrend: indicatorContext?.volumeTrend ?? 'flat',
       minutesSinceOpen: indicatorContext?.minutesSinceOpen ?? undefined,
       emaFastSlope: indicatorContext?.emaFastSlope ?? undefined,
@@ -2413,16 +3067,17 @@ export async function detectActiveSetups(options?: {
         setupType === 'orb_breakout'
         && parseBooleanEnv(process.env.SPX_ORB_FLOW_GRACE_ENABLED, true)
         && emaAligned
-        && confluence.score >= ORB_GRACE_MIN_CONFLUENCE_SCORE
+        && confluenceScore >= ORB_GRACE_MIN_CONFLUENCE_SCORE
         && indicatorContext?.minutesSinceOpen != null
         && indicatorContext.minutesSinceOpen <= ORB_GRACE_MAX_FIRST_SEEN_MINUTE
       ) || undefined,
     };
-  });
+  }));
 
   // Preserve recently active setups that dropped from the candidate list as expired.
   const setupIds = new Set(setups.map((setup) => setup.id));
   for (const previous of previousSetups || []) {
+    if (matchedPreviousSetupIds.has(previous.id)) continue;
     if (setupIds.has(previous.id)) continue;
     if (previous.status === 'expired' || previous.status === 'invalidated') continue;
 
@@ -2449,7 +3104,21 @@ export async function detectActiveSetups(options?: {
     nowMs,
   });
 
-  const rankedSetups = [...diversifiedSetups]
+  const standbyGuidance = environmentGate
+    ? buildStandbyGuidance({
+      gate: environmentGate,
+      setups: diversifiedSetups,
+      asOfTimestamp: evaluationIso,
+    })
+    : null;
+  const environmentAdjustedSetups = environmentGate
+    ? applyEnvironmentGateToSetups({
+      setups: diversifiedSetups,
+      gate: environmentGate,
+    })
+    : diversifiedSetups;
+
+  const rankedSetups = [...environmentAdjustedSetups]
     .sort((a, b) => {
       const statusDelta = SETUP_STATUS_SORT_ORDER[a.status] - SETUP_STATUS_SORT_ORDER[b.status];
       if (statusDelta !== 0) return statusDelta;
@@ -2471,6 +3140,17 @@ export async function detectActiveSetups(options?: {
   if (shouldUseCache) {
     await cacheSet(SETUPS_CACHE_KEY, rankedSetups, SETUPS_CACHE_TTL_SECONDS);
   }
+
+  await persistEnvironmentState({
+    state: environmentGate
+      ? {
+        asOf: evaluationIso,
+        gate: environmentGate,
+        standbyGuidance,
+      }
+      : emptyEnvironmentState(evaluationIso),
+    shouldUseCache,
+  });
 
   if (shouldPersistForWinRate) {
     await persistSetupInstancesForWinRate(rankedSetups).catch((error) => {
@@ -2519,6 +3199,10 @@ export async function detectActiveSetups(options?: {
     invalidationReasons,
     lifecycleEnabled: lifecycleConfig.lifecycleEnabled,
     evTieringEnabled: scoringConfig.evTieringEnabled,
+    environmentGateEnabled,
+    environmentGatePassed: environmentGate?.passed ?? true,
+    environmentGateReason: environmentGate?.reason ?? null,
+    standbyGuidanceActive: standbyGuidance?.status === 'STANDBY',
   });
 
   return rankedSetups;
@@ -2544,4 +3228,5 @@ export async function getSetupById(id: string, options?: { forceRefresh?: boolea
 export function __resetSetupDetectorStateForTests(): void {
   setupContextStateById.clear();
   setupsInFlight = null;
+  latestSetupEnvironmentState = null;
 }

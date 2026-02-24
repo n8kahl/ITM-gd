@@ -1,10 +1,11 @@
 'use client'
 
 import { createContext, useContext } from 'react'
-import type { FlowEvent } from '@/lib/types/spx-command-center'
+import type { FlowEvent, FlowWindowAggregation } from '@/lib/types/spx-command-center'
 
 export interface SPXFlowContextState {
   flowEvents: FlowEvent[]
+  flowAggregation: FlowWindowAggregation | null
 }
 
 const SPXFlowContext = createContext<SPXFlowContextState | null>(null)

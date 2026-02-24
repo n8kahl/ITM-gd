@@ -28,6 +28,34 @@ function tierLabel(tier: Setup['tier'] | undefined): string | null {
   return null
 }
 
+function formatCompactNumber(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`
+  return value.toFixed(0)
+}
+
+function formatDurationMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '--'
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainSeconds = seconds % 60
+  if (minutes < 60) return `${minutes}m ${remainSeconds}s`
+  const hours = Math.floor(minutes / 60)
+  const remainMinutes = minutes % 60
+  return `${hours}h ${remainMinutes}m`
+}
+
+function formatTriggerPattern(pattern: NonNullable<Setup['triggerContext']>['triggerBarPatternType']): string {
+  if (pattern === 'engulfing_bull') return 'Engulfing Bull'
+  if (pattern === 'engulfing_bear') return 'Engulfing Bear'
+  if (pattern === 'inverted_hammer') return 'Inverted Hammer'
+  if (pattern === 'doji') return 'Doji'
+  if (pattern === 'hammer') return 'Hammer'
+  return 'None'
+}
+
 /** Compute thermometer positions as percentages along the trade range */
 function computeThermometer(setup: Setup, currentPrice: number) {
   const entryMid = (setup.entryZone.low + setup.entryZone.high) / 2
@@ -83,6 +111,17 @@ export function SetupCard({
   const setupEv = setup.evR ?? null
   const alignmentScore = typeof setup.alignmentScore === 'number' ? setup.alignmentScore : null
   const confidenceTrend = setup.confidenceTrend || null
+  const triggerContext = setup.triggerContext
+  const triggerLatency = triggerContext ? formatDurationMs(triggerContext.triggerLatencyMs) : null
+  const triggerAtLabel = triggerContext
+    ? new Date(triggerContext.triggerBarTimestamp).toLocaleTimeString()
+    : null
+  const confluenceComposite = setup.confluenceBreakdown?.composite ?? null
+  const confluenceThreshold = setup.confluenceBreakdown?.threshold ?? null
+  const confluenceLegacy = setup.confluenceBreakdown?.legacyEquivalent ?? null
+  const confluenceScoreLabel = Number.isInteger(setup.confluenceScore)
+    ? `${setup.confluenceScore}/5`
+    : `${setup.confluenceScore.toFixed(1)}/5`
 
   const distToEntry = Number.isFinite(currentPrice) && currentPrice > 0
     ? Math.abs(currentPrice - entryMid)
@@ -143,7 +182,7 @@ export function SetupCard({
                 )}
               />
             ))}
-            <span className="ml-1 text-[11px] font-mono text-white/60">{setup.confluenceScore}/5</span>
+            <span className="ml-1 text-[11px] font-mono text-white/60">{confluenceScoreLabel}</span>
           </div>
         </div>
 
@@ -181,6 +220,63 @@ export function SetupCard({
                 Confidence {confidenceTrend}
               </span>
             )}
+          </div>
+        )}
+
+        {triggerContext && (
+          <div className="mt-2 rounded-lg border border-emerald-300/20 bg-emerald-500/[0.06] px-2 py-1.5">
+            <p className="text-[9px] uppercase tracking-[0.08em] text-emerald-100/85">
+              Triggered {triggerLatency} ago at {triggerAtLabel}
+            </p>
+            <p className="mt-0.5 text-[10px] text-emerald-50/85">
+              {formatTriggerPattern(triggerContext.triggerBarPatternType)} · Vol {formatCompactNumber(triggerContext.triggerBarVolume)} · Pen {triggerContext.penetrationDepth.toFixed(2)} pts
+            </p>
+          </div>
+        )}
+
+        {setup.confluenceBreakdown && (
+          <div className="mt-2 rounded-lg border border-white/10 bg-black/25 px-2 py-1.5">
+            <div className="flex items-center justify-between text-[9px] uppercase tracking-[0.08em] text-white/55">
+              <span>Weighted Confluence</span>
+              <span>
+                {confluenceComposite?.toFixed(1) || '--'}
+                {' / '}
+                {confluenceThreshold?.toFixed(1) || '--'}
+              </span>
+            </div>
+            <div className="mt-1 grid grid-cols-4 gap-1 text-[9px] font-mono">
+              <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 text-center text-white/80">F {setup.confluenceBreakdown.flow.toFixed(0)}</span>
+              <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 text-center text-white/80">E {setup.confluenceBreakdown.ema.toFixed(0)}</span>
+              <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 text-center text-white/80">Z {setup.confluenceBreakdown.zone.toFixed(0)}</span>
+              <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 text-center text-white/80">G {setup.confluenceBreakdown.gex.toFixed(0)}</span>
+              <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 text-center text-white/80">R {setup.confluenceBreakdown.regime.toFixed(0)}</span>
+              <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 text-center text-white/80">T {setup.confluenceBreakdown.multiTF.toFixed(0)}</span>
+              <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 text-center text-white/80">M {setup.confluenceBreakdown.memory.toFixed(0)}</span>
+              <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 text-center text-white/80">L {confluenceLegacy?.toFixed(1) || '--'}</span>
+            </div>
+          </div>
+        )}
+
+        {setup.multiTFConfluence && (
+          <div className="mt-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5 text-[9px]">
+            <p className={cn(
+              'uppercase tracking-[0.08em]',
+              setup.multiTFConfluence.aligned ? 'text-emerald-200' : 'text-amber-200',
+            )}>
+              Multi-TF {setup.multiTFConfluence.aligned ? 'Aligned' : 'Mixed'} · {setup.multiTFConfluence.score.toFixed(0)}
+            </p>
+            <p className="mt-0.5 font-mono text-white/70">
+              1h {setup.multiTFConfluence.tf1hStructureAligned.toFixed(0)} · 15m {setup.multiTFConfluence.tf15mSwingProximity.toFixed(0)} · 5m {setup.multiTFConfluence.tf5mMomentumAlignment.toFixed(0)} · 1m {setup.multiTFConfluence.tf1mMicrostructure.toFixed(0)}
+            </p>
+          </div>
+        )}
+
+        {setup.evContext?.model === 'adaptive' && (
+          <div className="mt-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5 text-[9px] font-mono text-white/75">
+            <p className="uppercase tracking-[0.08em] text-white/55">Adaptive EV Model</p>
+            <p className="mt-0.5">
+              pWin {Math.round(setup.evContext.adjustedPWin * 100)}% · Loss {setup.evContext.expectedLossR.toFixed(2)}R · T1/T2 {(setup.evContext.t1Weight * 100).toFixed(0)}/{(setup.evContext.t2Weight * 100).toFixed(0)} · Slip {setup.evContext.slippageR.toFixed(2)}R
+            </p>
           </div>
         )}
 

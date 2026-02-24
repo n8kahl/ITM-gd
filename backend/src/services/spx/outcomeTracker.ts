@@ -12,6 +12,7 @@ export type SetupFinalOutcome =
   | 'expired_unresolved';
 
 export type SetupInstanceRow = {
+  id?: string | null;
   engine_setup_id: string;
   session_date: string;
   setup_type: string;
@@ -65,6 +66,10 @@ interface OutcomeResolution {
   finalOutcome: SetupFinalOutcome;
   finalReason: string;
 }
+
+type LevelTouchOutcome = 'bounce' | 'break' | 'held' | 'unknown';
+
+let levelTouchesPersistenceEnabled = true;
 
 function round(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals));
@@ -121,6 +126,7 @@ function toTrackedRow(setup: Setup, observedAt: string) {
       flowRecentDirectionalPremium: setup.flowRecentDirectionalPremium ?? null,
       flowLocalDirectionalEvents: setup.flowLocalDirectionalEvents ?? null,
       flowLocalDirectionalPremium: setup.flowLocalDirectionalPremium ?? null,
+      triggerContext: setup.triggerContext ?? null,
       volumeTrend: setup.volumeTrend ?? null,
       minutesSinceOpen: setup.minutesSinceOpen ?? null,
       emaFastSlope: setup.emaFastSlope ?? null,
@@ -240,6 +246,73 @@ function isMissingColumnError(message: string): boolean {
   );
 }
 
+function isMissingRelationError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('relation') && normalized.includes('does not exist');
+}
+
+function resolveLevelTouchOutcome(input: {
+  setup: Setup;
+  trackedRow: SetupInstanceRow;
+}): LevelTouchOutcome {
+  if (input.trackedRow.final_outcome === 't2_before_stop' || input.trackedRow.final_outcome === 't1_before_stop') {
+    return 'bounce';
+  }
+  if (
+    input.trackedRow.final_outcome === 'stop_before_t1'
+    || (
+      input.setup.status === 'invalidated'
+      && input.setup.invalidationReason === 'stop_breach_confirmed'
+    )
+  ) {
+    return 'break';
+  }
+  if (input.setup.status === 'expired' || input.setup.status === 'invalidated') {
+    return 'held';
+  }
+  return 'unknown';
+}
+
+function toLevelTouchRow(input: {
+  setup: Setup;
+  trackedRow: SetupInstanceRow;
+  observedAt: string;
+}): Record<string, unknown> | null {
+  const setupInstanceId = typeof input.trackedRow.id === 'string' && input.trackedRow.id.length > 0
+    ? input.trackedRow.id
+    : null;
+  if (!setupInstanceId) return null;
+
+  const entryMid = round((input.setup.entryZone.low + input.setup.entryZone.high) / 2, 2);
+  const triggerContext = input.setup.triggerContext;
+  const testedAt = input.setup.triggeredAt || input.setup.statusUpdatedAt || input.observedAt;
+  const candlePattern = triggerContext?.triggerBarPatternType || 'none';
+
+  return {
+    setup_instance_id: setupInstanceId,
+    session_date: input.trackedRow.session_date,
+    level_price: entryMid,
+    tested_at: testedAt,
+    outcome: resolveLevelTouchOutcome({
+      setup: input.setup,
+      trackedRow: input.trackedRow,
+    }),
+    volume: triggerContext?.triggerBarVolume ?? null,
+    candle_pattern: candlePattern,
+    spread: null,
+    metadata: {
+      engineSetupId: input.setup.id,
+      setupType: input.setup.type,
+      direction: input.setup.direction,
+      status: input.setup.status,
+      invalidationReason: input.setup.invalidationReason || null,
+      stableIdHash: input.setup.stableIdHash || null,
+      penetrationDepth: triggerContext?.penetrationDepth ?? null,
+      triggerLatencyMs: triggerContext?.triggerLatencyMs ?? null,
+    },
+  };
+}
+
 function toRowKey(engineSetupId: string, sessionDate: string): string {
   return `${engineSetupId}:${sessionDate}`;
 }
@@ -250,7 +323,7 @@ async function loadTrackedRows(setupIds: string[]): Promise<Map<string, SetupIns
 
   const { data, error } = await supabase
     .from('spx_setup_instances')
-    .select('engine_setup_id,session_date,setup_type,direction,regime,tier,triggered_at,final_outcome,t1_hit_at,t2_hit_at,stop_hit_at')
+    .select('id,engine_setup_id,session_date,setup_type,direction,regime,tier,triggered_at,final_outcome,t1_hit_at,t2_hit_at,stop_hit_at')
     .in('engine_setup_id', uniqueIds);
 
   if (error) {
@@ -292,6 +365,48 @@ async function updateTrackedRow(input: {
   }
 
   return { ok: true };
+}
+
+async function persistLevelTouchRows(input: {
+  setups: Setup[];
+  rowMap: Map<string, SetupInstanceRow>;
+  observedAt: string;
+}): Promise<void> {
+  if (!levelTouchesPersistenceEnabled) return;
+
+  const touchRows = input.setups
+    .map((setup) => {
+      const sessionDate = toSessionDate(setup.createdAt || input.observedAt);
+      const trackedRow = input.rowMap.get(toRowKey(setup.id, sessionDate));
+      if (!trackedRow) return null;
+      return toLevelTouchRow({
+        setup,
+        trackedRow,
+        observedAt: input.observedAt,
+      });
+    })
+    .filter((row): row is Record<string, unknown> => row != null);
+
+  if (touchRows.length === 0) return;
+
+  const { error } = await supabase
+    .from('spx_level_touches')
+    .upsert(touchRows, { onConflict: 'setup_instance_id' });
+
+  if (!error) return;
+
+  if (isMissingRelationError(error.message)) {
+    levelTouchesPersistenceEnabled = false;
+    logger.warn('SPX level touch persistence disabled: table missing', {
+      error: error.message,
+    });
+    return;
+  }
+
+  logger.warn('SPX level touch persistence failed', {
+    rowCount: touchRows.length,
+    error: error.message,
+  });
 }
 
 export async function persistSetupInstancesForWinRate(
@@ -356,6 +471,12 @@ export async function persistSetupInstancesForWinRate(
       patch,
     });
   }
+
+  await persistLevelTouchRows({
+    setups,
+    rowMap,
+    observedAt,
+  });
 }
 
 export async function persistSetupTransitionsForWinRate(

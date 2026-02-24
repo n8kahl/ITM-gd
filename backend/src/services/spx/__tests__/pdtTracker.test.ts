@@ -1,19 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-vi.mock('../../../config/database', () => ({
+jest.mock('../../../config/database', () => ({
   supabase: {
-    from: vi.fn().mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            gte: vi.fn().mockReturnValue({
-              lt: vi.fn().mockResolvedValue({ data: [], error: null }),
+    from: jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            gte: jest.fn().mockReturnValue({
+              lt: jest.fn().mockResolvedValue({ data: [], error: null }),
             }),
           }),
         }),
-        order: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        order: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
           }),
         }),
       }),
@@ -21,21 +19,21 @@ vi.mock('../../../config/database', () => ({
   },
 }));
 
-vi.mock('../../../lib/logger', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+jest.mock('../../../lib/logger', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-vi.mock('../../marketHours', () => ({
-  toEasternTime: vi.fn().mockReturnValue({ dateStr: '2026-02-23', hour: 10, minute: 30 }),
+jest.mock('../../marketHours', () => ({
+  toEasternTime: jest.fn().mockReturnValue({ dateStr: '2026-02-23', hour: 10, minute: 30 }),
 }));
 
-vi.mock('../../coachPushChannel', () => ({
-  publishCoachMessage: vi.fn(),
+jest.mock('../../coachPushChannel', () => ({
+  publishCoachMessage: jest.fn(),
 }));
 
 describe('pdtTracker', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   it('exports canTrade function', async () => {

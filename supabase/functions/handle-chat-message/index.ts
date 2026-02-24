@@ -6,7 +6,7 @@ const APP_URL = (Deno.env.get('APP_URL') || 'https://tradeitm.com').replace(/\/+
 const RATE_LIMIT_MAX_MESSAGES = 30 // Max messages per minute per visitor
 const MAX_MESSAGE_LENGTH = 2000
 const MAX_CONVERSATION_TOKEN_LENGTH = 256
-const ENFORCE_VISITOR_CONVERSATION_TOKEN = Deno.env.get('ENFORCE_VISITOR_CONVERSATION_TOKEN') === 'true'
+const ENFORCE_VISITOR_CONVERSATION_TOKEN = Deno.env.get('ENFORCE_VISITOR_CONVERSATION_TOKEN') !== 'false'
 
 function corsHeaders(origin: string | null) {
   const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]

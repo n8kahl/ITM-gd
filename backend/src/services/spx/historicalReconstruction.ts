@@ -690,6 +690,23 @@ function buildHistoricalIndicatorContext(input: {
   asOfTimestamp: string;
   vwapPrice: number | null;
   vwapDeviation: number | null;
+  latestBar: {
+    t: number;
+    o: number;
+    h: number;
+    l: number;
+    c: number;
+    v: number;
+  } | null;
+  priorBar: {
+    t: number;
+    o: number;
+    h: number;
+    l: number;
+    c: number;
+    v: number;
+  } | null;
+  avgRecentVolume: number | null;
 } | null {
   const usable = input.bars.filter((bar) => Number.isFinite(bar.c) && bar.c > 0);
   if (usable.length < 8) return null;
@@ -726,6 +743,26 @@ function buildHistoricalIndicatorContext(input: {
   const vwapPrice = calculateVWAP(vwapBars);
   const lastClose = closes[closes.length - 1];
   const vwapPosition = vwapPrice != null ? analyzeVWAPPosition(lastClose, vwapPrice) : null;
+  const latestBarRaw = usable[usable.length - 1];
+  const priorBarRaw = usable.length > 1 ? usable[usable.length - 2] : null;
+  const toTriggerBar = (bar: { t: number; o?: number; h?: number; l?: number; c: number; v: number } | null) => {
+    if (!bar) return null;
+    const open = typeof bar.o === 'number' && Number.isFinite(bar.o) ? bar.o : bar.c;
+    const high = typeof bar.h === 'number' && Number.isFinite(bar.h) ? bar.h : Math.max(open, bar.c);
+    const low = typeof bar.l === 'number' && Number.isFinite(bar.l) ? bar.l : Math.min(open, bar.c);
+    return {
+      t: bar.t,
+      o: round(open, 4),
+      h: round(high, 4),
+      l: round(low, 4),
+      c: round(bar.c, 4),
+      v: Math.max(0, round(bar.v, 2)),
+    };
+  };
+  const recentVolumeBars = usable.slice(-20);
+  const avgRecentVolume = recentVolumeBars.length > 0
+    ? round(recentVolumeBars.reduce((sum, bar) => sum + bar.v, 0) / recentVolumeBars.length, 2)
+    : null;
 
   return {
     emaFast: round(emaFast, 2),
@@ -741,6 +778,9 @@ function buildHistoricalIndicatorContext(input: {
     asOfTimestamp: input.asOfTimestamp,
     vwapPrice: vwapPrice != null ? round(vwapPrice, 2) : null,
     vwapDeviation: vwapPosition != null ? round(vwapPosition.distancePct, 4) : null,
+    latestBar: toTriggerBar(latestBarRaw),
+    priorBar: toTriggerBar(priorBarRaw),
+    avgRecentVolume,
   };
 }
 

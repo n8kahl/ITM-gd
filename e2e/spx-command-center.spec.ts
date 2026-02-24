@@ -7,7 +7,7 @@ test.describe('SPX Command Center', () => {
     await setupSPXCommandCenterMocks(page, { delayMs: 150 })
     await authenticateAsMember(page)
 
-    await page.goto('/members/spx-command-center', { waitUntil: 'networkidle' })
+    await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('SPX Command Center').first()).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Setup Feed' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'AI Coach' })).toBeVisible()
@@ -25,13 +25,15 @@ test.describe('SPX Command Center', () => {
     await setupSPXCommandCenterMocks(page, { delayMs: 100 })
     await authenticateAsMember(page)
 
-    await page.goto('/members/spx-command-center', { waitUntil: 'networkidle' })
+    await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('spx-ai-coach-feed')).toBeVisible()
 
     await page.getByTestId('spx-ai-coach-feed').getByRole('button', { name: 'All' }).click()
-    await expect(page.getByTestId('spx-ai-coach-pinned-alert')).toBeVisible()
+    const pinnedAlerts = page.getByTestId('spx-ai-coach-pinned-alert')
+    await expect(pinnedAlerts.first()).toBeVisible()
     await expect(page.getByTestId('spx-action-strip-alert')).toHaveCount(0)
 
-    await expect(page.getByTestId('spx-ai-coach-pinned-alert')).toHaveCount(0, { timeout: 6_000 })
+    await expect(pinnedAlerts).toHaveCount(0, { timeout: 6_000 })
     const lifecycleBeforeReload = await page.evaluate(() => {
       const raw = window.localStorage.getItem('spx.coach.alert.lifecycle.v2')
       if (!raw) return {}
@@ -50,7 +52,8 @@ test.describe('SPX Command Center', () => {
       .map(([id]) => id)
     expect(seenBeforeReload.length).toBeGreaterThan(0)
 
-    await page.reload({ waitUntil: 'networkidle' })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('spx-ai-coach-feed')).toBeVisible()
     await page.getByTestId('spx-ai-coach-feed').getByRole('button', { name: 'All' }).click()
     await expect(page.getByTestId('spx-ai-coach-pinned-alert')).toHaveCount(0)
     const lifecycleAfterReload = await page.evaluate(() => {

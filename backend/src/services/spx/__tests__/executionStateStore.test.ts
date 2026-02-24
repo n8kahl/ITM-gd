@@ -1,24 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
 // Mock Supabase
-const mockSelect = vi.fn();
-const mockInsert = vi.fn();
-const mockUpdate = vi.fn();
-const mockUpsert = vi.fn();
-const mockEq = vi.fn();
-const mockIs = vi.fn();
-const mockOrder = vi.fn();
-const mockMaybeSingle = vi.fn();
+const mockUpdate = jest.fn();
+const mockUpsert = jest.fn();
+const mockEq = jest.fn();
+const mockIs = jest.fn();
+const mockOrder = jest.fn();
+const mockMaybeSingle = jest.fn();
 
 const chainMock = () => ({
-  select: vi.fn().mockReturnValue({
+  select: jest.fn().mockReturnValue({
     eq: mockEq.mockReturnThis(),
     is: mockIs.mockReturnThis(),
     order: mockOrder.mockReturnThis(),
     maybeSingle: mockMaybeSingle,
   }),
   upsert: mockUpsert.mockReturnValue({
-    select: vi.fn().mockReturnValue({
+    select: jest.fn().mockReturnValue({
       maybeSingle: mockMaybeSingle,
     }),
   }),
@@ -35,19 +31,19 @@ const chainMock = () => ({
   maybeSingle: mockMaybeSingle,
 });
 
-vi.mock('../../../config/database', () => ({
+jest.mock('../../../config/database', () => ({
   supabase: {
-    from: vi.fn().mockReturnValue(chainMock()),
+    from: jest.fn().mockReturnValue(chainMock()),
   },
 }));
 
-vi.mock('../../../lib/logger', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+jest.mock('../../../lib/logger', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
 describe('executionStateStore', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   it('exports upsertExecutionState function', async () => {

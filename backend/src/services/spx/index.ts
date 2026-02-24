@@ -4,11 +4,12 @@ import { getContractRecommendation } from './contractSelector';
 import { getBasisState, getSpyImpactState } from './crossReference';
 import { getFibLevels } from './fibEngine';
 import { getFlowEvents } from './flowEngine';
+import { createNeutralFlowWindowAggregation, getFlowWindowAggregation } from './flowAggregator';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import { logger } from '../../lib/logger';
 import { classifyCurrentRegime } from './regimeClassifier';
-import { detectActiveSetups } from './setupDetector';
+import { detectActiveSetups, getLatestSetupEnvironmentState } from './setupDetector';
 import type {
   BasisState,
   CoachMessage,
@@ -27,6 +28,7 @@ const SNAPSHOT_BACKGROUND_REFRESH_MS = 20_000;
 const SNAPSHOT_STAGE_TIMEOUTS_MS = {
   gex: 12_000,
   flow: 4_000,
+  flowAggregation: 4_000,
   basis: 4_000,
   spyImpact: 4_000,
   fib: 5_000,
@@ -204,6 +206,15 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
       fallback: () => fallbackSnapshot?.flow || [],
     }),
   ]);
+  const flowAggregation = await withStageFallback({
+    stage: 'flowAggregation',
+    forceRefresh,
+    run: () => getFlowWindowAggregation({
+      forceRefresh,
+      flowEvents: flow,
+    }),
+    fallback: () => fallbackSnapshot?.flowAggregation || createNeutralFlowWindowAggregation(),
+  });
 
   const basis = await withStageFallback({
     stage: 'basis',
@@ -309,6 +320,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
       }
     }),
   );
+  const setupEnvironmentState = await getLatestSetupEnvironmentState();
 
   return {
     levels: levelData.levels,
@@ -321,7 +333,10 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     regime,
     prediction,
     flow,
+    flowAggregation,
     coachMessages: coachState.messages,
+    environmentGate: setupEnvironmentState?.gate || null,
+    standbyGuidance: setupEnvironmentState?.standbyGuidance || null,
     generatedAt: nowIso(),
   };
 }

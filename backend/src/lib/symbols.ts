@@ -23,6 +23,9 @@ export const INDEX_SYMBOLS = new Set([
   'DJIA',
   'RUT',
   'VIX',
+  'VIX9D',
+  'VVIX',
+  'SKEW',
   'COMP',
 ]);
 
