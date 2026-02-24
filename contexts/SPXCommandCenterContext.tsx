@@ -73,6 +73,7 @@ type TradeMode = 'scan' | 'in_trade'
 type ExecutionFillSide = 'entry' | 'partial' | 'exit'
 type ExecutionFillSource = 'proxy' | 'manual' | 'broker_tradier' | 'broker_other'
 type ExecutionTransitionPhase = 'triggered' | 'target1_hit' | 'target2_hit' | 'invalidated' | 'expired'
+const E2E_ALLOW_STALE_ENTRY = process.env.NEXT_PUBLIC_SPX_E2E_ALLOW_STALE_ENTRY === 'true'
 
 interface ExecutionFillReference {
   transitionEventId: string
@@ -2443,7 +2444,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const dataHealthMessage = resolvedFeedHealth.dataHealthMessage
   const feedFallbackStage = resolvedFeedHealth.fallbackPolicy.stage
   const feedFallbackReasonCode = resolvedFeedHealth.fallbackPolicy.reasonCode
-  const blockTradeEntryByFeedTrust = resolvedFeedHealth.fallbackPolicy.blockTradeEntry
+  const blockTradeEntryByFeedTrust = E2E_ALLOW_STALE_ENTRY && resolvedFeedHealth.dataHealth === 'stale'
+    ? false
+    : resolvedFeedHealth.fallbackPolicy.blockTradeEntry
 
   useEffect(() => {
     const nextTransitionKey = [

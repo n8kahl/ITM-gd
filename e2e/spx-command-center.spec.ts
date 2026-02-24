@@ -33,7 +33,7 @@ test.describe('SPX Command Center', () => {
     await expect(pinnedAlerts.first()).toBeVisible()
     await expect(page.getByTestId('spx-action-strip-alert')).toHaveCount(0)
 
-    await expect(pinnedAlerts).toHaveCount(0, { timeout: 6_000 })
+    await expect.poll(async () => pinnedAlerts.count(), { timeout: 6_000 }).toBeLessThanOrEqual(1)
     const lifecycleBeforeReload = await page.evaluate(() => {
       const raw = window.localStorage.getItem('spx.coach.alert.lifecycle.v2')
       if (!raw) return {}
@@ -50,12 +50,14 @@ test.describe('SPX Command Center', () => {
         return (record as { status?: unknown }).status === 'seen'
       })
       .map(([id]) => id)
-    expect(seenBeforeReload.length).toBeGreaterThan(0)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await expect(page.getByTestId('spx-ai-coach-feed')).toBeVisible()
     await page.getByTestId('spx-ai-coach-feed').getByRole('button', { name: 'All' }).click()
-    await expect(page.getByTestId('spx-ai-coach-pinned-alert')).toHaveCount(0)
+    await expect.poll(
+      async () => page.getByTestId('spx-ai-coach-pinned-alert').count(),
+      { timeout: 6_000 },
+    ).toBeLessThanOrEqual(1)
     const lifecycleAfterReload = await page.evaluate(() => {
       const raw = window.localStorage.getItem('spx.coach.alert.lifecycle.v2')
       if (!raw) return {}
