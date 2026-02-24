@@ -5,6 +5,7 @@ const DEFAULT_MODEL_PATH = 'confidence-model/latest.json'
 const DEFAULT_REFRESH_MS = 24 * 60 * 60 * 1000
 const DEFAULT_FAILURE_BACKOFF_MS = 10 * 60 * 1000
 const MAX_FAILURE_BACKOFF_MS = 6 * 60 * 60 * 1000
+const TRUE_FLAGS = new Set(['1', 'true', 'yes', 'on', 'enabled'])
 
 interface LoadConfidenceModelWeightsOptions {
   forceRefresh?: boolean
@@ -34,15 +35,41 @@ function resolveFailureBackoffMs(): number {
   return parsed
 }
 
+function isTruthyFlag(value: string | undefined): boolean {
+  if (typeof value !== 'string') return false
+  return TRUE_FLAGS.has(value.trim().toLowerCase())
+}
+
+function resolveEnvByRuntime(serverName: string, browserName: string): string | undefined {
+  if (typeof window === 'undefined') return process.env[serverName]
+  return process.env[browserName]
+}
+
 function resolveModelUrl(): string | null {
-  const explicit = process.env.SPX_ML_CONFIDENCE_MODEL_URL?.trim()
+  const explicit = resolveEnvByRuntime(
+    'SPX_ML_CONFIDENCE_MODEL_URL',
+    'NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_URL',
+  )?.trim()
   if (explicit) return explicit
+
+  // Browser-side model fetches are opt-in to avoid noisy storage 4xx when
+  // deployments do not publish model artifacts yet.
+  if (typeof window !== 'undefined') {
+    const browserAutoloadEnabled = isTruthyFlag(process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_BROWSER_AUTOLOAD)
+    if (!browserAutoloadEnabled) return null
+  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
   if (!supabaseUrl) return null
 
-  const bucket = process.env.SPX_ML_CONFIDENCE_BUCKET?.trim() || DEFAULT_MODEL_BUCKET
-  const path = process.env.SPX_ML_CONFIDENCE_MODEL_PATH?.trim() || DEFAULT_MODEL_PATH
+  const bucket = resolveEnvByRuntime(
+    'SPX_ML_CONFIDENCE_BUCKET',
+    'NEXT_PUBLIC_SPX_ML_CONFIDENCE_BUCKET',
+  )?.trim() || DEFAULT_MODEL_BUCKET
+  const path = resolveEnvByRuntime(
+    'SPX_ML_CONFIDENCE_MODEL_PATH',
+    'NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_PATH',
+  )?.trim() || DEFAULT_MODEL_PATH
   const encodedPath = path.split('/').map((part) => encodeURIComponent(part)).join('/')
   return `${supabaseUrl}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`
 }

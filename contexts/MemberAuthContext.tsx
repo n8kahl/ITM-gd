@@ -98,6 +98,8 @@ interface MemberAuthContextValue extends MemberAuthState {
 const E2E_BYPASS_AUTH_ENABLED = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === 'true'
 const E2E_BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001'
 const E2E_BYPASS_SHARED_SECRET = process.env.NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET || ''
+const DISCORD_GUILD_ROLES_MISSING_CACHE_KEY = 'member_auth:discord_guild_roles_missing_at_ms'
+const DISCORD_GUILD_ROLES_MISSING_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
 function createE2EBypassAuthState(): MemberAuthState {
   const nowIso = new Date().toISOString()
@@ -253,6 +255,35 @@ function isMissingSupabaseRelationError(error: unknown, tableName: string): bool
   )
 }
 
+function readCachedMissingDiscordGuildRolesFlag(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const raw = window.localStorage.getItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY)
+    if (!raw) return false
+    const detectedAtMs = Number.parseInt(raw, 10)
+    if (!Number.isFinite(detectedAtMs)) {
+      window.localStorage.removeItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY)
+      return false
+    }
+    if ((Date.now() - detectedAtMs) > DISCORD_GUILD_ROLES_MISSING_CACHE_TTL_MS) {
+      window.localStorage.removeItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY)
+      return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+function cacheMissingDiscordGuildRolesFlag(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY, String(Date.now()))
+  } catch {
+    // Ignore storage write failures.
+  }
+}
+
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const [state, setState] = useState<MemberAuthState>({
@@ -296,6 +327,8 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Fetch role mapping and tab configurations from config APIs on mount
   useEffect(() => {
+    discordGuildRolesTableMissingRef.current = readCachedMissingDiscordGuildRolesFlag()
+
     // Fetch role mapping
     fetch('/api/config/roles')
       .then(res => res.json())
@@ -637,6 +670,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           if (guildRoleError) {
             if (isMissingSupabaseRelationError(guildRoleError, 'discord_guild_roles')) {
               discordGuildRolesTableMissingRef.current = true
+              cacheMissingDiscordGuildRolesFlag()
             }
           } else {
             for (const row of guildRoleRows || []) {

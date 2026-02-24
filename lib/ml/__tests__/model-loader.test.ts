@@ -10,6 +10,10 @@ describe('loadConfidenceModelWeights', () => {
   const previousBucket = process.env.SPX_ML_CONFIDENCE_BUCKET
   const previousPath = process.env.SPX_ML_CONFIDENCE_MODEL_PATH
   const previousRefreshMs = process.env.SPX_ML_CONFIDENCE_REFRESH_MS
+  const previousBrowserAutoload = process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_BROWSER_AUTOLOAD
+  const previousPublicModelUrl = process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_URL
+  const previousPublicBucket = process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_BUCKET
+  const previousPublicPath = process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_PATH
 
   beforeEach(() => {
     resetConfidenceModelCacheForTest()
@@ -17,6 +21,10 @@ describe('loadConfidenceModelWeights', () => {
     process.env.SPX_ML_CONFIDENCE_BUCKET = 'ml-models'
     process.env.SPX_ML_CONFIDENCE_MODEL_PATH = 'confidence/latest.json'
     process.env.SPX_ML_CONFIDENCE_REFRESH_MS = '60000'
+    delete process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_BROWSER_AUTOLOAD
+    delete process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_URL
+    delete process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_BUCKET
+    delete process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_PATH
   })
 
   afterEach(() => {
@@ -33,6 +41,18 @@ describe('loadConfidenceModelWeights', () => {
 
     if (previousRefreshMs == null) delete process.env.SPX_ML_CONFIDENCE_REFRESH_MS
     else process.env.SPX_ML_CONFIDENCE_REFRESH_MS = previousRefreshMs
+
+    if (previousBrowserAutoload == null) delete process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_BROWSER_AUTOLOAD
+    else process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_BROWSER_AUTOLOAD = previousBrowserAutoload
+
+    if (previousPublicModelUrl == null) delete process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_URL
+    else process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_URL = previousPublicModelUrl
+
+    if (previousPublicBucket == null) delete process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_BUCKET
+    else process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_BUCKET = previousPublicBucket
+
+    if (previousPublicPath == null) delete process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_PATH
+    else process.env.NEXT_PUBLIC_SPX_ML_CONFIDENCE_MODEL_PATH = previousPublicPath
   })
 
   it('loads confidence model weights from Supabase storage URL', async () => {
@@ -99,5 +119,32 @@ describe('loadConfidenceModelWeights', () => {
     expect(firstAttempt).toBeNull()
     expect(secondAttempt).toBeNull()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips browser-side model fetch unless explicitly enabled', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    const originalWindow = globalThis.window
+
+    Object.defineProperty(globalThis, 'window', {
+      value: {} as Window,
+      configurable: true,
+      writable: true,
+    })
+
+    try {
+      const model = await loadConfidenceModelWeights({
+        forceRefresh: true,
+        fetchImpl: fetchMock,
+      })
+
+      expect(model).toBeNull()
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        value: originalWindow,
+        configurable: true,
+        writable: true,
+      })
+    }
   })
 })
