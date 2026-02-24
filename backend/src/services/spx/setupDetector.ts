@@ -121,6 +121,7 @@ const ORB_BREAKOUT_T1_R_MIN_MULTIPLIER = 1.15;
 const ORB_BREAKOUT_T1_R_MAX_MULTIPLIER = 2.4;
 const ORB_BREAKOUT_T2_R_MIN_MULTIPLIER = 1.9;
 const ORB_BREAKOUT_T2_R_MAX_MULTIPLIER = 3.8;
+const ORB_ENTRY_ZONE_MAX_WIDTH_POINTS = 6;
 const MEAN_FADE_TARGET_SCALE = 0.95;
 const MEAN_REVERSION_PARTIAL_AT_T1_MIN = 0.75;
 const GEOMETRY_BUCKET_OPENING_MAX_MINUTE = 90;
@@ -590,6 +591,25 @@ function buildVWAPSetupGeometry(input: {
   }
 
   return null;
+}
+
+function clampEntryZoneWidth(
+  entryZone: { low: number; high: number },
+  maxWidth: number,
+): { low: number; high: number } {
+  const width = entryZone.high - entryZone.low;
+  if (!Number.isFinite(width) || width <= maxWidth) {
+    return {
+      low: round(entryZone.low, 2),
+      high: round(entryZone.high, 2),
+    };
+  }
+  const center = (entryZone.low + entryZone.high) / 2;
+  const half = maxWidth / 2;
+  return {
+    low: round(center - half, 2),
+    high: round(center + half, 2),
+  };
 }
 
 function setupTypeForRegime(regime: Regime): SetupType {
@@ -2959,8 +2979,16 @@ export async function detectActiveSetups(options?: {
       direction,
       indicatorContext,
     });
-    const entryLow = vwapGeometry?.entryLow ?? round(zone.priceLow, 2);
-    const entryHigh = vwapGeometry?.entryHigh ?? round(zone.priceHigh, 2);
+    const rawEntryLow = vwapGeometry?.entryLow ?? round(zone.priceLow, 2);
+    const rawEntryHigh = vwapGeometry?.entryHigh ?? round(zone.priceHigh, 2);
+    const resolvedEntryZone = setupType === 'orb_breakout'
+      ? clampEntryZoneWidth(
+        { low: rawEntryLow, high: rawEntryHigh },
+        ORB_ENTRY_ZONE_MAX_WIDTH_POINTS,
+      )
+      : { low: rawEntryLow, high: rawEntryHigh };
+    const entryLow = resolvedEntryZone.low;
+    const entryHigh = resolvedEntryZone.high;
     const entryMid = (entryLow + entryHigh) / 2;
     const stableIdHash = hashStableSetupId({
       sessionDate,
@@ -3614,6 +3642,8 @@ export const __testables = {
   detectVWAPReclaim,
   detectVWAPFade,
   buildVWAPSetupGeometry,
+  clampEntryZoneWidth,
+  ORB_ENTRY_ZONE_MAX_WIDTH_POINTS,
   decayFactor,
   computeDecayedConfluence,
   CONFLUENCE_HALF_LIVES_MS,
