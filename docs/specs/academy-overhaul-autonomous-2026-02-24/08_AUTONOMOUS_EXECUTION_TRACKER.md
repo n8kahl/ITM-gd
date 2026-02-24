@@ -17,6 +17,7 @@
 | 5 | Reporting & Analytics | COMPLETE | 5A, 5B | — |
 | 6 | AI Image Generation & Media | COMPLETE | 6 | — |
 | 7 | QA, Accessibility, Performance | COMPLETE | 7A, 7B, 7C, 7D | — |
+| 8 | Legacy Cleanup, Validation, Release Docs | COMPLETE | 8A, 8B, 8C | — |
 
 ---
 
@@ -78,6 +79,14 @@
 | 7C | TypeScript Validation | QA | COMPLETE | tsc: 0 errors | Frontend + Backend clean |
 | 7D | Production Readiness | QA | COMPLETE | tsc: 0 errors | All seed data written, tsc clean |
 
+### Phase 8: Legacy Cleanup, Validation, Release Docs
+
+| Slice | Description | Agent | Status | Gate Result | Notes |
+|-------|------------|-------|--------|-------------|-------|
+| 8A | Release-level validation gates | Orchestrator | COMPLETE | tsc: PASS, build: PASS, eslint: PASS, vitest: 436/436 | All gates green |
+| 8B | Legacy audit + test fix | Orchestrator | COMPLETE | frontend-contracts: 49/49 | Fixed AcademyMarkdown test target (block-renderer) |
+| 8C | Release notes + runbook | Docs | COMPLETE | — | Release notes + runbook + tracker update |
+
 ---
 
 ## Files Created/Modified
@@ -86,7 +95,7 @@
 - `20260224100000_academy_overhaul_phase1a.sql` — Gamification schema
 - `20260224100001_academy_overhaul_phase1b.sql` — Reporting tables
 - `20260224200000_academy_overhaul_track1_seed.sql` — Track 1 seed
-- `20260224200001_academy_overhaul_tracks2_3_seed.sql` — Tracks 2-3 seed (686 lines, 3 modules, 11 lessons)
+- `20260224200001_academy_overhaul_tracks2_3_seed.sql` — Tracks 2-3 seed (1,697 lines, 6 modules, 24 lessons)
 - `20260224200002_academy_overhaul_tracks4_5_6_seed.sql` — Tracks 4-6 seed (687 lines, 7 modules, 18 lessons)
 - `20260224200003_academy_overhaul_achievements_validation.sql` — 30 achievements
 
@@ -158,3 +167,5 @@
 - `docs/specs/academy-overhaul-autonomous-2026-02-24/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
 - `docs/specs/academy-overhaul-autonomous-2026-02-24/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
 - `docs/specs/academy-overhaul-autonomous-2026-02-24/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+- `docs/specs/ACADEMY_OVERHAUL_RELEASE_NOTES_2026-02-24.md`
+- `docs/specs/ACADEMY_OVERHAUL_RUNBOOK_2026-02-24.md`
