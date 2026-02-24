@@ -25,6 +25,10 @@ import earningsRouter from './routes/earnings';
 import economicRouter from './routes/economic';
 import fibonacciRouter from './routes/fibonacci';
 import spxRouter from './routes/spx';
+import academyGamificationRouter from './routes/academy-gamification';
+import academyActivitiesRouter from './routes/academy-activities';
+import academyAnalyticsRouter from './routes/academy-analytics';
+import academyAdminRouter from './routes/academy-admin';
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
 import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers/positionTrackerWorker';
 import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/sessionCleanupWorker';
@@ -127,6 +131,10 @@ app.use('/api/earnings', earningsRouter);
 app.use('/api/economic', economicRouter);
 app.use('/api/fibonacci', fibonacciRouter);
 app.use('/api/spx', spxRouter);
+app.use('/api/academy/gamification', academyGamificationRouter);
+app.use('/api/academy/activities', academyActivitiesRouter);
+app.use('/api/academy/analytics', academyAnalyticsRouter);
+app.use('/api/academy/admin', academyAdminRouter);
 // Backward-compatible auth-gated endpoint retained for legacy clients and E2E checks.
 app.get('/api/journal/trades', authenticateToken, (_req: Request, res: Response) => {
   res.status(410).json({

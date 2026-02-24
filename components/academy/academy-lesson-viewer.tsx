@@ -1,18 +1,18 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
 import { ChevronLeft } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { AcademyMarkdown } from '@/components/academy-v3/shared/academy-markdown'
-import { AcademyCard, AcademyShell } from '@/components/academy/academy-shell'
+import { AcademyShell } from '@/components/academy/academy-shell'
+import { AcademyBlockRenderer } from '@/components/academy/lesson/academy-block-renderer'
+import { LessonProgressBar } from '@/components/academy/lesson/academy-lesson-progress-bar'
+import { LessonNavigation } from '@/components/academy/lesson/academy-lesson-navigation'
 import {
-  ACADEMY_DEFAULT_MEDIA_IMAGE,
-  getBlockMarkdown,
-  resolveBlockImage,
-  resolveLessonImage,
-} from '@/components/academy/academy-media'
+  LessonSidebar,
+  LessonSidebarBackdrop,
+  type SidebarBlock,
+} from '@/components/academy/lesson/academy-lesson-sidebar'
 import {
   completeLessonBlock,
   fetchAcademyLesson,
@@ -23,19 +23,6 @@ import {
 
 type LessonData = Awaited<ReturnType<typeof fetchAcademyLesson>>
 type PlanData = Awaited<ReturnType<typeof fetchAcademyPlan>>
-
-function formatBlockTypeLabel(blockType: string): string {
-  return blockType.replaceAll('_', ' ')
-}
-
-const BLOCK_TYPE_CLASSNAMES: Record<string, string> = {
-  hook: 'text-emerald-300 border-emerald-500/35 bg-emerald-500/10',
-  concept_explanation: 'text-emerald-300 border-emerald-500/35 bg-emerald-500/10',
-  worked_example: 'text-amber-200 border-amber-300/30 bg-amber-300/10',
-  guided_practice: 'text-sky-200 border-sky-300/30 bg-sky-300/10',
-  independent_practice: 'text-fuchsia-200 border-fuchsia-300/30 bg-fuchsia-300/10',
-  reflection: 'text-zinc-200 border-white/20 bg-white/5',
-}
 
 export function AcademyLessonViewer({
   lessonId,
@@ -52,7 +39,11 @@ export function AcademyLessonViewer({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [mediaError, setMediaError] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // ---------------------------------------------------------------------------
+  // Data loading
+  // ---------------------------------------------------------------------------
 
   useEffect(() => {
     let active = true
@@ -72,7 +63,9 @@ export function AcademyLessonViewer({
         setCompletedBlockIds(completedSet)
 
         if (resume) {
-          const firstIncompleteIndex = lessonData.blocks.findIndex((block) => !completedSet.has(block.id))
+          const firstIncompleteIndex = lessonData.blocks.findIndex(
+            (block) => !completedSet.has(block.id)
+          )
           if (firstIncompleteIndex >= 0) {
             setCurrentBlockIndex(firstIncompleteIndex)
           } else {
@@ -98,6 +91,10 @@ export function AcademyLessonViewer({
     }
   }, [lessonId, resume])
 
+  // ---------------------------------------------------------------------------
+  // Derived state
+  // ---------------------------------------------------------------------------
+
   const context = useMemo(() => {
     if (!plan || !lesson) return null
 
@@ -112,7 +109,10 @@ export function AcademyLessonViewer({
             lessonIndex,
             totalLessons: moduleItem.lessons.length,
             previousLessonId: lessonIndex > 0 ? moduleItem.lessons[lessonIndex - 1]?.id : null,
-            nextLessonId: lessonIndex + 1 < moduleItem.lessons.length ? moduleItem.lessons[lessonIndex + 1]?.id : null,
+            nextLessonId:
+              lessonIndex + 1 < moduleItem.lessons.length
+                ? moduleItem.lessons[lessonIndex + 1]?.id
+                : null,
           }
         }
       }
@@ -121,182 +121,244 @@ export function AcademyLessonViewer({
     return null
   }, [plan, lesson])
 
-  const activeBlock = lesson?.blocks[currentBlockIndex] || null
-  const completedCount = lesson?.blocks.filter((block) => completedBlockIds.has(block.id)).length || 0
+  const activeBlock = lesson?.blocks[currentBlockIndex] ?? null
+  const completedCount = lesson?.blocks.filter((block) => completedBlockIds.has(block.id)).length ?? 0
   const allBlocksComplete = lesson?.blocks.length ? completedCount >= lesson.blocks.length : false
-  const lessonFallbackImage = lesson ? resolveLessonImage(lesson) : ACADEMY_DEFAULT_MEDIA_IMAGE
-  const activeBlockImage = activeBlock
-    ? resolveBlockImage(activeBlock, lessonFallbackImage)
-    : ACADEMY_DEFAULT_MEDIA_IMAGE
+  const totalBlocks = lesson?.blocks.length ?? 0
 
-  useEffect(() => {
-    setMediaError(false)
-  }, [lessonId, activeBlock?.id])
+  // canProceed: the current block is already completed OR the viewer is stepping backward
+  const canProceed = activeBlock ? completedBlockIds.has(activeBlock.id) : true
 
-  async function handleCompleteAndContinue() {
-    if (!lesson || !activeBlock) return
+  const sidebarBlocks: SidebarBlock[] = useMemo(
+    () =>
+      lesson?.blocks.map((block) => ({
+        id: block.id,
+        blockType: block.blockType,
+        title: block.title ?? undefined,
+        completed: completedBlockIds.has(block.id),
+      })) ?? [],
+    [lesson, completedBlockIds]
+  )
 
-    if (completedBlockIds.has(activeBlock.id)) {
-      if (currentBlockIndex < lesson.blocks.length - 1) {
-        setCurrentBlockIndex((index) => index + 1)
+  const objectives: string[] = useMemo(() => {
+    if (!lesson) return []
+    return lesson.learningObjective ? [lesson.learningObjective] : []
+  }, [lesson])
+
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
+
+  const handleNavigate = useCallback(
+    (index: number) => {
+      if (!lesson) return
+      const clamped = Math.max(0, Math.min(lesson.blocks.length - 1, index))
+      setCurrentBlockIndex(clamped)
+      setNotice(null)
+    },
+    [lesson]
+  )
+
+  const handleBlockSelect = useCallback(
+    (blockId: string) => {
+      if (!lesson) return
+      const index = lesson.blocks.findIndex((b) => b.id === blockId)
+      if (index >= 0) {
+        setCurrentBlockIndex(index)
+        setNotice(null)
+        // Auto-close sidebar on mobile after selection
+        setSidebarOpen(false)
       }
-      return
-    }
+    },
+    [lesson]
+  )
 
-    setSubmitting(true)
-    setNotice(null)
+  const handleBlockComplete = useCallback(
+    async (blockId: string) => {
+      if (!lesson) return
 
-    try {
-      const result = await completeLessonBlock(lesson.id, { blockId: activeBlock.id })
-
-      setCompletedBlockIds((previous) => {
-        const next = new Set(previous)
-        next.add(activeBlock.id)
-        return next
-      })
-
-      if (result.nextBlockId) {
-        const nextIndex = lesson.blocks.findIndex((block) => block.id === result.nextBlockId)
-        if (nextIndex >= 0) {
-          setCurrentBlockIndex(nextIndex)
+      // If already completed, just advance
+      if (completedBlockIds.has(blockId)) {
+        if (currentBlockIndex < lesson.blocks.length - 1) {
+          setCurrentBlockIndex((i) => i + 1)
         }
-      } else {
-        setNotice('Lesson completed. Continue to the next lesson when ready.')
+        return
       }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save block completion')
-    } finally {
-      setSubmitting(false)
-    }
-  }
+
+      setSubmitting(true)
+      setNotice(null)
+
+      try {
+        const result = await completeLessonBlock(lesson.id, { blockId })
+
+        setCompletedBlockIds((previous) => {
+          const next = new Set(previous)
+          next.add(blockId)
+          return next
+        })
+
+        if (result.nextBlockId) {
+          const nextIndex = lesson.blocks.findIndex((block) => block.id === result.nextBlockId)
+          if (nextIndex >= 0) {
+            setCurrentBlockIndex(nextIndex)
+          }
+        } else {
+          setNotice('Lesson complete. Continue to the next lesson when ready.')
+        }
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to save block completion')
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [lesson, completedBlockIds, currentBlockIndex]
+  )
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
     <AcademyShell
       title="Lesson Viewer"
       description="Study one block at a time with full-width markdown and structured progression."
-      maxWidthClassName="max-w-5xl"
+      maxWidthClassName="max-w-6xl"
     >
       {loading ? (
-        <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-zinc-300">Loading lesson...</div>
+        <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-white/60">
+          Loading lesson...
+        </div>
       ) : error || !lesson ? (
-        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">{error || 'Lesson not found'}</div>
+        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">
+          {error ?? 'Lesson not found'}
+        </div>
       ) : (
-        <div className="mx-auto max-w-3xl space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <>
+          {/* Progress bar — thin strip at very top of lesson area */}
+          <div className="mb-4">
+            <LessonProgressBar
+              completedBlocks={completedCount}
+              totalBlocks={totalBlocks}
+              currentBlockIndex={currentBlockIndex}
+            />
+          </div>
+
+          {/* Breadcrumb + lesson meta */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <Link
-              href={context ? `/members/academy/modules/${context.moduleSlug}` : '/members/academy/modules'}
-              className="inline-flex items-center gap-1 text-sm text-zinc-300 transition-colors hover:text-white"
+              href={
+                context
+                  ? `/members/academy/modules/${context.moduleSlug}`
+                  : '/members/academy/modules'
+              }
+              className="inline-flex items-center gap-1 text-sm text-white/50 transition-colors hover:text-white"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
               {context ? context.moduleTitle : 'Back to Modules'}
             </Link>
 
-            <p className="text-xs text-zinc-400">
-              {context ? `Lesson ${context.lessonIndex + 1} of ${context.totalLessons}` : 'Lesson'}
+            <p className="text-xs text-white/40">
+              {context
+                ? `Lesson ${context.lessonIndex + 1} of ${context.totalLessons}`
+                : 'Lesson'}
             </p>
           </div>
 
-          <AcademyCard className="academy-card-readable space-y-4 p-5">
-            <div>
-              <h2 className="text-xl font-semibold text-white">{lesson.title}</h2>
-              <p className="mt-2 text-sm text-zinc-300">{lesson.learningObjective}</p>
-              {context ? <p className="mt-2 text-xs text-zinc-400">Track: {context.trackTitle}</p> : null}
-            </div>
+          {/* Main layout: sidebar + content */}
+          <div className="relative flex gap-4">
+            {/* Mobile backdrop */}
+            <LessonSidebarBackdrop
+              isOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+            />
 
-            {activeBlock ? (
-              <div className="space-y-4">
-                <span
-                  className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ${
-                    BLOCK_TYPE_CLASSNAMES[activeBlock.blockType] || BLOCK_TYPE_CLASSNAMES.hook
-                  }`}
-                >
-                  {formatBlockTypeLabel(activeBlock.blockType)}
-                </span>
+            {/* Sidebar */}
+            <LessonSidebar
+              blocks={sidebarBlocks}
+              currentBlockId={activeBlock?.id ?? ''}
+              onBlockSelect={handleBlockSelect}
+              objectives={objectives}
+              estimatedMinutes={lesson.estimatedMinutes}
+              isOpen={sidebarOpen}
+              onToggle={() => setSidebarOpen((prev) => !prev)}
+            />
 
-                {activeBlock.title ? <h3 className="text-lg font-semibold text-white">{activeBlock.title}</h3> : null}
-
-                <div className="relative aspect-[16/9] overflow-hidden rounded-lg border border-white/10 bg-[#0f1117]">
-                  <Image
-                    src={mediaError ? ACADEMY_DEFAULT_MEDIA_IMAGE : activeBlockImage}
-                    alt={activeBlock.title || lesson.title}
-                    fill
-                    className="object-contain p-2"
-                    sizes="(max-width: 1024px) 100vw, 768px"
-                    onError={() => setMediaError(true)}
-                  />
+            {/* Content column */}
+            <div className="min-w-0 flex-1 space-y-4">
+              {/* Lesson header card */}
+              <section className="glass-card-heavy rounded-xl border border-white/10 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-semibold text-white leading-snug">
+                      {lesson.title}
+                    </h2>
+                    <p className="mt-1.5 text-sm text-white/60">{lesson.learningObjective}</p>
+                    {context && (
+                      <p className="mt-1 text-xs text-white/35">Track: {context.trackTitle}</p>
+                    )}
+                  </div>
+                  {/* Sidebar toggle (desktop) */}
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen((prev) => !prev)}
+                    aria-label={sidebarOpen ? 'Close outline' : 'Open outline'}
+                    aria-expanded={sidebarOpen}
+                    className="hidden shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/50 transition-colors hover:border-white/20 hover:text-white md:flex items-center gap-1.5"
+                  >
+                    Outline
+                    <span className="text-white/30">{sidebarOpen ? '–' : '+'}</span>
+                  </button>
                 </div>
+              </section>
 
-                <AcademyMarkdown className="academy-markdown-readable">{getBlockMarkdown(activeBlock.contentJson)}</AcademyMarkdown>
-              </div>
-            ) : (
-              <p className="text-sm text-zinc-400">No lesson blocks are available yet.</p>
-            )}
-          </AcademyCard>
-
-          <AcademyCard className="academy-card-readable">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-zinc-400">
-                Block Progress: {completedCount} of {lesson.blocks.length} completed
-              </p>
-              <div className="flex items-center gap-1.5" aria-label="Block progress dots">
-                {lesson.blocks.map((block, index) => (
-                  <span
-                    key={block.id}
-                    className={`h-2.5 w-2.5 rounded-full ${
-                      completedBlockIds.has(block.id)
-                        ? 'bg-emerald-400'
-                        : index === currentBlockIndex
-                          ? 'bg-zinc-300'
-                          : 'bg-white/15'
-                    }`}
+              {/* Active block */}
+              {activeBlock ? (
+                <section className="glass-card-heavy rounded-xl border border-white/10 p-5 space-y-4">
+                  <AcademyBlockRenderer
+                    block={activeBlock}
+                    onComplete={handleBlockComplete}
+                    isCompleted={completedBlockIds.has(activeBlock.id)}
                   />
-                ))}
-              </div>
+                  {submitting && (
+                    <p className="text-xs text-emerald-400/60">Saving progress...</p>
+                  )}
+                </section>
+              ) : (
+                <section className="glass-card-heavy rounded-xl border border-white/10 p-5">
+                  <p className="text-sm text-white/40">No lesson blocks are available yet.</p>
+                </section>
+              )}
+
+              {/* Navigation card */}
+              <section className="glass-card-heavy rounded-xl border border-white/10 p-4 space-y-4">
+                <LessonNavigation
+                  currentIndex={currentBlockIndex}
+                  totalBlocks={totalBlocks}
+                  onNavigate={handleNavigate}
+                  canProceed={canProceed}
+                />
+
+                {/* Status messages */}
+                {notice && (
+                  <p className="text-center text-xs text-emerald-400">{notice}</p>
+                )}
+
+                {/* Next lesson CTA */}
+                {allBlocksComplete && context?.nextLessonId && (
+                  <div className="flex justify-center">
+                    <Link
+                      href={`/members/academy/lessons/${context.nextLessonId}`}
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                    >
+                      Continue to next lesson
+                      <ChevronLeft className="h-4 w-4 rotate-180" strokeWidth={1.5} />
+                    </Link>
+                  </div>
+                )}
+              </section>
             </div>
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => setCurrentBlockIndex((index) => Math.max(0, index - 1))}
-                disabled={currentBlockIndex === 0}
-                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-200 transition-colors hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Previous
-              </button>
-
-              <button
-                type="button"
-                onClick={handleCompleteAndContinue}
-                disabled={!activeBlock || submitting}
-                className="rounded-lg border border-emerald-500/35 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitting ? 'Saving...' : 'Complete & Continue'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!lesson.blocks.length) return
-                  setCurrentBlockIndex((index) => Math.min(lesson.blocks.length - 1, index + 1))
-                }}
-                disabled={!lesson.blocks.length || currentBlockIndex >= lesson.blocks.length - 1}
-                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-200 transition-colors hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-
-            {notice ? <p className="mt-3 text-xs text-emerald-300">{notice}</p> : null}
-            {allBlocksComplete && context?.nextLessonId ? (
-              <Link
-                href={`/members/academy/lessons/${context.nextLessonId}`}
-                className="mt-3 inline-flex text-xs text-emerald-300 hover:text-emerald-200"
-              >
-                Continue to next lesson
-              </Link>
-            ) : null}
-          </AcademyCard>
-        </div>
+          </div>
+        </>
       )}
     </AcademyShell>
   )

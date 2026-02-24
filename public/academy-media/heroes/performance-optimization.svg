@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+  <defs>
+    <linearGradient id="hg_performance_optimization" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9D174D"/>
+      <stop offset="100%" stop-color="#831843"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="200" fill="url(#hg_performance_optimization)"/>
+  <polyline points="0,160 40,140 80,160 120,140 160,160 200,140 240,160 280,140 320,160 360,140 400,160 440,140 480,160 520,140 560,160 600,140 640,160 680,140 720,160 760,140 800,160" fill="none" stroke="#EC4899" stroke-width="1" opacity="0.1"/>
+  <text x="40" y="80" font-family="system-ui, sans-serif" font-size="32" font-weight="700" fill="white" opacity="0.95">Performance Optimization</text>
+  <text x="40" y="110" font-family="system-ui, sans-serif" font-size="14" fill="#EC4899" opacity="0.7">Module 6.2</text>
+  <line x1="40" y1="130" x2="200" y2="130" stroke="#EC4899" stroke-width="2" opacity="0.4"/>
+</svg>

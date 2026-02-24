@@ -11,7 +11,7 @@ type LessonLike = {
 }
 
 type LessonBlockLike = {
-  blockType: 'hook' | 'concept_explanation' | 'worked_example' | 'guided_practice' | 'independent_practice' | 'reflection'
+  blockType: string
   contentJson: Record<string, unknown>
 }
 
@@ -22,7 +22,7 @@ const SAFE_REMOTE_IMAGE_HOSTS = new Set([
 ])
 const SAFE_REMOTE_IMAGE_SUFFIXES = ['.supabase.co']
 
-const BLOCK_IMAGE_BY_TYPE: Record<LessonBlockLike['blockType'], string> = {
+const BLOCK_IMAGE_BY_TYPE: Record<string, string> = {
   hook: '/academy/illustrations/market-context.svg',
   concept_explanation: '/academy/illustrations/training-default.svg',
   worked_example: '/academy/illustrations/trade-management.svg',

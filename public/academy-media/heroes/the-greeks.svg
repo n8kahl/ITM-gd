@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+  <defs>
+    <linearGradient id="hg_the_greeks" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5B21B6"/>
+      <stop offset="100%" stop-color="#4C1D95"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="200" fill="url(#hg_the_greeks)"/>
+  <line x1="0" y1="0" x2="0" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="80" y1="0" x2="80" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="160" y1="0" x2="160" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="240" y1="0" x2="240" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="320" y1="0" x2="320" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="400" y1="0" x2="400" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="480" y1="0" x2="480" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="560" y1="0" x2="560" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="640" y1="0" x2="640" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="720" y1="0" x2="720" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="0" y1="0" x2="800" y2="0" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="0" y1="50" x2="800" y2="50" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="0" y1="100" x2="800" y2="100" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="0" y1="150" x2="800" y2="150" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/><line x1="0" y1="200" x2="800" y2="200" stroke="#8B5CF6" stroke-width="0.5" opacity="0.1"/>
+  <text x="40" y="80" font-family="system-ui, sans-serif" font-size="32" font-weight="700" fill="white" opacity="0.95">The Greeks</text>
+  <text x="40" y="110" font-family="system-ui, sans-serif" font-size="14" fill="#8B5CF6" opacity="0.7">Module 3.2</text>
+  <line x1="40" y1="130" x2="200" y2="130" stroke="#8B5CF6" stroke-width="2" opacity="0.4"/>
+</svg>

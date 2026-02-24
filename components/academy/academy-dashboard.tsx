@@ -5,6 +5,11 @@ import { BookOpen, CheckCircle2, TrendingUp } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { AcademyCard, AcademyShell } from '@/components/academy/academy-shell'
+import { AcademyStreakBanner } from '@/components/academy/dashboard/academy-streak-banner'
+import { AcademyXpLevelCard } from '@/components/academy/dashboard/academy-xp-level-card'
+import { AcademyContinueLearningHero } from '@/components/academy/dashboard/academy-continue-learning-hero'
+import { AcademyWeeklySummary } from '@/components/academy/dashboard/academy-weekly-summary'
+import { AcademyAchievementShowcase } from '@/components/academy/dashboard/academy-achievement-showcase'
 import {
   fetchAcademyPlan,
   fetchAcademyProgressSummary,
@@ -16,45 +21,57 @@ import { Analytics } from '@/lib/analytics'
 type PlanData = Awaited<ReturnType<typeof fetchAcademyPlan>>
 type ProgressSummary = Awaited<ReturnType<typeof fetchAcademyProgressSummary>>
 type ResumeData = Awaited<ReturnType<typeof fetchAcademyResume>>
-type RecommendationData = Awaited<ReturnType<typeof fetchRecommendations>>
+
+// ---------------------------------------------------------------------------
+// Gamification placeholder types
+// TODO: Replace with real fetch from /api/academy/gamification/user/{userId}/stats
+// once userId is accessible in this client component (e.g. via session context).
+// ---------------------------------------------------------------------------
+interface GamificationStats {
+  currentStreak: number
+  longestStreak: number
+  streakFreezeAvailable: boolean
+  totalXp: number
+  currentLevel: number
+  recentXpEvents: Array<{ source: string; amount: number; timestamp: string }>
+  daysActive: boolean[]
+  lessonsThisWeek: number
+  lessonsLastWeek: number
+  timeSpentMinutes: number
+  unlockedAchievements: Array<{
+    key: string
+    title: string
+    description: string
+    iconUrl: string
+    unlockedAt: string
+  }>
+  totalAchievements: number
+}
+
+const GAMIFICATION_PLACEHOLDER: GamificationStats = {
+  currentStreak: 0,
+  longestStreak: 0,
+  streakFreezeAvailable: false,
+  totalXp: 0,
+  currentLevel: 1,
+  recentXpEvents: [],
+  daysActive: [false, false, false, false, false, false, false],
+  lessonsThisWeek: 0,
+  lessonsLastWeek: 0,
+  timeSpentMinutes: 0,
+  unlockedAchievements: [],
+  totalAchievements: 20,
+}
 
 function withResumeQuery(url: string): string {
   return url.includes('?') ? `${url}&resume=1` : `${url}?resume=1`
-}
-
-function ProgressRing({ progressPercent }: { progressPercent: number }) {
-  const clamped = Math.max(0, Math.min(100, progressPercent))
-  const radius = 28
-  const circumference = 2 * Math.PI * radius
-  const dashoffset = circumference - (clamped / 100) * circumference
-
-  return (
-    <svg width="72" height="72" viewBox="0 0 72 72" aria-label={`Overall progress ${clamped}%`}>
-      <circle cx="36" cy="36" r={radius} stroke="rgba(255,255,255,0.12)" strokeWidth="6" fill="none" />
-      <circle
-        cx="36"
-        cy="36"
-        r={radius}
-        stroke="rgb(52 211 153)"
-        strokeWidth="6"
-        fill="none"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={dashoffset}
-        transform="rotate(-90 36 36)"
-      />
-      <text x="36" y="40" textAnchor="middle" className="fill-white text-[12px] font-semibold">
-        {clamped}%
-      </text>
-    </svg>
-  )
 }
 
 export function AcademyDashboard() {
   const [plan, setPlan] = useState<PlanData | null>(null)
   const [summary, setSummary] = useState<ProgressSummary | null>(null)
   const [resume, setResume] = useState<ResumeData | null>(null)
-  const [recommendations, setRecommendations] = useState<RecommendationData | null>(null)
+  const [gamification] = useState<GamificationStats>(GAMIFICATION_PLACEHOLDER)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -67,12 +84,11 @@ export function AcademyDashboard() {
       fetchAcademyResume(),
       fetchRecommendations(),
     ])
-      .then(([planData, progressSummary, resumeTarget, recommendationData]) => {
+      .then(([planData, progressSummary, resumeTarget]) => {
         if (!active) return
         setPlan(planData)
         setSummary(progressSummary)
         setResume(resumeTarget)
-        setRecommendations(recommendationData)
         setError(null)
       })
       .catch((err: unknown) => {
@@ -94,102 +110,128 @@ export function AcademyDashboard() {
   }, [plan])
 
   const lessonCount = useMemo(() => summary?.totalLessons || 0, [summary])
-  const progressPercent = summary?.progressPercent || 0
-  const topRecommendations = recommendations?.items.slice(0, 3) || []
 
   return (
     <AcademyShell
       title="Your Learning Plan"
       description="See where you are, resume quickly, and focus on the highest-impact next step."
-      maxWidthClassName="max-w-4xl"
+      maxWidthClassName="max-w-5xl"
     >
       {loading ? (
-        <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-zinc-300">Loading your plan...</div>
+        <div
+          className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-zinc-300"
+          data-testid="academy-dashboard-loading"
+        >
+          Loading your plan...
+        </div>
       ) : error ? (
-        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">{error}</div>
+        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-6 text-sm text-rose-200">
+          {error}
+        </div>
       ) : (
-        <div className="space-y-4">
-          <AcademyCard className="p-5">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="space-y-1">
+        <div className="space-y-4" data-testid="academy-dashboard">
+          {/* Program stats summary bar */}
+          <AcademyCard className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-0.5">
                 <p className="text-xs uppercase tracking-[0.08em] text-emerald-300">Program</p>
-                <h2 className="text-xl font-semibold text-white">{plan?.program.title || 'Academy Program'}</h2>
-                <p className="text-sm text-zinc-400">
+                <h2 className="font-serif text-lg font-semibold text-white">
+                  {plan?.program.title || 'Academy Program'}
+                </h2>
+                <p className="font-mono text-xs text-zinc-400">
                   {moduleCount} modules · {lessonCount} lessons
                 </p>
               </div>
-              <ProgressRing progressPercent={progressPercent} />
+              {summary && summary.progressPercent > 0 && (
+                <div className="flex items-center gap-2">
+                  <div
+                    className="h-2 w-32 overflow-hidden rounded-full bg-white/10"
+                    role="progressbar"
+                    aria-valuenow={summary.progressPercent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Overall progress ${summary.progressPercent}%`}
+                  >
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+                      style={{ width: `${summary.progressPercent}%` }}
+                    />
+                  </div>
+                  <span className="font-mono text-xs text-zinc-400">{summary.progressPercent}%</span>
+                </div>
+              )}
             </div>
           </AcademyCard>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <AcademyCard title="Continue Learning">
-              {resume ? (
-                <div className="space-y-3">
-                  <p className="text-sm font-semibold text-white">{resume.lessonTitle}</p>
-                  <p className="text-xs text-zinc-400">
-                    Lesson {resume.lessonNumber} of {resume.totalLessons} · {resume.courseProgressPercent}% complete
-                  </p>
-                  <Link
-                    href={withResumeQuery(resume.resumeUrl)}
-                    onClick={() => Analytics.trackAcademyAction('resume_lesson')}
-                    className="inline-flex rounded-md border border-emerald-500/35 bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-500/20"
-                  >
-                    Resume lesson
-                  </Link>
-                </div>
-              ) : (
-                <p className="text-sm text-zinc-400">Start your first module to generate a resume target.</p>
-              )}
-            </AcademyCard>
+          {/* Continue Learning hero — full width */}
+          <AcademyContinueLearningHero
+            lessonTitle={resume?.lessonTitle}
+            moduleName={resume?.courseProgressPercent !== undefined ? `${resume.courseProgressPercent}% through module` : undefined}
+            resumeUrl={resume ? withResumeQuery(resume.resumeUrl) : undefined}
+            progressPercent={resume?.courseProgressPercent}
+            lessonNumber={resume?.lessonNumber}
+            totalLessons={resume?.totalLessons}
+          />
 
-            <AcademyCard title="Recommended Next">
-              {topRecommendations.length ? (
-                <ul className="space-y-3">
-                  {topRecommendations.map((item, index) => (
-                    <li key={`${item.type}-${index}`} className="rounded-md border border-white/10 p-3">
-                      <p className="text-sm font-medium text-white">{item.title}</p>
-                      <p className="mt-1 text-xs text-zinc-400">{item.reason}</p>
-                      <Link
-                        href={item.actionTarget}
-                        onClick={() => Analytics.trackAcademyAction('recommendation_action')}
-                        className="mt-2 inline-flex text-xs text-emerald-300 hover:text-emerald-200"
-                      >
-                        {item.actionLabel}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-zinc-400">Recommendations appear after initial lesson activity.</p>
-              )}
-            </AcademyCard>
+          {/* Two-column grid: left (streak + XP), right (weekly + achievements) */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {/* Left column */}
+            <div className="flex flex-col gap-4">
+              <AcademyStreakBanner
+                currentStreak={gamification.currentStreak}
+                longestStreak={gamification.longestStreak}
+                streakFreezeAvailable={gamification.streakFreezeAvailable}
+              />
+              <AcademyXpLevelCard
+                totalXp={gamification.totalXp}
+                currentLevel={gamification.currentLevel}
+                recentXpEvents={gamification.recentXpEvents}
+              />
+            </div>
+
+            {/* Right column */}
+            <div className="flex flex-col gap-4">
+              <AcademyWeeklySummary
+                daysActive={gamification.daysActive}
+                lessonsThisWeek={gamification.lessonsThisWeek}
+                lessonsLastWeek={gamification.lessonsLastWeek}
+                timeSpentMinutes={gamification.timeSpentMinutes}
+              />
+              <AcademyAchievementShowcase
+                unlockedAchievements={gamification.unlockedAchievements}
+                totalAchievements={gamification.totalAchievements}
+              />
+            </div>
           </div>
 
+          {/* Browse Modules CTA */}
           <AcademyCard title="Quick Actions">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <Link
                 href="/members/academy/modules"
                 onClick={() => Analytics.trackAcademyAction('browse_modules')}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-200 transition-colors hover:border-emerald-500/35 hover:text-white"
+                data-testid="cta-browse-modules"
               >
-                <BookOpen className="h-4 w-4" />
+                <BookOpen className="h-4 w-4" strokeWidth={1.5} />
                 Browse Modules
               </Link>
               <Link
                 href="/members/academy/review"
                 onClick={() => Analytics.trackAcademyAction('open_review_queue')}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-200 transition-colors hover:border-emerald-500/35 hover:text-white"
+                data-testid="cta-review-queue"
               >
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-4 w-4" strokeWidth={1.5} />
                 Review Queue
               </Link>
               <Link
                 href="/members/academy/progress"
                 onClick={() => Analytics.trackAcademyAction('view_progress')}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-200 transition-colors hover:border-emerald-500/35 hover:text-white"
+                data-testid="cta-view-progress"
               >
-                <TrendingUp className="h-4 w-4" />
+                <TrendingUp className="h-4 w-4" strokeWidth={1.5} />
                 View Progress
               </Link>
             </div>

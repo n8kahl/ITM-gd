@@ -165,8 +165,8 @@ describe('component quality checks', () => {
     }
   })
 
-  it('lesson viewer uses AcademyMarkdown rendering', () => {
-    const content = readFileIfExists(path.join(COMPONENTS_DIR, 'academy-lesson-viewer.tsx'))
+  it('lesson block renderer uses AcademyMarkdown rendering', () => {
+    const content = readFileIfExists(path.join(COMPONENTS_DIR, 'lesson/academy-block-renderer.tsx'))
     expect(content).toContain('AcademyMarkdown')
   })
 

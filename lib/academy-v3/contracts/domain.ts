@@ -9,6 +9,32 @@ export const academyBlockTypeSchema = z.enum([
   'guided_practice',
   'independent_practice',
   'reflection',
+  'options_chain_simulator',
+  'payoff_diagram_builder',
+  'greeks_dashboard',
+  'trade_scenario_tree',
+  'strategy_matcher',
+  'position_builder',
+  'flashcard_deck',
+  'timed_challenge',
+  'market_context_tagger',
+  'order_entry_simulator',
+  'what_went_wrong',
+  'journal_prompt',
+])
+
+export const academyLearningEventTypeSchema = z.enum([
+  'lesson_started',
+  'block_completed',
+  'assessment_submitted',
+  'assessment_passed',
+  'assessment_failed',
+  'remediation_assigned',
+  'review_completed',
+  'activity_completed',
+  'achievement_unlocked',
+  'streak_milestone',
+  'xp_earned',
 ])
 
 export const academyAssessmentTypeSchema = z.enum([
@@ -96,8 +122,49 @@ export const academyPlanSchema = z.object({
   ),
 })
 
+export const academyUserXpSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  totalXp: z.number().int().nonnegative(),
+  currentLevel: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const academyUserStreakSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  currentStreakDays: z.number().int().nonnegative(),
+  longestStreakDays: z.number().int().nonnegative(),
+  lastActivityDate: z.string().nullable(),
+  streakFreezeAvailable: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const academyAchievementSchema = z.object({
+  id: z.string().uuid(),
+  key: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  iconUrl: z.string().nullable(),
+  category: z.string(),
+  unlockCriteria: z.record(z.string(), z.unknown()),
+  xpReward: z.number().int().nonnegative(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+})
+
+export const academyUserAchievementSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  achievementId: z.string().uuid(),
+  unlockedAt: z.string(),
+})
+
 export type AcademyDifficulty = z.infer<typeof academyDifficultySchema>
 export type AcademyBlockType = z.infer<typeof academyBlockTypeSchema>
+export type AcademyLearningEventType = z.infer<typeof academyLearningEventTypeSchema>
 export type AcademyAssessmentType = z.infer<typeof academyAssessmentTypeSchema>
 export type AcademyAssessmentItemType = z.infer<typeof academyAssessmentItemTypeSchema>
 
@@ -107,3 +174,7 @@ export type AcademyModule = z.infer<typeof academyModuleSchema>
 export type AcademyLesson = z.infer<typeof academyLessonSchema>
 export type AcademyLessonBlock = z.infer<typeof academyLessonBlockSchema>
 export type AcademyPlan = z.infer<typeof academyPlanSchema>
+export type AcademyUserXp = z.infer<typeof academyUserXpSchema>
+export type AcademyUserStreak = z.infer<typeof academyUserStreakSchema>
+export type AcademyAchievement = z.infer<typeof academyAchievementSchema>
+export type AcademyUserAchievement = z.infer<typeof academyUserAchievementSchema>
