@@ -10,6 +10,8 @@ import { getMergedLevels } from './levelEngine';
 import { logger } from '../../lib/logger';
 import { classifyCurrentRegime } from './regimeClassifier';
 import { detectActiveSetups, getLatestSetupEnvironmentState } from './setupDetector';
+import { applyTickStateToSetups, evaluateTickSetupTransitions, syncTickEvaluatorSetups } from './tickEvaluator';
+import { getLatestTick } from '../tickCache';
 import type {
   BasisState,
   CoachMessage,
@@ -268,6 +270,12 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     }),
     fallback: () => fallbackSnapshot?.setups || [],
   });
+  syncTickEvaluatorSetups(setupsRaw);
+  const latestSpxTick = getLatestTick('SPX');
+  if (latestSpxTick) {
+    evaluateTickSetupTransitions(latestSpxTick);
+  }
+  const setupsTickAdjusted = applyTickStateToSetups(setupsRaw);
 
   const prediction = await withStageFallback({
     stage: 'prediction',
@@ -284,7 +292,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   const coachState = await withStageFallback({
     stage: 'coach',
     forceRefresh,
-    run: () => getCoachState({ forceRefresh, setups: setupsRaw, prediction }),
+    run: () => getCoachState({ forceRefresh, setups: setupsTickAdjusted, prediction }),
     fallback: () => ({
       messages: getFallbackCoachMessages(fallbackSnapshot),
       generatedAt: nowIso(),
@@ -294,7 +302,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   const deadline = Date.now() + SNAPSHOT_CONTRACT_ENRICHMENT_BUDGET_MS;
   let inlineRecommendations = 0;
   const setups = await Promise.all(
-    setupsRaw.map(async (setup) => {
+    setupsTickAdjusted.map(async (setup) => {
       if (setup.status !== 'ready') return setup;
       if (inlineRecommendations >= SNAPSHOT_MAX_INLINE_RECOMMENDATIONS) return setup;
 

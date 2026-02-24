@@ -195,7 +195,7 @@ const IMMEDIATELY_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['
 const ENTERABLE_SETUP_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
 const SNAPSHOT_DELAY_HEALTH_MS = 12_000
 const TRADE_FOCUS_STORAGE_KEY = 'spx_command_center:trade_focus'
-const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX'] as const
+const SPX_PUBLIC_CHANNELS = ['setups:update', 'coach:message', 'price:SPX', 'flow:alert'] as const
 const PROACTIVE_COACH_COOLDOWN_MS = 45_000
 const PROACTIVE_FLOW_DIVERGENCE_THRESHOLD = 42
 const PROACTIVE_STOP_DISTANCE_THRESHOLD = 3
@@ -219,6 +219,7 @@ const SETUP_TIER_PRIORITY: Record<NonNullable<Setup['tier']>, number> = {
   watchlist: 2,
   hidden: 3,
 }
+const REALTIME_FLOW_EVENT_LIMIT = 80
 
 function toEpoch(value: string | null | undefined): number {
   if (!value) return 0
@@ -278,6 +279,85 @@ function rankSetups(setups: Setup[]): Setup[] {
 
 function roundTo(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals))
+}
+
+function parseFlowEventTimestamp(input: unknown): string | null {
+  if (typeof input !== 'string' || input.trim().length === 0) return null
+  const parsed = Date.parse(input)
+  if (!Number.isFinite(parsed)) return null
+  return input
+}
+
+function mergeFlowEvents(existing: FlowEvent[], incoming: FlowEvent[]): FlowEvent[] {
+  if (incoming.length === 0) {
+    return [...existing]
+      .sort((a, b) => toEpoch(b.timestamp) - toEpoch(a.timestamp))
+      .slice(0, REALTIME_FLOW_EVENT_LIMIT)
+  }
+
+  const deduped = new Map<string, FlowEvent>()
+  for (const event of [...incoming, ...existing]) {
+    deduped.set(event.id, event)
+  }
+
+  return Array.from(deduped.values())
+    .sort((a, b) => toEpoch(b.timestamp) - toEpoch(a.timestamp))
+    .slice(0, REALTIME_FLOW_EVENT_LIMIT)
+}
+
+function parseRealtimeFlowEvent(message: RealtimeSocketMessage): FlowEvent | null {
+  if (message.type !== 'spx_flow') return null
+  const payload = message.data
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+
+  const typeRaw = (payload as { type?: unknown }).type
+  const symbolRaw = (payload as { symbol?: unknown }).symbol
+  const directionRaw = (payload as { direction?: unknown }).direction
+  const strike = toFiniteNumber((payload as { strike?: unknown }).strike)
+  const expiry = typeof (payload as { expiry?: unknown }).expiry === 'string'
+    ? (payload as { expiry: string }).expiry
+    : null
+  const size = toFiniteNumber((payload as { size?: unknown }).size)
+  const premium = toFiniteNumber((payload as { premium?: unknown }).premium)
+  const timestamp = parseFlowEventTimestamp(
+    (payload as { timestamp?: unknown }).timestamp
+      ?? message.timestamp
+      ?? new Date().toISOString(),
+  )
+
+  if (typeRaw !== 'sweep' && typeRaw !== 'block') return null
+  if (symbolRaw !== 'SPX' && symbolRaw !== 'SPY') return null
+  if (directionRaw !== 'bullish' && directionRaw !== 'bearish') return null
+  if (strike == null || premium == null || size == null) return null
+  if (!expiry || !timestamp) return null
+
+  const id = `${symbolRaw}:${typeRaw}:${directionRaw}:${strike}:${expiry}:${size}:${premium}:${timestamp}`
+  return {
+    id,
+    type: typeRaw,
+    symbol: symbolRaw,
+    strike,
+    expiry,
+    size,
+    direction: directionRaw,
+    premium,
+    timestamp,
+  }
+}
+
+function hasSetupPriceProgressionConflict(setup: Setup, currentPrice: number): boolean {
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) return false
+  if (setup.status === 'triggered' || setup.status === 'invalidated' || setup.status === 'expired') {
+    return false
+  }
+
+  const target1 = setup.target1.price
+  if (!Number.isFinite(target1)) return false
+
+  if (setup.direction === 'bullish') {
+    return currentPrice >= target1
+  }
+  return currentPrice <= target1
 }
 
 
@@ -539,6 +619,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const [coachDecisionStatus, setCoachDecisionStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [coachDecisionError, setCoachDecisionError] = useState<string | null>(null)
   const [realtimeSetups, setRealtimeSetups] = useState<Setup[]>([])
+  const [realtimeFlowEvents, setRealtimeFlowEvents] = useState<FlowEvent[]>([])
   const [setupTriggerNotificationsEnabled, setSetupTriggerNotificationsEnabled] = useState(true)
   const [latestMicrobar, setLatestMicrobar] = useState<RealtimeMicrobar | null>(null)
   const selectedSetupIdRef = useRef<string | null>(null)
@@ -684,6 +765,12 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       return
     }
 
+    const flowEvent = parseRealtimeFlowEvent(message)
+    if (flowEvent) {
+      setRealtimeFlowEvents((previous) => mergeFlowEvents(previous, [flowEvent]))
+      return
+    }
+
     if (message.type === 'spx_coach') {
       const payload = message.data
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return
@@ -755,7 +842,16 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     setRealtimeSetups((previous) => mergeActionableSetups(previous, snapshotSetups, { nowMs: snapshotEpochMs }))
   }, [snapshotData?.generatedAt, snapshotData?.setups])
 
-  const flowEvents = useMemo(() => snapshotData?.flow || [], [snapshotData?.flow])
+  useEffect(() => {
+    const snapshotFlow = snapshotData?.flow || []
+    setRealtimeFlowEvents((previous) => mergeFlowEvents(previous, snapshotFlow))
+  }, [snapshotData?.flow])
+
+  const flowEvents = useMemo(
+    () => mergeFlowEvents(realtimeFlowEvents, snapshotData?.flow || []),
+    [realtimeFlowEvents, snapshotData?.flow],
+  )
+  const currentSpxPriceForSetupValidation = stream.prices.get('SPX')?.price ?? snapshotData?.basis?.spxPrice ?? 0
   const activeSetups = useMemo(() => {
     const nowMs = toEpoch(snapshotData?.generatedAt) || Date.now()
     const enriched = realtimeSetups.map((setup) => enrichSPXSetupWithDecisionEngine(setup, {
@@ -766,8 +862,10 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       flowEvents,
       nowMs,
     }))
-    return rankSetups(enriched)
+    const filtered = enriched.filter((setup) => !hasSetupPriceProgressionConflict(setup, currentSpxPriceForSetupValidation))
+    return rankSetups(filtered)
   }, [
+    currentSpxPriceForSetupValidation,
     flowEvents,
     realtimeSetups,
     snapshotData?.basis,
@@ -2429,11 +2527,12 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   ])
 
   const error = snapshotError || null
+  const effectiveFeedError = error?.message || stream.error || null
   const streamTrustState = marketDataOrchestratorRef.current.evaluate(Date.now(), stream.isConnected)
   const resolvedFeedHealth = resolveSPXFeedHealth({
     snapshotIsDegraded,
     snapshotDegradedMessage,
-    errorMessage: error?.message || null,
+    errorMessage: effectiveFeedError,
     snapshotRequestLate,
     snapshotAvailable: Boolean(snapshotData),
     streamConnected: stream.isConnected,

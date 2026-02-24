@@ -105,7 +105,6 @@ let wsReconnectAttempt = 0
 let wsConsecutiveConnectFailures = 0
 let wsRetryPausedUntil = 0
 let wsNextConnectAt = 0
-let wsAuthFailedToken: string | null = null
 let activeStreamToken: string | null = null
 let subscribedSymbols = new Set<string>()
 let subscribedChannels = new Set<string>()
@@ -439,13 +438,6 @@ function ensureSocketConnection(): void {
     return
   }
 
-  if (wsAuthFailedToken && wsAuthFailedToken === token) {
-    sharedState.error = 'Authentication required for live stream'
-    debugPriceStream('Reconnect blocked for unauthorized token')
-    notifyConsumers()
-    return
-  }
-
   if (Date.now() < wsRetryPausedUntil) {
     sharedState.error = 'Live stream temporarily unavailable'
     debugPriceStream('Reconnect paused', {
@@ -469,7 +461,6 @@ function ensureSocketConnection(): void {
     wsConsecutiveConnectFailures = 0
     wsRetryPausedUntil = 0
     wsNextConnectAt = 0
-    wsAuthFailedToken = null
   }
   activeStreamToken = token
 
@@ -491,7 +482,6 @@ function ensureSocketConnection(): void {
     wsReconnectAttempt = 0
     wsConsecutiveConnectFailures = 0
     wsRetryPausedUntil = 0
-    wsAuthFailedToken = null
     sharedState.isConnected = true
     sharedState.error = null
     debugPriceStream('Websocket connected')
@@ -535,7 +525,6 @@ function ensureSocketConnection(): void {
       sharedState.error = event.reason || 'Authentication required for live stream'
       wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
       wsNextConnectAt = wsRetryPausedUntil
-      wsAuthFailedToken = activeStreamToken
       if (getPriceStreamDebugEnabled()) {
         console.warn('[price-stream] WebSocket auth close', {
           code: event.code,
@@ -543,6 +532,11 @@ function ensureSocketConnection(): void {
         })
       }
       notifyConsumers()
+      clearReconnectTimer()
+      wsReconnectTimer = setTimeout(() => {
+        wsReconnectTimer = null
+        ensureSocketConnection()
+      }, WS_RETRY_PAUSE_MS)
       return
     }
 

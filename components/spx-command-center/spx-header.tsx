@@ -56,8 +56,12 @@ export function SPXHeader({
   totalLevelsCount,
 }: SPXHeaderProps) {
   const { regime, basis, dataHealth, feedFallbackReasonCode, feedFallbackStage } = useSPXAnalyticsContext()
-  const { spxPrice, spxPriceSource } = useSPXPriceContext()
+  const { spxPrice, spxPriceSource, priceStreamConnected, priceStreamError } = useSPXPriceContext()
   const fallbackReasonLabel = formatSPXFeedFallbackReasonCode(feedFallbackReasonCode)
+  const streamStatusLabel = priceStreamConnected ? 'Connected' : 'Disconnected'
+  const streamErrorLabel = priceStreamError && priceStreamError.trim().length > 0
+    ? priceStreamError
+    : null
 
   return (
     <header
@@ -124,6 +128,14 @@ export function SPXHeader({
           )}>
             {feedLabel(feedFallbackStage, spxPriceSource)}
           </div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-white/65">
+            {streamStatusLabel}
+          </div>
+          {streamErrorLabel && (
+            <div className="max-w-[18rem] truncate font-mono text-[8px] text-rose-200/80" title={streamErrorLabel}>
+              {streamErrorLabel}
+            </div>
+          )}
         </div>
         <BrokerHeaderChip onClick={onOpenSettings} />
         <button
