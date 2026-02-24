@@ -1,0 +1,19 @@
+{"level":"info","message":"REDIS_URL not set - running without Redis cache","timestamp":"2026-02-24T21:34:21.426Z"}
+/Users/natekahl/ITM-gd/backend/src/config/database.ts:11
+  throw new Error('Missing Supabase environment variables');
+        ^
+
+
+Error: Missing Supabase environment variables
+    at dotenv (/Users/natekahl/ITM-gd/backend/src/config/database.ts:11:9)
+    at Object.<anonymous> (/Users/natekahl/ITM-gd/backend/src/config/database.ts:23:23)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (/Users/natekahl/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Module.require (node:internal/modules/cjs/loader:1289:19)
+    at require (node:internal/modules/helpers:182:18)
+    at stopPrice (/Users/natekahl/ITM-gd/backend/src/services/spx/winRateBacktest.ts:4:26)
+    at Object.<anonymous> (/Users/natekahl/ITM-gd/backend/src/services/spx/winRateBacktest.ts:1142:1)
+
+Node.js v20.19.5
