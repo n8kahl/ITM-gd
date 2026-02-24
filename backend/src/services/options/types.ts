@@ -250,6 +250,26 @@ export interface IVTermStructureAnalysis {
   inversionPoint?: string;
 }
 
+export interface IVForecastFeatures {
+  realizedVolTrend: number;
+  ivMomentum: number;
+  meanReversionPressure: number;
+  termStructureSlope: number;
+  skewPressure: number;
+  volOfVol: number;
+  closeToExpiryPressure: number;
+}
+
+export interface IVForecastAnalysis {
+  horizonMinutes: number;
+  predictedIV: number | null;
+  currentIV: number | null;
+  deltaIV: number | null;
+  direction: 'up' | 'down' | 'flat' | 'unknown';
+  confidence: number;
+  features: IVForecastFeatures;
+}
+
 export interface IVAnalysisProfile {
   symbol: string;
   currentPrice: number;
@@ -257,6 +277,7 @@ export interface IVAnalysisProfile {
   ivRank: IVRankAnalysis;
   skew: IVSkewAnalysis;
   termStructure: IVTermStructureAnalysis;
+  ivForecast?: IVForecastAnalysis;
 }
 
 // Black-Scholes inputs

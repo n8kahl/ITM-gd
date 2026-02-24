@@ -99,6 +99,11 @@ describe('ivAnalysis service', () => {
     expect(result.skew.skewDirection).toBe('put_heavy');
     expect(result.termStructure.expirations.length).toBe(2);
     expect(result.termStructure.shape).toBe('contango');
+    expect(result.ivForecast).toBeDefined();
+    expect(result.ivForecast?.horizonMinutes).toBe(60);
+    expect(result.ivForecast?.predictedIV).not.toBeNull();
+    expect(result.ivForecast?.features).toBeDefined();
+    expect(result.ivForecast?.confidence).toBeGreaterThan(0);
     expect(mockCacheSet).toHaveBeenCalledTimes(1);
   });
 

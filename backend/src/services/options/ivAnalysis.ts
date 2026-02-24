@@ -8,6 +8,8 @@ import {
   IVAnalysisProfile,
   IVRankAnalysis,
   IVSkewAnalysis,
+  IVForecastAnalysis,
+  IVForecastFeatures,
   IVTermStructureAnalysis,
   IVTermStructurePoint,
   OptionContract,
@@ -28,6 +30,12 @@ const MAX_EXPIRATIONS_ALLOWED = 12;
 function round(value: number, digits: number = 2): number {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
 }
 
 function average(values: number[]): number {
@@ -224,6 +232,100 @@ function buildTermStructure(points: IVTermStructurePoint[]): IVTermStructureAnal
   };
 }
 
+function safeRatio(numerator: number, denominator: number, fallback: number = 0): number {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return fallback;
+  return numerator / denominator;
+}
+
+function buildIVForecast(
+  ivRank: IVRankAnalysis,
+  skew: IVSkewAnalysis,
+  termStructure: IVTermStructureAnalysis,
+  realizedVolSeries: number[],
+  nearestDte: number | null,
+  minutesToClose: number,
+): IVForecastAnalysis {
+  const currentIV = ivRank.currentIV;
+  if (currentIV == null || !Number.isFinite(currentIV)) {
+    return {
+      horizonMinutes: 60,
+      predictedIV: null,
+      currentIV: null,
+      deltaIV: null,
+      direction: 'unknown',
+      confidence: 0,
+      features: {
+        realizedVolTrend: 0,
+        ivMomentum: 0,
+        meanReversionPressure: 0,
+        termStructureSlope: 0,
+        skewPressure: 0,
+        volOfVol: 0,
+        closeToExpiryPressure: 0,
+      },
+    };
+  }
+
+  const realizedRecent = average(realizedVolSeries.slice(-5));
+  const realizedBaseline = average(realizedVolSeries.slice(-20));
+  const realizedTrend = safeRatio(realizedRecent - realizedBaseline, Math.max(realizedBaseline, 1), 0);
+  const previousRealized = realizedVolSeries.length >= 2 ? realizedVolSeries[realizedVolSeries.length - 2] : realizedRecent;
+  const ivMomentum = safeRatio(realizedRecent - previousRealized, Math.max(previousRealized, 1), 0);
+  const meanReversionPressure = safeRatio(currentIV - realizedBaseline, Math.max(realizedBaseline, 1), 0);
+
+  const frontTerm = termStructure.expirations[0]?.atmIV ?? currentIV;
+  const backTerm = termStructure.expirations[termStructure.expirations.length - 1]?.atmIV ?? currentIV;
+  const termStructureSlope = safeRatio(backTerm - frontTerm, Math.max(frontTerm, 1), 0);
+  const skewPressure = (skew.skew25delta ?? skew.skew10delta ?? 0) / 10;
+  const volOfVol = safeRatio(standardDeviation(realizedVolSeries.slice(-20)), Math.max(realizedBaseline, 1), 0);
+  const closeToExpiryPressure = nearestDte === 0
+    ? Math.max(0, (60 - Math.max(minutesToClose, 0)) / 60)
+    : nearestDte === 1
+      ? 0.25
+      : 0;
+
+  const features: IVForecastFeatures = {
+    realizedVolTrend: round(realizedTrend, 4),
+    ivMomentum: round(ivMomentum, 4),
+    meanReversionPressure: round(meanReversionPressure, 4),
+    termStructureSlope: round(termStructureSlope, 4),
+    skewPressure: round(skewPressure, 4),
+    volOfVol: round(volOfVol, 4),
+    closeToExpiryPressure: round(closeToExpiryPressure, 4),
+  };
+
+  const weightedDeltaPct = (
+    (features.realizedVolTrend * 0.22)
+    + (features.ivMomentum * 0.18)
+    - (features.meanReversionPressure * 0.3)
+    + (features.termStructureSlope * 0.14)
+    + (features.skewPressure * 0.08)
+    + (features.volOfVol * 0.12)
+    - (features.closeToExpiryPressure * 0.1)
+  );
+  const boundedDeltaPct = Math.max(-0.2, Math.min(0.2, weightedDeltaPct));
+  const predictedIV = Math.max(1, currentIV * (1 + boundedDeltaPct));
+  const deltaIV = predictedIV - currentIV;
+
+  const confidenceBase = Math.min(1, realizedVolSeries.length / 60);
+  const confidence = clamp(
+    confidenceBase * (1 - Math.min(Math.abs(features.volOfVol), 0.7))
+      * (1 - Math.min(closeToExpiryPressure * 0.5, 0.4)),
+    0.05,
+    0.95,
+  );
+
+  return {
+    horizonMinutes: 60,
+    predictedIV: round(predictedIV),
+    currentIV: round(currentIV),
+    deltaIV: round(deltaIV, 3),
+    direction: deltaIV > 0.15 ? 'up' : deltaIV < -0.15 ? 'down' : 'flat',
+    confidence: round(confidence, 3),
+    features,
+  };
+}
+
 function buildCacheKey(symbol: string, options: { expiry?: string; strikeRange: number; maxExpirations: number }): string {
   return `options:iv:${symbol}:${options.expiry || 'multi'}:${options.strikeRange}:${options.maxExpirations}`;
 }
@@ -322,6 +424,15 @@ export async function analyzeIVProfile(
     : ivRank.ivRank;
   const skew = buildIVSkewAnalysis(firstChainCalls, firstChainPuts, currentPrice);
   const termStructure = buildTermStructure(termStructurePoints.sort((a, b) => a.dte - b.dte));
+  const realizedVolSeries = deriveHistoricalVolatilityProxies(closes);
+  const ivForecast = buildIVForecast(
+    ivRank,
+    skew,
+    termStructure,
+    realizedVolSeries,
+    nearestDte,
+    minutesToClose,
+  );
 
   const profile: IVAnalysisProfile = {
     symbol,
@@ -333,6 +444,7 @@ export async function analyzeIVProfile(
     },
     skew,
     termStructure,
+    ivForecast,
   };
 
   await cacheSet(cacheKey, profile, IV_CACHE_TTL_SECONDS);
