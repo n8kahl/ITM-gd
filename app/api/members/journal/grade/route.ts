@@ -19,6 +19,16 @@ interface GradeCandidate {
   setup_notes: string | null
   execution_notes: string | null
   lessons_learned: string | null
+  setup_type: string | null
+  followed_plan: boolean | null
+  discipline_score: number | null
+}
+
+interface HistoricalContext {
+  symbolWinRate: number | null
+  symbolAvgPnl: number | null
+  symbolTradeCount: number
+  recentStreak: 'winning' | 'losing' | 'mixed'
 }
 
 function toNumber(value: unknown): number | null {
@@ -50,6 +60,9 @@ function toGradeCandidate(value: Record<string, unknown>): GradeCandidate | null
     setup_notes: typeof value.setup_notes === 'string' ? value.setup_notes : null,
     execution_notes: typeof value.execution_notes === 'string' ? value.execution_notes : null,
     lessons_learned: typeof value.lessons_learned === 'string' ? value.lessons_learned : null,
+    setup_type: typeof value.setup_type === 'string' ? value.setup_type : null,
+    followed_plan: typeof value.followed_plan === 'boolean' ? value.followed_plan : null,
+    discipline_score: toNumber(value.discipline_score),
   }
 }
 
@@ -95,7 +108,7 @@ function buildHeuristicAnalysis(entry: GradeCandidate): AITradeAnalysis {
   }
 }
 
-async function requestAIAnalysis(entry: GradeCandidate): Promise<AITradeAnalysis | null> {
+async function requestAIAnalysis(entry: GradeCandidate, history?: HistoricalContext): Promise<AITradeAnalysis | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return null
 
@@ -113,23 +126,29 @@ async function requestAIAnalysis(entry: GradeCandidate): Promise<AITradeAnalysis
         messages: [
           {
             role: 'system',
-            content: 'You grade trade journal entries. Return strict JSON with keys: grade, entry_quality, exit_quality, risk_management, lessons, scored_at.',
+            content: 'You grade trade journal entries with historical context. Return strict JSON with keys: grade (A-F), entry_quality (string, max 500 chars), exit_quality (string, max 500 chars), risk_management (string, max 500 chars), lessons (array of strings, max 5 items, each max 200 chars), scored_at (ISO datetime string). Grade holistically: A = excellent process AND outcome, B = good process, C = average, D = poor process, F = reckless. Factor in plan adherence, risk management, and pattern recognition from historical context.',
           },
           {
             role: 'user',
             content: JSON.stringify({
-              symbol: entry.symbol,
-              direction: entry.direction,
-              entry_price: entry.entry_price,
-              exit_price: entry.exit_price,
-              position_size: entry.position_size,
-              pnl: entry.pnl,
-              pnl_percentage: entry.pnl_percentage,
-              stop_loss: entry.stop_loss,
-              initial_target: entry.initial_target,
-              setup_notes: entry.setup_notes,
-              execution_notes: entry.execution_notes,
-              lessons_learned: entry.lessons_learned,
+              trade: {
+                symbol: entry.symbol,
+                direction: entry.direction,
+                entry_price: entry.entry_price,
+                exit_price: entry.exit_price,
+                position_size: entry.position_size,
+                pnl: entry.pnl,
+                pnl_percentage: entry.pnl_percentage,
+                stop_loss: entry.stop_loss,
+                initial_target: entry.initial_target,
+                setup_type: entry.setup_type,
+                followed_plan: entry.followed_plan,
+                discipline_score: entry.discipline_score,
+                setup_notes: entry.setup_notes,
+                execution_notes: entry.execution_notes,
+                lessons_learned: entry.lessons_learned,
+              },
+              history: history ?? null,
             }),
           },
         ],
@@ -178,7 +197,7 @@ export async function POST(request: NextRequest) {
 
     const { data: rows, error } = await supabase
       .from('journal_entries')
-      .select('id,symbol,direction,entry_price,exit_price,position_size,pnl,pnl_percentage,stop_loss,initial_target,setup_notes,execution_notes,lessons_learned')
+      .select('id,symbol,direction,entry_price,exit_price,position_size,pnl,pnl_percentage,stop_loss,initial_target,setup_notes,execution_notes,lessons_learned,setup_type,followed_plan,discipline_score')
       .eq('user_id', user.id)
       .in('id', validated.entryIds)
 
@@ -193,8 +212,37 @@ export async function POST(request: NextRequest) {
 
     const gradedResults: Array<{ entryId: string, grade: AITradeAnalysis, ai_analysis: AITradeAnalysis }> = []
 
+    // Fetch historical context for each unique symbol
+    const symbolHistoryCache = new Map<string, HistoricalContext>()
+    const uniqueSymbols: string[] = Array.from(new Set(candidates.map((c: GradeCandidate) => c.symbol)))
+
+    for (const sym of uniqueSymbols) {
+      const { data: symTrades } = await supabase
+        .from('journal_entries')
+        .select('pnl')
+        .eq('user_id', user.id)
+        .ilike('symbol', sym)
+        .not('pnl', 'is', null)
+        .order('trade_date', { ascending: false })
+        .limit(20)
+
+      const pnls = (symTrades ?? []).map((r) => typeof (r as Record<string, unknown>).pnl === 'number' ? (r as Record<string, unknown>).pnl as number : null).filter((p): p is number => p != null)
+
+      const wins = pnls.filter((p) => p > 0).length
+      const last3 = pnls.slice(0, 3)
+      const streak: 'winning' | 'losing' | 'mixed' = last3.length >= 2 && last3.every((p) => p > 0) ? 'winning' : last3.length >= 2 && last3.every((p) => p < 0) ? 'losing' : 'mixed'
+
+      symbolHistoryCache.set(sym, {
+        symbolWinRate: pnls.length > 0 ? Math.round((wins / pnls.length) * 10000) / 100 : null,
+        symbolAvgPnl: pnls.length > 0 ? Math.round((pnls.reduce((s, p) => s + p, 0) / pnls.length) * 100) / 100 : null,
+        symbolTradeCount: pnls.length,
+        recentStreak: streak,
+      })
+    }
+
     for (const entry of candidates) {
-      const aiResult = await requestAIAnalysis(entry)
+      const history = symbolHistoryCache.get(entry.symbol)
+      const aiResult = await requestAIAnalysis(entry, history)
       const analysis = aiResult ?? buildHeuristicAnalysis(entry)
 
       const parsed = aiTradeAnalysisSchema.safeParse(analysis)

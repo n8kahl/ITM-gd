@@ -38,7 +38,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { LevelAnnotation } from './trading-chart'
 import { usePriceStream } from '@/hooks/use-price-stream'
 import { OptionsChain } from './options-chain'
-import { TradeJournal } from './trade-journal'
+// TradeJournal removed — journal is now accessed via /members/journal or slide-over
 import { Onboarding, hasCompletedOnboarding } from './onboarding'
 import { WidgetContextMenu } from './widget-context-menu'
 import { PreferencesPanel } from './preferences-panel'
@@ -168,7 +168,6 @@ export type CenterView =
   | 'welcome'
   | 'chart'
   | 'options'
-  | 'journal'
   | 'preferences'
 
 interface CenterPanelProps {
@@ -214,11 +213,10 @@ const TABS: Array<{
   view: CenterView
   icon: typeof CandlestickChart
   label: string
-  group: 'analyze' | 'journal'
+  group: 'analyze'
 }> = [
   { view: 'chart', icon: CandlestickChart, label: 'Chart', group: 'analyze' },
   { view: 'options', icon: TableProperties, label: 'Options', group: 'analyze' },
-  { view: 'journal', icon: BookOpen, label: 'Journal', group: 'journal' },
 ]
 
 const PRESSABLE_PROPS = {
@@ -226,15 +224,13 @@ const PRESSABLE_PROPS = {
   whileTap: { scale: 0.98 },
 }
 
-const TAB_GROUP_LABELS: Record<'analyze' | 'journal', string> = {
+const TAB_GROUP_LABELS: Record<'analyze', string> = {
   analyze: 'Analyze',
-  journal: 'Journal',
 }
 
 const ROUTABLE_VIEWS = new Set<CenterView>([
   'chart',
   'options',
-  'journal',
 ])
 
 // Level annotation colors by type
@@ -914,12 +910,10 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
   // RENDER
   // ============================================
 
-  const shouldRenderChartCanvas = activeView === 'chart' || (!isSheetMode && (activeView === 'options' || activeView === 'journal'))
+  const shouldRenderChartCanvas = activeView === 'chart' || (!isSheetMode && activeView === 'options')
   const isDesktopOptionsOverlay = !isSheetMode && activeView === 'options'
-  const isDesktopJournalOverlay = !isSheetMode && activeView === 'journal'
   const isSheetOptionsView = isSheetMode && activeView === 'options'
-  const isSheetJournalView = isSheetMode && activeView === 'journal'
-  const viewTransitionKey: CenterView = activeView === 'options' || activeView === 'journal' ? 'chart' : activeView
+  const viewTransitionKey: CenterView = activeView === 'options' ? 'chart' : activeView
 
   return (
     <div className="h-full flex flex-col relative">
@@ -1063,9 +1057,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
               onTryFeature={(feature) => {
                 const nextView: CenterView = feature === 'options'
                   ? 'options'
-                  : feature === 'journal'
-                    ? 'journal'
-                    : 'chart'
+                  : 'chart'
                 setActiveView(nextView)
                 setCenterView(nextView as Parameters<typeof setCenterView>[0])
               }}
@@ -1083,8 +1075,8 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
                 setCenterView('options')
               }}
               onShowJournal={() => {
-                setActiveView('journal')
-                setCenterView('journal')
+                // Journal moved to /members/journal — navigate there instead
+                window.open('/members/journal', '_self')
               }}
               onShowPreferences={() => setIsPreferencesOpen(true)}
               hideContextData={!isSheetMode && isDesktopViewport}
@@ -1143,12 +1135,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
             />
           )}
 
-          {isSheetJournalView && (
-            <TradeJournal onClose={() => {
-              setActiveView('welcome')
-              setCenterView(null)
-            }} />
-          )}
+          {/* Journal view removed — accessible at /members/journal */}
 
         </ViewTransition>
 
@@ -1196,23 +1183,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
             </motion.div>
           )}
 
-          {isDesktopJournalOverlay && (
-            <motion.div
-              key="desktop-journal-overlay"
-              initial={{ x: 28, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 28, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="absolute inset-y-0 right-0 z-20 w-full xl:w-[72%] border-l border-white/10 bg-[#0B0D10]"
-            >
-              <TradeJournal
-                onClose={() => {
-                  setActiveView('chart')
-                  setCenterView('chart')
-                }}
-              />
-            </motion.div>
-          )}
+          {/* Desktop journal overlay removed — accessible at /members/journal */}
         </AnimatePresence>
       </div>
 

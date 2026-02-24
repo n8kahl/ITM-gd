@@ -243,24 +243,37 @@ function ScreenshotQuickAddDialog({
       }
 
       const topPosition = analysis?.positions?.[0]
+      const exitPrice = topPosition?.exitPrice && topPosition.exitPrice > 0 ? topPosition.exitPrice : null
+      const entryPrice = topPosition?.entryPrice && topPosition.entryPrice > 0 ? topPosition.entryPrice : null
+      const positionSize = topPosition?.quantity ? Math.abs(topPosition.quantity) : 1
+      const direction = topPosition && topPosition.quantity < 0 ? 'short' as const : 'long' as const
+
+      // Auto-calculate PnL if both entry and exit prices are available
+      let pnl: number | null = null
+      if (entryPrice != null && exitPrice != null) {
+        const perUnit = direction === 'short' ? entryPrice - exitPrice : exitPrice - entryPrice
+        pnl = Math.round(perUnit * positionSize * 100) / 100
+      }
+
       const createResponse = await fetch('/api/members/journal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           symbol: normalizedSymbol,
           trade_date: new Date().toISOString(),
-          direction: topPosition && topPosition.quantity < 0 ? 'short' : 'long',
+          direction,
           contract_type: topPosition?.type === 'call' || topPosition?.type === 'put' ? topPosition.type : 'stock',
-          entry_price: topPosition?.entryPrice && topPosition.entryPrice > 0 ? topPosition.entryPrice : null,
-          position_size: topPosition?.quantity ? Math.abs(topPosition.quantity) : 1,
+          entry_price: entryPrice,
+          exit_price: exitPrice,
+          position_size: positionSize,
+          pnl,
           strike_price: typeof topPosition?.strike === 'number' ? topPosition.strike : null,
           expiration_date: typeof topPosition?.expiry === 'string' ? topPosition.expiry.slice(0, 10) : null,
-          // Quick screenshot flow doesn't capture an explicit exit fill, so we
-          // persist as open by default to avoid falsely marking trades closed.
-          is_open: true,
+          is_open: exitPrice == null,
           screenshot_url: result.url,
           screenshot_storage_path: result.storagePath,
           setup_notes: notes.trim() || null,
+          tags: ['screenshot:quick-add'],
         }),
       })
 

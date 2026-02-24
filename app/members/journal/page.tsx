@@ -11,6 +11,8 @@ import { TradeEntrySheet } from '@/components/journal/trade-entry-sheet'
 import { EntryDetailSheet } from '@/components/journal/entry-detail-sheet'
 import { ImportWizard } from '@/components/journal/import-wizard'
 import { ScreenshotQuickAdd } from '@/components/journal/screenshot-quick-add'
+import { DraftNotification } from '@/components/journal/draft-notification'
+import { PsychologyPrompt } from '@/components/journal/psychology-prompt'
 import { readCachedJournalEntries, writeCachedJournalEntries } from '@/lib/journal/offline-storage'
 import { sanitizeJournalEntries, sanitizeJournalEntry } from '@/lib/journal/sanitize-entry'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
@@ -96,6 +98,8 @@ export default function JournalPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<JournalEntry | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+
+  const [psychPromptEntry, setPsychPromptEntry] = useState<JournalEntry | null>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -247,6 +251,12 @@ export default function JournalPage() {
 
     setEditEntry(null)
     void loadEntries()
+
+    // Trigger psychology prompt for closed trades with P&L
+    if (!nextEntry.is_open && nextEntry.pnl != null && !nextEntry.mood_before) {
+      setPsychPromptEntry(nextEntry)
+    }
+
     return nextEntry
   }, [editEntry, loadEntries])
 
@@ -376,6 +386,26 @@ export default function JournalPage() {
         <div className="rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-200">
           You&apos;re offline. Journal is in read-only cache mode until your connection returns.
         </div>
+      ) : null}
+
+      {isOnline ? (
+        <DraftNotification
+          onReviewDrafts={() => {
+            dispatchFilters({ type: 'patch', value: { isOpen: 'true' } })
+          }}
+        />
+      ) : null}
+
+      {psychPromptEntry ? (
+        <PsychologyPrompt
+          entryId={psychPromptEntry.id}
+          symbol={psychPromptEntry.symbol}
+          onComplete={() => {
+            setPsychPromptEntry(null)
+            void loadEntries()
+          }}
+          onDismiss={() => setPsychPromptEntry(null)}
+        />
       ) : null}
 
       {showImportWizard && isOnline ? (

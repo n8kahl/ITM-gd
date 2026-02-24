@@ -17,6 +17,8 @@ interface AnalyticsRow {
   entry_price: number | null
   exit_price: number | null
   stop_loss: number | null
+  setup_type: string | null
+  market_context: Record<string, unknown> | null
 }
 
 function toNumber(value: unknown): number | null {
@@ -117,6 +119,10 @@ function toAnalyticsRow(value: Record<string, unknown>): AnalyticsRow | null {
     entry_price: toNumber(value.entry_price),
     exit_price: toNumber(value.exit_price),
     stop_loss: toNumber(value.stop_loss),
+    setup_type: typeof value.setup_type === 'string' ? value.setup_type : null,
+    market_context: typeof value.market_context === 'object' && value.market_context !== null
+      ? value.market_context as Record<string, unknown>
+      : null,
   }
 }
 
@@ -132,7 +138,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('journal_entries')
-      .select('id,trade_date,symbol,direction,pnl,hold_duration_min,mfe_percent,mae_percent,entry_price,exit_price,stop_loss')
+      .select('id,trade_date,symbol,direction,pnl,hold_duration_min,mfe_percent,mae_percent,entry_price,exit_price,stop_loss,setup_type,market_context')
       .eq('user_id', user.id)
       .order('trade_date', { ascending: true })
 
@@ -345,7 +351,64 @@ export async function GET(request: NextRequest) {
       .map(([bucket, count]) => ({ bucket, count }))
       .sort((a, b) => Number(a.bucket) - Number(b.bucket))
 
-    const response: AdvancedAnalyticsResponse = {
+    // --- Phase 3 Enhancement: Regime and Setup breakdowns ---
+    const setupMap = new Map<string, { pnl: number; count: number; wins: number }>()
+    const regimeMap = new Map<string, Map<string, { pnl: number; count: number; wins: number }>>()
+
+    for (const row of closed) {
+      const pnl = row.pnl ?? 0
+
+      // Setup type breakdown
+      if (row.setup_type) {
+        const bucket = setupMap.get(row.setup_type) ?? { pnl: 0, count: 0, wins: 0 }
+        bucket.pnl += pnl
+        bucket.count += 1
+        bucket.wins += pnl > 0 ? 1 : 0
+        setupMap.set(row.setup_type, bucket)
+      }
+
+      // Regime tag breakdowns
+      if (row.market_context) {
+        for (const key of ['vix_bucket', 'trend_state', 'gex_regime', 'time_bucket']) {
+          const value = row.market_context[key]
+          if (typeof value !== 'string') continue
+
+          if (!regimeMap.has(key)) regimeMap.set(key, new Map())
+          const inner = regimeMap.get(key)!
+          const bucket = inner.get(value) ?? { pnl: 0, count: 0, wins: 0 }
+          bucket.pnl += pnl
+          bucket.count += 1
+          bucket.wins += pnl > 0 ? 1 : 0
+          inner.set(value, bucket)
+        }
+      }
+    }
+
+    const setupStats = Array.from(setupMap.entries())
+      .map(([setup, agg]) => ({
+        setup_type: setup,
+        pnl: Math.round(agg.pnl * 100) / 100,
+        count: agg.count,
+        win_rate: agg.count > 0 ? Math.round((agg.wins / agg.count) * 10000) / 100 : 0,
+      }))
+      .sort((a, b) => b.pnl - a.pnl)
+
+    const regimeStats: Record<string, Array<{ value: string; pnl: number; count: number; win_rate: number }>> = {}
+    for (const [key, inner] of regimeMap.entries()) {
+      regimeStats[key] = Array.from(inner.entries())
+        .map(([value, agg]) => ({
+          value,
+          pnl: Math.round(agg.pnl * 100) / 100,
+          count: agg.count,
+          win_rate: agg.count > 0 ? Math.round((agg.wins / agg.count) * 10000) / 100 : 0,
+        }))
+        .sort((a, b) => b.count - a.count)
+    }
+
+    const response: AdvancedAnalyticsResponse & {
+      setup_stats: typeof setupStats
+      regime_stats: typeof regimeStats
+    } = {
       period,
       period_start: periodStart,
       total_trades: totalTrades,
@@ -369,6 +432,8 @@ export async function GET(request: NextRequest) {
       equity_curve: equityCurve,
       r_multiple_distribution: rMultipleDistribution,
       mfe_mae_scatter: mfeMaeScatter,
+      setup_stats: setupStats,
+      regime_stats: regimeStats,
     }
 
     return successResponse(response)
