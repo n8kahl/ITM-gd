@@ -606,17 +606,26 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         const roleTitleMap = buildRoleTitleMapFromPermissions(permissionRows)
 
         if (roleIds.length > 0) {
-          const { data: guildRoleRows } = await supabase
-            .from('discord_guild_roles')
-            .select('discord_role_id, discord_role_name')
-            .in('discord_role_id', roleIds)
+          try {
+            const { data: guildRoleRows, error: guildRoleError } = await supabase
+              .from('discord_guild_roles')
+              .select('discord_role_id, discord_role_name')
+              .in('discord_role_id', roleIds)
 
-          for (const row of guildRoleRows || []) {
-            const roleId = typeof (row as any)?.discord_role_id === 'string' ? (row as any).discord_role_id : null
-            const roleName = typeof (row as any)?.discord_role_name === 'string' ? (row as any).discord_role_name : null
-            if (roleId && roleName && !roleTitleMap[roleId]) {
-              roleTitleMap[roleId] = roleName
+            if (guildRoleError) {
+              console.warn('[MemberAuth] discord_guild_roles lookup skipped (table may not exist yet):', guildRoleError.code)
+            } else {
+              for (const row of guildRoleRows || []) {
+                const roleId = typeof (row as any)?.discord_role_id === 'string' ? (row as any).discord_role_id : null
+                const roleName = typeof (row as any)?.discord_role_name === 'string' ? (row as any).discord_role_name : null
+                if (roleId && roleName && !roleTitleMap[roleId]) {
+                  roleTitleMap[roleId] = roleName
+                }
+              }
             }
+          } catch {
+            // Non-fatal: discord_guild_roles table may not exist yet.
+            // Role titles will fall back to "Discord Role" placeholder below.
           }
         }
 

@@ -17,7 +17,7 @@ import {
 } from '@/lib/academy-v3/access-control'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import { toSafeErrorMessage } from '@/lib/academy/api-utils'
-import { academyV3ErrorResponse } from '@/app/api/academy-v3/_shared'
+import { academyV3ErrorResponse, logAcademyError } from '@/app/api/academy-v3/_shared'
 
 export async function POST(
   request: NextRequest,
@@ -72,6 +72,7 @@ export async function POST(
       return academyV3ErrorResponse(404, 'BLOCK_NOT_FOUND', error.message)
     }
 
+    logAcademyError('POST /api/academy-v3/lessons/[id]/complete-block', 'INTERNAL_ERROR', error)
     return academyV3ErrorResponse(
       500,
       'INTERNAL_ERROR',
