@@ -375,6 +375,49 @@ describe('Opportunity Scanner', () => {
       }
     });
 
+    it('applies anomaly boost only when anomaly direction aligns with setup direction', async () => {
+      const technicalSpy = jest.spyOn(technicalScannerModule, 'runTechnicalScan').mockResolvedValue([]);
+      const optionsSpy = jest.spyOn(optionsScannerModule, 'runOptionsScan').mockResolvedValue([
+        {
+          type: 'unusual_activity',
+          symbol: 'SPX',
+          direction: 'bullish',
+          confidence: 0.5,
+          currentPrice: 6000,
+          description: 'aligned anomaly',
+          metadata: {
+            anomalyScore: 0.8,
+            anomalyDirection: 'bullish',
+          },
+        },
+        {
+          type: 'unusual_activity',
+          symbol: 'SPX',
+          direction: 'bullish',
+          confidence: 0.5,
+          currentPrice: 6000,
+          description: 'misaligned anomaly',
+          metadata: {
+            anomalyScore: 0.8,
+            anomalyDirection: 'bearish',
+          },
+        },
+      ]);
+
+      try {
+        const result = await scanOpportunities(['SPX'], true);
+        const aligned = result.opportunities.find((item) => item.description === 'aligned anomaly');
+        const misaligned = result.opportunities.find((item) => item.description === 'misaligned anomaly');
+
+        expect(aligned).toBeDefined();
+        expect(misaligned).toBeDefined();
+        expect((aligned as NonNullable<typeof aligned>).score).toBeGreaterThan((misaligned as NonNullable<typeof misaligned>).score);
+      } finally {
+        technicalSpy.mockRestore();
+        optionsSpy.mockRestore();
+      }
+    });
+
     it('should return scored and sorted opportunities', async () => {
       // Mock minimal data
       mockCalculateLevels.mockRejectedValue(new Error('test'));

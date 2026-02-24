@@ -140,6 +140,8 @@ export async function scanUnusualActivity(symbol: string): Promise<OptionsSetup 
         volumeOIRatio: ratio,
         iv: (anomaly.contract.impliedVolatility * 100).toFixed(1) + '%',
         anomalyScore: Number(anomaly.anomalyScore.toFixed(4)),
+        anomalyDirection: direction,
+        anomalyAveragePathLength: Number(anomaly.averagePathLength.toFixed(3)),
         anomalyFeatures: {
           volumeOiZScore: Number(anomaly.features.volumeOiZScore.toFixed(4)),
           premiumMomentum: Number(anomaly.features.premiumMomentum.toFixed(4)),

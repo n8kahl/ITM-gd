@@ -163,6 +163,13 @@ export interface ContractRecommendation {
   healthTier?: 'green' | 'amber' | 'red';
   thetaRiskPer15m?: number;
   ivVsRealized?: number;
+  ivTiming?: {
+    signal: 'tailwind' | 'headwind' | 'neutral';
+    confidence: number;
+    deltaIV: number | null;
+    recommendation: 'enter_now' | 'wait_for_better_iv' | 'neutral';
+    summary: string;
+  };
   alternatives?: Array<{
     description: string;
     strike: number;

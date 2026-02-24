@@ -127,7 +127,14 @@ function scoreOptionsSetup(setup: OptionsSetup): number {
   score += typeBonus[setup.type] || 0;
 
   const anomalyScore = setup.metadata?.anomalyScore;
-  if (typeof anomalyScore === 'number' && Number.isFinite(anomalyScore)) {
+  const anomalyDirection = typeof setup.metadata?.anomalyDirection === 'string'
+    ? setup.metadata.anomalyDirection
+    : null;
+  if (
+    typeof anomalyScore === 'number'
+    && Number.isFinite(anomalyScore)
+    && (anomalyDirection == null || anomalyDirection === setup.direction)
+  ) {
     score += clamp(Math.round(anomalyScore * 12), 0, 12);
   }
 
