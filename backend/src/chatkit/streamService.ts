@@ -453,13 +453,13 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
       if (cumulativeTokens > MAX_TOTAL_TOKENS_PER_REQUEST) {
         finalContent = functionCalls.length > 0
           ? buildBudgetFallbackMessage(routingPlan, functionCalls)
-          : 'I hit the response budget while gathering data. Please retry with a narrower request.';
+          : 'I pulled part of the live data, but could not finish the full deep-dive in one pass. Ask for one symbol and timeframe and I will continue.';
         break;
       }
 
       iteration += 1;
       if (iteration > maxFunctionCallIterations) {
-        finalContent = 'I reached the function-call limit for this request. Please retry with a more specific question.';
+        finalContent = 'I gathered enough for a quick read but could not finish every analysis step. Ask for one focused follow-up and I will continue.';
         break;
       }
 

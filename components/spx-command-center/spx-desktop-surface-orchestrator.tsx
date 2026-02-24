@@ -58,6 +58,7 @@ export type SPXDesktopSurfaceOrchestratorProps = {
   onSelectOverlayPreset: (preset: SPXOverlayPreset) => void
   onRunActionStripCommand: (id: SPXCommandId) => void
   sidebarPanel: SidebarPanelConfig | null
+  activeLevelCategoryCount?: number
 }
 
 export function SPXDesktopSurfaceOrchestrator({
@@ -101,6 +102,7 @@ export function SPXDesktopSurfaceOrchestrator({
   onSelectOverlayPreset,
   onRunActionStripCommand,
   sidebarPanel,
+  activeLevelCategoryCount,
 }: SPXDesktopSurfaceOrchestratorProps) {
   const isSpatialView = desktopViewMode === 'spatial'
 
@@ -161,6 +163,7 @@ export function SPXDesktopSurfaceOrchestrator({
         immersiveToggleEnabled={isSpatialView}
         showAdvancedHud={showAdvancedHud}
         onToggleAdvancedHud={onToggleAdvancedHud}
+        activeLevelCategoryCount={activeLevelCategoryCount}
       />
       {sidebarPanel ? (
         <SidebarPanel

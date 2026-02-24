@@ -55,9 +55,14 @@ export function DraftNotification({ onReviewDrafts }: DraftNotificationProps) {
   }, [])
 
   useEffect(() => {
-    void fetchDrafts()
+    const initialFetch = window.setTimeout(() => {
+      void fetchDrafts()
+    }, 0)
     const interval = setInterval(() => void fetchDrafts(), POLL_INTERVAL_MS)
-    return () => clearInterval(interval)
+    return () => {
+      window.clearTimeout(initialFetch)
+      clearInterval(interval)
+    }
   }, [fetchDrafts])
 
   if (draftInfo.count === 0 || dismissed) return null

@@ -1,0 +1,170 @@
+ WARN  Unsupported engine: wanted: {"node":">=22.0.0"} (current: {"node":"v20.19.5","pnpm":"10.29.1"})
+
+> titm-ai-coach-backend@1.0.0 backtest:spx /Users/natekahl/ITM-gd/backend
+> tsx src/scripts/spxBacktestRange.ts -- --startDate=2026-01-25 --endDate=2026-02-24 --source=spx_setup_instances --bars=second
+
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-26/2026-01-26","timestamp":"2026-02-24T13:56:19.793Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-28/2026-01-28","timestamp":"2026-02-24T13:56:20.188Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-29/2026-01-29","timestamp":"2026-02-24T13:56:20.411Z"}
+{
+  "dateRange": {
+    "from": "2026-01-25",
+    "to": "2026-02-24"
+  },
+  "sourceUsed": "spx_setup_instances",
+  "setupCount": 8,
+  "evaluatedSetupCount": 8,
+  "skippedSetupCount": 0,
+  "ambiguousBarCount": 0,
+  "missingTarget2Count": 0,
+  "missingBarsSessions": [],
+  "requestedResolution": "second",
+  "resolutionUsed": "second",
+  "resolutionFallbackSessions": [],
+  "usedMassiveMinuteBars": false,
+  "executionModel": {
+    "enabled": true,
+    "entrySlipPoints": 0.2,
+    "targetSlipPoints": 0.25,
+    "stopSlipPoints": 0.15,
+    "commissionPerTradeR": 0.04,
+    "partialAtT1Pct": 0.65,
+    "moveStopToBreakevenAfterT1": true
+  },
+  "profitability": {
+    "triggeredCount": 3,
+    "resolvedCount": 3,
+    "withRealizedRCount": 3,
+    "averageRealizedR": 0.7591,
+    "medianRealizedR": 0.8691,
+    "cumulativeRealizedR": 2.2772,
+    "expectancyR": 0.7591,
+    "positiveRealizedRatePct": 66.67,
+    "bySetupType": [
+      {
+        "key": "trend_pullback",
+        "tradeCount": 2,
+        "averageRealizedR": 1.6586,
+        "cumulativeRealizedR": 3.3172
+      },
+      {
+        "key": "flip_reclaim",
+        "tradeCount": 1,
+        "averageRealizedR": -1.04,
+        "cumulativeRealizedR": -1.04
+      }
+    ]
+  },
+  "notes": [
+    "Skipped 24 gate-blocked spx_setup_instances rows (non-actionable).",
+    "Skipped 62 hidden-tier spx_setup_instances rows (non-actionable)."
+  ],
+  "analytics": {
+    "dateRange": {
+      "from": "2026-01-25",
+      "to": "2026-02-24"
+    },
+    "denominator": "resolved_triggered",
+    "triggeredCount": 3,
+    "resolvedCount": 3,
+    "pendingCount": 0,
+    "t1Wins": 2,
+    "t2Wins": 2,
+    "stopsBeforeT1": 1,
+    "invalidatedOther": 0,
+    "expiredUnresolved": 0,
+    "t1WinRatePct": 66.67,
+    "t2WinRatePct": 66.67,
+    "failureRatePct": 33.33,
+    "bySetupType": [
+      {
+        "key": "trend_pullback",
+        "triggeredCount": 2,
+        "resolvedCount": 2,
+        "pendingCount": 0,
+        "t1Wins": 2,
+        "t2Wins": 2,
+        "stopsBeforeT1": 0,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 100,
+        "t2WinRatePct": 100,
+        "failureRatePct": 0
+      },
+      {
+        "key": "flip_reclaim",
+        "triggeredCount": 1,
+        "resolvedCount": 1,
+        "pendingCount": 0,
+        "t1Wins": 0,
+        "t2Wins": 0,
+        "stopsBeforeT1": 1,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 0,
+        "t2WinRatePct": 0,
+        "failureRatePct": 100
+      }
+    ],
+    "byRegime": [
+      {
+        "key": "breakout",
+        "triggeredCount": 2,
+        "resolvedCount": 2,
+        "pendingCount": 0,
+        "t1Wins": 1,
+        "t2Wins": 1,
+        "stopsBeforeT1": 1,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 50,
+        "t2WinRatePct": 50,
+        "failureRatePct": 50
+      },
+      {
+        "key": "trending",
+        "triggeredCount": 1,
+        "resolvedCount": 1,
+        "pendingCount": 0,
+        "t1Wins": 1,
+        "t2Wins": 1,
+        "stopsBeforeT1": 0,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 100,
+        "t2WinRatePct": 100,
+        "failureRatePct": 0
+      }
+    ],
+    "byTier": [
+      {
+        "key": "watchlist",
+        "triggeredCount": 2,
+        "resolvedCount": 2,
+        "pendingCount": 0,
+        "t1Wins": 1,
+        "t2Wins": 1,
+        "stopsBeforeT1": 1,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 50,
+        "t2WinRatePct": 50,
+        "failureRatePct": 50
+      },
+      {
+        "key": "sniper_secondary",
+        "triggeredCount": 1,
+        "resolvedCount": 1,
+        "pendingCount": 0,
+        "t1Wins": 1,
+        "t2Wins": 1,
+        "stopsBeforeT1": 0,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 100,
+        "t2WinRatePct": 100,
+        "failureRatePct": 0
+      }
+    ]
+  }
+}

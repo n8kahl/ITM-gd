@@ -70,7 +70,7 @@ export function LevelMatrix() {
                 : 'border-white/20 bg-white/[0.03] text-white/65',
             )}
           >
-            {showAll ? 'Focused' : 'Show All'}
+            {showAll ? `All (${sorted.length})` : `Near Price (${simplified.length})`}
           </button>
           <Filter className="h-4 w-4 text-white/50" />
         </div>

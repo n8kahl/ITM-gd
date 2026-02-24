@@ -1,4 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('@/backend/src/config/database', () => ({
+  supabase: {},
+}));
+
 import { inferTargetOptionPrice } from '@/backend/src/services/broker/tradier/executionEngine';
 
 describe('T1 Price Inference (S5)', () => {

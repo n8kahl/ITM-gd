@@ -107,6 +107,17 @@ describe('intentRouter', () => {
     expect(plan.requiredFunctions).toEqual(expect.arrayContaining(['get_key_levels', 'show_chart']));
   });
 
+  it('does not force setup workflow for plain-language context + invalidation prompts', () => {
+    const plan = buildIntentRoutingPlan(
+      'Explain the SPX context in plain English: trend, nearest support/resistance, and what would invalidate the current idea.',
+    );
+
+    expect(plan.intents).toContain('key_levels');
+    expect(plan.intents).not.toContain('setup_help');
+    expect(plan.requiredFunctions).toContain('get_key_levels');
+    expect(plan.requiredFunctions).not.toContain('scan_opportunities');
+  });
+
   it('avoids company profile intent for generic educational "what is" prompts', () => {
     const plan = buildIntentRoutingPlan('What is delta and why does it matter for options?');
 
@@ -234,9 +245,11 @@ describe('intentRouter', () => {
       },
     ]);
 
-    expect(message).toContain('hit the response budget');
+    expect(message).toContain('quick read');
     expect(message).toContain('SPX');
     expect(message).toContain('PDH');
     expect(message).toContain('PDL');
+    expect(message).not.toContain('Completed tools');
+    expect(message).not.toContain('Remaining required tools');
   });
 });

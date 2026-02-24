@@ -1,0 +1,250 @@
+
+> titm-ai-coach-backend@1.0.0 backtest:spx /Users/natekahl/ITM-gd/backend
+> tsx src/scripts/spxBacktestRange.ts -- --startDate=2026-01-02 --endDate=2026-02-24 --source=spx_setup_instances --bars=second --includeBlockedSetups=true --includeHiddenTiers=true
+
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-02/2026-01-02","timestamp":"2026-02-24T13:57:33.349Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-05/2026-01-05","timestamp":"2026-02-24T13:57:33.742Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-06/2026-01-06","timestamp":"2026-02-24T13:57:33.932Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-07/2026-01-07","timestamp":"2026-02-24T13:57:34.141Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-08/2026-01-08","timestamp":"2026-02-24T13:57:34.341Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-09/2026-01-09","timestamp":"2026-02-24T13:57:34.546Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-12/2026-01-12","timestamp":"2026-02-24T13:57:34.747Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-13/2026-01-13","timestamp":"2026-02-24T13:57:34.939Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-14/2026-01-14","timestamp":"2026-02-24T13:57:35.131Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-15/2026-01-15","timestamp":"2026-02-24T13:57:35.362Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-16/2026-01-16","timestamp":"2026-02-24T13:57:35.567Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-20/2026-01-20","timestamp":"2026-02-24T13:57:35.841Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-21/2026-01-21","timestamp":"2026-02-24T13:57:36.072Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-22/2026-01-22","timestamp":"2026-02-24T13:57:36.304Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-23/2026-01-23","timestamp":"2026-02-24T13:57:36.503Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-26/2026-01-26","timestamp":"2026-02-24T13:57:36.701Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-27/2026-01-27","timestamp":"2026-02-24T13:57:36.885Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-28/2026-01-28","timestamp":"2026-02-24T13:57:37.062Z"}
+{"level":"info","message":"Massive.com API Request: GET /v2/aggs/ticker/I:SPX/range/1/second/2026-01-29/2026-01-29","timestamp":"2026-02-24T13:57:37.291Z"}
+{
+  "dateRange": {
+    "from": "2026-01-02",
+    "to": "2026-02-24"
+  },
+  "sourceUsed": "spx_setup_instances",
+  "setupCount": 540,
+  "evaluatedSetupCount": 540,
+  "skippedSetupCount": 0,
+  "ambiguousBarCount": 0,
+  "missingTarget2Count": 0,
+  "missingBarsSessions": [],
+  "requestedResolution": "second",
+  "resolutionUsed": "second",
+  "resolutionFallbackSessions": [],
+  "usedMassiveMinuteBars": false,
+  "executionModel": {
+    "enabled": true,
+    "entrySlipPoints": 0.2,
+    "targetSlipPoints": 0.25,
+    "stopSlipPoints": 0.15,
+    "commissionPerTradeR": 0.04,
+    "partialAtT1Pct": 0.65,
+    "moveStopToBreakevenAfterT1": true
+  },
+  "profitability": {
+    "triggeredCount": 412,
+    "resolvedCount": 412,
+    "withRealizedRCount": 412,
+    "averageRealizedR": 0.2541,
+    "medianRealizedR": 0.3866,
+    "cumulativeRealizedR": 104.7065,
+    "expectancyR": 0.2541,
+    "positiveRealizedRatePct": 52.91,
+    "bySetupType": [
+      {
+        "key": "flip_reclaim",
+        "tradeCount": 252,
+        "averageRealizedR": 0.1947,
+        "cumulativeRealizedR": 49.0575
+      },
+      {
+        "key": "trend_pullback",
+        "tradeCount": 109,
+        "averageRealizedR": 0.1215,
+        "cumulativeRealizedR": 13.2401
+      },
+      {
+        "key": "orb_breakout",
+        "tradeCount": 38,
+        "averageRealizedR": 0.8833,
+        "cumulativeRealizedR": 33.5664
+      },
+      {
+        "key": "mean_reversion",
+        "tradeCount": 13,
+        "averageRealizedR": 0.6802,
+        "cumulativeRealizedR": 8.8425
+      }
+    ]
+  },
+  "notes": [],
+  "analytics": {
+    "dateRange": {
+      "from": "2026-01-02",
+      "to": "2026-02-24"
+    },
+    "denominator": "resolved_triggered",
+    "triggeredCount": 412,
+    "resolvedCount": 412,
+    "pendingCount": 0,
+    "t1Wins": 216,
+    "t2Wins": 158,
+    "stopsBeforeT1": 185,
+    "invalidatedOther": 0,
+    "expiredUnresolved": 11,
+    "t1WinRatePct": 52.43,
+    "t2WinRatePct": 38.35,
+    "failureRatePct": 44.9,
+    "bySetupType": [
+      {
+        "key": "flip_reclaim",
+        "triggeredCount": 252,
+        "resolvedCount": 252,
+        "pendingCount": 0,
+        "t1Wins": 136,
+        "t2Wins": 98,
+        "stopsBeforeT1": 110,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 6,
+        "t1WinRatePct": 53.97,
+        "t2WinRatePct": 38.89,
+        "failureRatePct": 43.65
+      },
+      {
+        "key": "trend_pullback",
+        "triggeredCount": 109,
+        "resolvedCount": 109,
+        "pendingCount": 0,
+        "t1Wins": 48,
+        "t2Wins": 34,
+        "stopsBeforeT1": 57,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 4,
+        "t1WinRatePct": 44.04,
+        "t2WinRatePct": 31.19,
+        "failureRatePct": 52.29
+      },
+      {
+        "key": "orb_breakout",
+        "triggeredCount": 38,
+        "resolvedCount": 38,
+        "pendingCount": 0,
+        "t1Wins": 21,
+        "t2Wins": 17,
+        "stopsBeforeT1": 17,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 55.26,
+        "t2WinRatePct": 44.74,
+        "failureRatePct": 44.74
+      },
+      {
+        "key": "mean_reversion",
+        "triggeredCount": 13,
+        "resolvedCount": 13,
+        "pendingCount": 0,
+        "t1Wins": 11,
+        "t2Wins": 9,
+        "stopsBeforeT1": 1,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 1,
+        "t1WinRatePct": 84.62,
+        "t2WinRatePct": 69.23,
+        "failureRatePct": 7.69
+      }
+    ],
+    "byRegime": [
+      {
+        "key": "trending",
+        "triggeredCount": 320,
+        "resolvedCount": 320,
+        "pendingCount": 0,
+        "t1Wins": 167,
+        "t2Wins": 120,
+        "stopsBeforeT1": 146,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 7,
+        "t1WinRatePct": 52.19,
+        "t2WinRatePct": 37.5,
+        "failureRatePct": 45.63
+      },
+      {
+        "key": "breakout",
+        "triggeredCount": 77,
+        "resolvedCount": 77,
+        "pendingCount": 0,
+        "t1Wins": 36,
+        "t2Wins": 29,
+        "stopsBeforeT1": 38,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 3,
+        "t1WinRatePct": 46.75,
+        "t2WinRatePct": 37.66,
+        "failureRatePct": 49.35
+      },
+      {
+        "key": "compression",
+        "triggeredCount": 15,
+        "resolvedCount": 15,
+        "pendingCount": 0,
+        "t1Wins": 13,
+        "t2Wins": 9,
+        "stopsBeforeT1": 1,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 1,
+        "t1WinRatePct": 86.67,
+        "t2WinRatePct": 60,
+        "failureRatePct": 6.67
+      }
+    ],
+    "byTier": [
+      {
+        "key": "hidden",
+        "triggeredCount": 383,
+        "resolvedCount": 383,
+        "pendingCount": 0,
+        "t1Wins": 199,
+        "t2Wins": 146,
+        "stopsBeforeT1": 173,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 11,
+        "t1WinRatePct": 51.96,
+        "t2WinRatePct": 38.12,
+        "failureRatePct": 45.17
+      },
+      {
+        "key": "watchlist",
+        "triggeredCount": 25,
+        "resolvedCount": 25,
+        "pendingCount": 0,
+        "t1Wins": 14,
+        "t2Wins": 9,
+        "stopsBeforeT1": 11,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 56,
+        "t2WinRatePct": 36,
+        "failureRatePct": 44
+      },
+      {
+        "key": "sniper_secondary",
+        "triggeredCount": 4,
+        "resolvedCount": 4,
+        "pendingCount": 0,
+        "t1Wins": 3,
+        "t2Wins": 3,
+        "stopsBeforeT1": 1,
+        "invalidatedOther": 0,
+        "expiredUnresolved": 0,
+        "t1WinRatePct": 75,
+        "t2WinRatePct": 75,
+        "failureRatePct": 25
+      }
+    ]
+  }
+}
