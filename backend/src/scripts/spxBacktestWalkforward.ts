@@ -151,6 +151,10 @@ async function main() {
   const source = parseSource(parseArg('source'));
   const includeBlockedSetups = parseArg('includeBlockedSetups') === 'true';
   const includeHiddenTiers = parseArg('includeHiddenTiers') === 'true';
+  const recomputeStopsArg = parseArg('recomputeStops');
+  const recomputeStops = recomputeStopsArg == null
+    ? true
+    : recomputeStopsArg === 'true';
   const forcedEnd = parseArg('to');
   const endDate = forcedEnd || lastCompletedTradingDayEt(new Date());
   const windows = buildWindows({ weeks, endDate });
@@ -182,6 +186,7 @@ async function main() {
         partialAtT1Pct: profile.tradeManagement.partialAtT1Pct,
         moveStopToBreakevenAfterT1: profile.tradeManagement.moveStopToBreakeven,
       },
+      recomputeStops,
     });
     results.push(result);
     perWindow.push({
@@ -209,6 +214,7 @@ async function main() {
       resolution,
       includeBlockedSetups,
       includeHiddenTiers,
+      recomputeStops,
       endDate,
     },
     aggregate: rollup,
@@ -221,4 +227,3 @@ void main().catch((error) => {
   console.error(`SPX walk-forward backtest failed: ${message}`);
   process.exit(1);
 });
-

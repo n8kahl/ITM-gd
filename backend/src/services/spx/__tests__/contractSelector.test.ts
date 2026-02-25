@@ -159,6 +159,30 @@ function makeSetup(overrides: Partial<Setup> = {}): Setup {
   };
 }
 
+const ALL_SETUP_TYPES: Setup['type'][] = [
+  'fade_at_wall',
+  'breakout_vacuum',
+  'mean_reversion',
+  'trend_continuation',
+  'orb_breakout',
+  'trend_pullback',
+  'flip_reclaim',
+  'vwap_reclaim',
+  'vwap_fade_at_band',
+];
+
+const BASE_DELTA_BY_SETUP: Record<Setup['type'], number> = {
+  fade_at_wall: 0.18,
+  breakout_vacuum: 0.28,
+  mean_reversion: 0.22,
+  trend_continuation: 0.3,
+  orb_breakout: 0.32,
+  trend_pullback: 0.26,
+  flip_reclaim: 0.24,
+  vwap_reclaim: 0.28,
+  vwap_fade_at_band: 0.2,
+};
+
 describe('contractSelector', () => {
   describe('deltaTargetForSetup', () => {
     it('returns correct delta targets per setup type', () => {
@@ -214,6 +238,14 @@ describe('contractSelector', () => {
       const highTheta = makeContract({ theta: -2.5 });
 
       expect(scoreContract(setup, lowTheta)).toBeGreaterThan(scoreContract(setup, highTheta));
+    });
+
+    it('scores contracts with zeroed greeks lower than similar contracts with active greeks', () => {
+      const setup = makeSetup({ type: 'orb_breakout' });
+      const validGreeks = makeContract({ delta: 0.32, gamma: 0.02, theta: -0.4, vega: 4.8 });
+      const zeroGreeks = makeContract({ delta: 0, gamma: 0, theta: 0, vega: 0 });
+
+      expect(scoreContract(setup, validGreeks)).toBeGreaterThan(scoreContract(setup, zeroGreeks));
     });
   });
 
@@ -371,18 +403,163 @@ describe('contractSelector', () => {
   });
 
   describe('production selector helpers', () => {
-    it('uses higher delta targets in choppy regimes and lower in breakout regimes', () => {
-      const rangingTarget = deltaTargetForSetupProd({
-        type: 'fade_at_wall',
-        regime: 'ranging',
-      } as Pick<Setup, 'type' | 'regime'>);
-      const breakoutTarget = deltaTargetForSetupProd({
-        type: 'orb_breakout',
-        regime: 'breakout',
-      } as Pick<Setup, 'type' | 'regime'>);
+    describe('regime-based delta adjustments', () => {
+      it('applies breakout-trending reduction for orb_breakout', () => {
+        const target = deltaTargetForSetupProd({
+          type: 'orb_breakout',
+          regime: 'trending',
+        } as Pick<Setup, 'type' | 'regime'>);
+        expect(target).toBeCloseTo(0.28, 6);
+      });
 
-      expect(rangingTarget).toBeGreaterThan(0.2);
-      expect(breakoutTarget).toBeLessThan(0.32);
+      it('applies compression boost for orb_breakout', () => {
+        const target = deltaTargetForSetupProd({
+          type: 'orb_breakout',
+          regime: 'compression',
+        } as Pick<Setup, 'type' | 'regime'>);
+        expect(target).toBeCloseTo(0.38, 6);
+      });
+
+      it('applies ranging boost for mean_reversion', () => {
+        const target = deltaTargetForSetupProd({
+          type: 'mean_reversion',
+          regime: 'ranging',
+        } as Pick<Setup, 'type' | 'regime'>);
+        expect(target).toBeCloseTo(0.28, 6);
+      });
+
+      it('keeps fade_at_wall at base delta during breakout regime (no momentum adjustment)', () => {
+        const target = deltaTargetForSetupProd({
+          type: 'fade_at_wall',
+          regime: 'breakout',
+        } as Pick<Setup, 'type' | 'regime'>);
+        expect(target).toBeCloseTo(0.18, 6);
+      });
+
+      it('uses base delta targets when regime is null or undefined', () => {
+        for (const setupType of ALL_SETUP_TYPES) {
+          expect(deltaTargetForSetupProd({
+            type: setupType,
+            regime: undefined,
+          } as unknown as Pick<Setup, 'type' | 'regime'>)).toBeCloseTo(BASE_DELTA_BY_SETUP[setupType], 6);
+          expect(deltaTargetForSetupProd({
+            type: setupType,
+            regime: null,
+          } as unknown as Pick<Setup, 'type' | 'regime'>)).toBeCloseTo(BASE_DELTA_BY_SETUP[setupType], 6);
+        }
+      });
+
+      it('keeps adjusted deltas inside hard guardrails', () => {
+        const regimes: Array<Setup['regime'] | undefined | null> = ['ranging', 'compression', 'breakout', 'trending', undefined, null];
+        for (const setupType of ALL_SETUP_TYPES) {
+          for (const regime of regimes) {
+            const target = deltaTargetForSetupProd({
+              type: setupType,
+              regime,
+            } as unknown as Pick<Setup, 'type' | 'regime'>);
+            expect(target).toBeGreaterThanOrEqual(0.05);
+            expect(target).toBeLessThanOrEqual(0.8);
+          }
+        }
+      });
+    });
+
+    describe('late-day filter enforcement', () => {
+      it('uses standard spread limits at 1:59 PM ET', () => {
+        const setup = makeSetup({ direction: 'bullish', regime: 'ranging' });
+        const nowBeforeCutoff = new Date('2026-02-20T18:59:00.000Z');
+        const daytimeOnlyContract = makeContract({
+          type: 'call',
+          bid: 1.35,
+          ask: 1.65,
+          delta: 0.24,
+          openInterest: 200,
+          volume: 80,
+        });
+
+        const result = filterCandidatesProd(setup, [daytimeOnlyContract], false, nowBeforeCutoff);
+        expect(result).toHaveLength(1);
+      });
+
+      it('applies strict late-day filters at 2:01 PM ET', () => {
+        const setup = makeSetup({ direction: 'bullish', regime: 'ranging' });
+        const nowAfterCutoff = new Date('2026-02-20T19:01:00.000Z');
+        const contracts = [
+          makeContract({
+            type: 'call',
+            strike: 6000,
+            bid: 1.45,
+            ask: 1.70,
+            delta: 0.26,
+            openInterest: 350,
+            volume: 100,
+          }),
+          makeContract({
+            type: 'call',
+            strike: 6010,
+            bid: 1.30,
+            ask: 1.65,
+            delta: 0.26,
+            openInterest: 400,
+            volume: 120,
+          }),
+          makeContract({
+            type: 'call',
+            strike: 6020,
+            bid: 1.20,
+            ask: 1.60,
+            delta: 0.27,
+            openInterest: 300,
+            volume: 90,
+          }),
+          makeContract({
+            type: 'call',
+            strike: 6030,
+            bid: 1.45,
+            ask: 1.70,
+            delta: 0.28,
+            openInterest: 220,
+            volume: 100,
+          }),
+        ];
+
+        const result = filterCandidatesProd(setup, contracts, false, nowAfterCutoff);
+        expect(result).toHaveLength(1);
+        expect(result[0].strike).toBe(6000);
+      });
+
+      it('rejects contracts after 2 PM that passed daytime filters', () => {
+        const setup = makeSetup({ direction: 'bullish', regime: 'ranging' });
+        const candidate = makeContract({
+          type: 'call',
+          bid: 1.35,
+          ask: 1.65,
+          delta: 0.24,
+          openInterest: 200,
+          volume: 80,
+        });
+
+        const before2pmEt = filterCandidatesProd(setup, [candidate], false, new Date('2026-02-20T18:59:00.000Z'));
+        const after2pmEt = filterCandidatesProd(setup, [candidate], false, new Date('2026-02-20T19:01:00.000Z'));
+
+        expect(before2pmEt).toHaveLength(1);
+        expect(after2pmEt).toHaveLength(0);
+      });
+
+      it('enforces open interest floor of 250 exactly at 2 PM ET', () => {
+        const setup = makeSetup({ direction: 'bullish', regime: 'ranging' });
+        const lowOiContract = makeContract({
+          type: 'call',
+          bid: 1.45,
+          ask: 1.70,
+          delta: 0.26,
+          openInterest: 200,
+          volume: 90,
+        });
+
+        const result = filterCandidatesProd(setup, [lowOiContract], false, new Date('2026-02-20T19:00:00.000Z'));
+        expect(result).toHaveLength(0);
+      });
     });
 
     it('rejects 0DTE contracts after rollover cutoff', () => {

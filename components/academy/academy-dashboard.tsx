@@ -16,6 +16,7 @@ import {
   fetchAcademyResume,
   fetchRecommendations,
 } from '@/lib/academy-v3/client'
+import { Analytics } from '@/lib/analytics'
 
 type PlanData = Awaited<ReturnType<typeof fetchAcademyPlan>>
 type ProgressSummary = Awaited<ReturnType<typeof fetchAcademyProgressSummary>>
@@ -225,6 +226,7 @@ export function AcademyDashboard() {
                 </div>
                 <Link
                   href="/members/academy/modules"
+                  onClick={() => Analytics.trackAcademyAction('dashboard_browse_modules')}
                   className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20"
                   data-testid="cta-browse-modules"
                 >

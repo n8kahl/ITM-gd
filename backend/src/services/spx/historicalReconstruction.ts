@@ -8,6 +8,7 @@ import { supabase } from '../../config/database';
 import { logger } from '../../lib/logger';
 import { calculateLevels, type LevelItem } from '../levels';
 import { classifyCurrentRegime } from './regimeClassifier';
+import { calculateAtrFromBars } from './atrService';
 import { getFibLevels } from './fibEngine';
 import { detectActiveSetups } from './setupDetector';
 import {
@@ -685,6 +686,7 @@ function buildHistoricalIndicatorContext(input: {
   emaSlow: number;
   emaFastSlope: number;
   emaSlowSlope: number;
+  atr14: number | null;
   volumeTrend: 'rising' | 'flat' | 'falling';
   sessionOpenPrice: number;
   orbHigh: number;
@@ -765,6 +767,7 @@ function buildHistoricalIndicatorContext(input: {
   const vwapBandSet = calculateVWAPBandSet(vwapBars);
   const lastClose = closes[closes.length - 1];
   const vwapPosition = vwapPrice != null ? analyzeVWAPPosition(lastClose, vwapPrice) : null;
+  const atr14 = calculateAtrFromBars(usable, 14);
   const latestBarRaw = usable[usable.length - 1];
   const priorBarRaw = usable.length > 1 ? usable[usable.length - 2] : null;
   const toTriggerBar = (bar: { t: number; o?: number; h?: number; l?: number; c: number; v?: number } | null) => {
@@ -792,6 +795,7 @@ function buildHistoricalIndicatorContext(input: {
     emaSlow: round(emaSlow, 2),
     emaFastSlope: round(emaFast - emaFastPrior, 4),
     emaSlowSlope: round(emaSlow - emaSlowPrior, 4),
+    atr14: atr14 != null ? round(atr14, 4) : null,
     volumeTrend: volumeTrendFromBars(usable),
     sessionOpenPrice: round(sessionOpenPrice, 2),
     orbHigh: round(Number.isFinite(orbHigh) ? orbHigh : sessionOpenPrice, 2),
