@@ -40,9 +40,12 @@ function buildTriggeredDirective(event: SetupTransitionEvent): {
 } {
   const setup = event.setup;
   const entryMid = round((setup.entryZone.low + setup.entryZone.high) / 2, 2);
+  const confluenceDescriptor = Number.isFinite(setup.confluenceScore)
+    ? `confluence ${setup.confluenceScore}/5`
+    : 'multi-factor';
 
   return {
-    content: `Execution command: ENTER ${setup.direction.toUpperCase()} ${humanizeSetupType(setup.type)}. Entry ${setup.entryZone.low.toFixed(2)}-${setup.entryZone.high.toFixed(2)} (ref ${entryMid.toFixed(2)}), stop ${setup.stop.toFixed(2)}, T1 ${setup.target1.price.toFixed(2)}, T2 ${setup.target2.price.toFixed(2)}.`,
+    content: `Observation: SPX ${setup.direction === 'bullish' ? 'testing support at' : 'approaching resistance at'} ${humanizeSetupType(setup.type)} zone. ${setup.direction.charAt(0).toUpperCase() + setup.direction.slice(1)} setup, ${confluenceDescriptor}. Entry ${setup.entryZone.low.toFixed(2)}-${setup.entryZone.high.toFixed(2)} (ref ${entryMid.toFixed(2)}), stop ${setup.stop.toFixed(2)}, T1 ${setup.target1.price.toFixed(2)}, T2 ${setup.target2.price.toFixed(2)}.`,
     directive: {
       command: 'ENTER',
       actionId: 'ENTER_TRADE_FOCUS',
@@ -100,7 +103,7 @@ function buildTarget2Directive(event: SetupTransitionEvent): {
   const setup = event.setup;
 
   return {
-    content: `Execution command: EXIT remainder at T2 ${setup.target2.price.toFixed(2)}. Setup objective complete.`,
+    content: `Action: EXIT remainder at T2 ${setup.target2.price.toFixed(2)}. Full objective reached.`,
     directive: {
       command: 'EXIT_T2',
       actionId: 'EXIT_TRADE_FOCUS',
@@ -126,7 +129,7 @@ function buildStopDirective(event: SetupTransitionEvent): {
   const setup = event.setup;
 
   return {
-    content: `Execution command: EXIT now. Stop condition confirmed near ${setup.stop.toFixed(2)}; stand down and preserve capital.`,
+    content: `Risk protocol: Stop ${setup.stop.toFixed(2)} confirmed. Exit and preserve capital. Discipline held.`,
     directive: {
       command: 'EXIT_STOP',
       actionId: 'EXIT_TRADE_FOCUS',
@@ -143,7 +146,50 @@ function buildStopDirective(event: SetupTransitionEvent): {
   };
 }
 
-export function buildExecutionCoachMessageFromTransition(event: SetupTransitionEvent): CoachMessage | null {
+function buildReflectiveDirective(event: SetupTransitionEvent): {
+  content: string;
+  directive: ExecutionDirective;
+  type: CoachMessage['type'];
+  priority: CoachMessage['priority'];
+} | null {
+  const setup = event.setup;
+  let content: string | null = null;
+
+  if (event.reason === 'target2') {
+    content = `Review: Trade captured T2 at ${setup.target2.price.toFixed(2)}. ${humanizeSetupType(setup.type)} in ${setup.regime} regime — note conditions for future setups.`;
+  } else if (event.reason === 'stop') {
+    content = `Review: Stop hit at ${setup.stop.toFixed(2)}. ${humanizeSetupType(setup.type)} in ${setup.regime} — review entry timing post-session.`;
+  } else if (event.reason === 'target1') {
+    content = `Review: Partial taken at T1 ${setup.target1.price.toFixed(2)}. Runner still active.`;
+  }
+
+  if (!content) return null;
+
+  return {
+    content,
+    directive: {
+      command: event.reason === 'stop' ? 'EXIT_STOP' : 'EXIT_T2',
+      actionId: 'EXIT_TRADE_FOCUS',
+      phase: event.toPhase,
+      transitionId: event.id,
+      transitionTimestamp: event.timestamp,
+      reason: event.reason,
+      fromPhase: event.fromPhase,
+      toPhase: event.toPhase,
+      setupStatus: setup.status,
+    },
+    type: 'post_trade',
+    priority: 'guidance',
+  };
+}
+
+export function buildExecutionCoachMessageFromTransition(
+  event: SetupTransitionEvent,
+  options?: {
+    onReflectiveMessage?: (message: CoachMessage) => void;
+    reflectionDelayMs?: number;
+  },
+): CoachMessage | null {
   let descriptor: {
     content: string;
     directive: ExecutionDirective;
@@ -163,7 +209,7 @@ export function buildExecutionCoachMessageFromTransition(event: SetupTransitionE
 
   if (!descriptor) return null;
 
-  return {
+  const primaryMessage: CoachMessage = {
     id: `coach_execution_${event.id}`,
     type: descriptor.type,
     priority: descriptor.priority,
@@ -194,4 +240,46 @@ export function buildExecutionCoachMessageFromTransition(event: SetupTransitionE
     },
     timestamp: event.timestamp,
   };
+  const terminalPhase = event.toPhase === 'target2_hit' || (event.toPhase === 'invalidated' && event.reason === 'stop');
+  if (terminalPhase) {
+    const reflection = buildReflectiveDirective(event);
+    if (reflection && options?.onReflectiveMessage) {
+      const reflectionDelayMs = Math.max(0, options.reflectionDelayMs ?? 5000);
+      setTimeout(() => {
+        options.onReflectiveMessage?.({
+          id: `coach_execution_reflective_${event.id}`,
+          type: reflection.type,
+          priority: reflection.priority,
+          setupId: event.setupId,
+          content: reflection.content,
+          structuredData: {
+            source: 'setup_transition',
+            directiveVersion: 'v1',
+            executionDirective: reflection.directive,
+            transition: {
+              id: event.id,
+              setupId: event.setupId,
+              symbol: event.symbol,
+              direction: event.direction,
+              fromPhase: event.fromPhase,
+              toPhase: event.toPhase,
+              reason: event.reason,
+              price: event.price,
+              timestamp: event.timestamp,
+            },
+            setup: {
+              type: event.setup.type,
+              entryZone: event.setup.entryZone,
+              stop: event.setup.stop,
+              target1: event.setup.target1,
+              target2: event.setup.target2,
+            },
+          },
+          timestamp: event.timestamp,
+        });
+      }, reflectionDelayMs);
+    }
+  }
+
+  return primaryMessage;
 }

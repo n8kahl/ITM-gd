@@ -60,7 +60,7 @@ describe('spx/executionCoach', () => {
     expect(message?.type).toBe('pre_trade');
     expect(message?.priority).toBe('setup');
     expect(message?.setupId).toBe('setup-1');
-    expect(message?.content).toContain('Execution command: ENTER');
+    expect(message?.content).toContain('Observation: SPX');
     expect(message?.structuredData.source).toBe('setup_transition');
 
     const directive = (message?.structuredData as { executionDirective?: { command?: string; transitionId?: string } })
@@ -101,7 +101,7 @@ describe('spx/executionCoach', () => {
     expect(message).toBeTruthy();
     expect(message?.type).toBe('alert');
     expect(message?.priority).toBe('alert');
-    expect(message?.content).toContain('EXIT now');
+    expect(message?.content).toContain('Risk protocol: Stop');
     const directive = (message?.structuredData as { executionDirective?: { command?: string } }).executionDirective;
     expect(directive?.command).toBe('EXIT_STOP');
   });
