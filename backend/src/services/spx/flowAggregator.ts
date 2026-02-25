@@ -118,7 +118,7 @@ function summarizeWindow(input: {
   const sweepCount = scoped.filter((event) => event.type === 'sweep').length;
   const blockCount = scoped.filter((event) => event.type === 'block').length;
 
-  const flowScore = totalPremium > 0 ? round((bullishPremium / totalPremium) * 100, 2) : 50;
+  const flowScore = totalPremium > 0 ? round((bullishPremium / totalPremium) * 100, 2) : 0;
   const bias = isDirectionalBias(flowScore, totalPremium);
 
   return {
