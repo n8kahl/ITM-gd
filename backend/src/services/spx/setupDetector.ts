@@ -1159,10 +1159,11 @@ function computeDecayedConfluence(input: {
     if (score <= 0) continue;
     const halfLifeMs = CONFLUENCE_HALF_LIVES_MS[key as keyof typeof CONFLUENCE_HALF_LIVES_MS]
       ?? DEFAULT_CONFLUENCE_COMPONENT_HALF_LIFE_MS;
-    const timestampMs = Number.isFinite(input.componentTimestampsMs[key])
-      ? input.componentTimestampsMs[key]
-      : input.nowMs;
-    const ageMs = Math.max(0, input.nowMs - timestampMs);
+    const timestampMs = input.componentTimestampsMs[key];
+    const hasTimestamp = Number.isFinite(timestampMs) && timestampMs > 0;
+    const ageMs = hasTimestamp
+      ? Math.max(0, input.nowMs - timestampMs)
+      : halfLifeMs;
     total += score * decayFactor(ageMs, halfLifeMs);
   }
   return Math.min(5, round(total, 4));
@@ -1204,7 +1205,8 @@ function calculateWeightedConfluence(input: {
   const zone = clamp(input.zoneQualityScore);
   const gex = input.gexAligned ? 82 : 38;
   const regime = clamp((input.regimeAligned ? 80 : 34) - (input.regimeConflict ? 12 : 0));
-  const multiTF = clamp(input.multiTFComposite ?? 50);
+  const multiTFAvailable = input.multiTFComposite != null && Number.isFinite(input.multiTFComposite);
+  const multiTF = clamp(multiTFAvailable ? Number(input.multiTFComposite) : 35);
   const memory = clamp(50 + (input.memoryScoreBoost * 7), 20, 95);
 
   const weighted = (
@@ -3713,5 +3715,6 @@ export const __testables = {
   ORB_ENTRY_ZONE_MAX_WIDTH_POINTS,
   decayFactor,
   computeDecayedConfluence,
+  calculateWeightedConfluence,
   CONFLUENCE_HALF_LIVES_MS,
 };
