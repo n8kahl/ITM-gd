@@ -196,6 +196,16 @@ export interface Setup {
   direction: 'bullish' | 'bearish';
   entryZone: { low: number; high: number };
   stop: number;
+  baseStop?: number;
+  geometryStopScale?: number;
+  atr14?: number | null;
+  vixRegime?: SPXVixRegime | null;
+  netGex?: number | null;
+  gexNet?: number | null;
+  gexDistanceBp?: number | null;
+  gexCallWall?: number | null;
+  gexPutWall?: number | null;
+  gexFlipPoint?: number | null;
   target1: { price: number; label: string };
   target2: { price: number; label: string };
   confluenceScore: number;
@@ -218,7 +228,7 @@ export interface Setup {
   score?: number;
   alignmentScore?: number;
   flowConfirmed?: boolean;
-  gateStatus?: 'eligible' | 'blocked';
+  gateStatus?: 'eligible' | 'blocked' | 'shadow_blocked';
   gateReasons?: string[];
   tradeManagement?: {
     partialAtT1Pct: number;

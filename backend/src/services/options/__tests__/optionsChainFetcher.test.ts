@@ -107,6 +107,14 @@ describe('optionsChainFetcher', () => {
     expect(result.options.puts).toHaveLength(1);
     expect(result.options.calls[0].bid).toBe(4.9);
     expect(result.options.puts[0].ask).toBe(4.9);
+    expect(result.options.calls[0].delta).toBe(0.53);
+    expect(result.options.calls[0].gamma).toBe(0.02);
+    expect(result.options.calls[0].theta).toBe(-0.11);
+    expect(result.options.calls[0].vega).toBe(0.07);
+    expect(result.options.puts[0].delta).toBe(-0.47);
+    expect(result.options.puts[0].gamma).toBe(0.021);
+    expect(result.options.puts[0].theta).toBe(-0.1);
+    expect(result.options.puts[0].vega).toBe(0.068);
     expect(mockCacheSet).toHaveBeenCalled();
   });
 
@@ -179,8 +187,78 @@ describe('optionsChainFetcher', () => {
 
     const result = await fetchOptionsChain('SPY', '2026-02-13', 3);
 
+    expect(result.options.calls[0].delta).not.toBe(0);
     expect(result.options.calls[0].gamma).toBeGreaterThan(0);
+    expect(result.options.calls[0].theta).not.toBe(0);
+    expect(result.options.calls[0].vega).toBeGreaterThan(0);
     expect(result.options.puts[0].gamma).toBeGreaterThan(0);
+  });
+
+  it('returns zero greeks when provider greeks and IV are both unavailable', async () => {
+    mockGetOptionsContracts.mockResolvedValue([
+      {
+        ticker: 'O:SPY260213C00500000',
+        underlying_ticker: 'SPY',
+        strike_price: 500,
+        expiration_date: '2026-02-13',
+        contract_type: 'call',
+      },
+    ]);
+
+    mockGetOptionsSnapshot.mockResolvedValue({
+      ticker: 'O:SPY260213C00500000',
+      day: { open: 4.0, high: 4.8, low: 3.8, close: 4.4, volume: 900 },
+      last_quote: { bid: 4.3, ask: 4.5, bid_size: 9, ask_size: 10, last_updated: 0 },
+      greeks: {},
+      open_interest: 4100,
+    } as any);
+
+    const result = await fetchOptionsChain('SPY', '2026-02-13', 3);
+    const contract = result.options.calls[0];
+
+    expect(contract.delta).toBe(0);
+    expect(contract.gamma).toBe(0);
+    expect(contract.theta).toBe(0);
+    expect(contract.vega).toBe(0);
+  });
+
+  it('produces reasonable Black-Scholes ATM delta for SPX calls', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-02-25T15:00:00.000Z'));
+    mockGetMinuteAggregates.mockResolvedValueOnce([
+      {
+        o: 5898,
+        h: 5906,
+        l: 5895,
+        c: 5900,
+        v: 18_000,
+        t: Date.parse('2026-02-25T14:59:00.000Z'),
+      },
+    ] as any);
+    mockGetOptionsContracts.mockResolvedValue([
+      {
+        ticker: 'O:SPX260320C05900000',
+        underlying_ticker: 'SPX',
+        strike_price: 5900,
+        expiration_date: '2026-03-20',
+        contract_type: 'call',
+      },
+    ]);
+    mockGetOptionsSnapshot.mockResolvedValue({
+      ticker: 'O:SPX260320C05900000',
+      day: { open: 88, high: 96, low: 84, close: 92, volume: 2100 },
+      last_quote: { bid: 91.5, ask: 92.5, bid_size: 8, ask_size: 9, last_updated: 0 },
+      greeks: {},
+      implied_volatility: 0.2,
+      open_interest: 6700,
+    } as any);
+
+    const result = await fetchOptionsChain('SPX', '2026-03-20', 3);
+    const call = result.options.calls[0];
+
+    expect(call.strike).toBe(5900);
+    expect(call.delta).toBeGreaterThanOrEqual(0.45);
+    expect(call.delta).toBeLessThanOrEqual(0.55);
   });
 
   it('keeps ET same-day expiration when UTC has crossed midnight', async () => {

@@ -13,10 +13,10 @@ const GEX_MEAN_REVERSION_FAMILIES = new Set<SetupType>([
 ]);
 
 const MEAN_REVERSION_STOP_CONFIG: Record<Regime, { maxPoints: number; atrMultiple: number }> = {
-  compression: { maxPoints: 8, atrMultiple: 0.8 },
-  ranging: { maxPoints: 9, atrMultiple: 1.0 },
-  trending: { maxPoints: 10, atrMultiple: 1.2 },
-  breakout: { maxPoints: 12, atrMultiple: 1.5 },
+  compression: { maxPoints: 10, atrMultiple: 0.8 },
+  ranging: { maxPoints: 15, atrMultiple: 1.0 },
+  trending: { maxPoints: 15, atrMultiple: 1.2 },
+  breakout: { maxPoints: 18, atrMultiple: 1.5 },
 };
 
 export interface AdaptiveStopInput {
@@ -67,6 +67,21 @@ export function resolveVixStopScale(vixRegime: SPXVixRegime | null | undefined):
   if (vixRegime === 'elevated') return 1.3;
   if (vixRegime === 'extreme') return 1.6;
   return 1;
+}
+
+export function getRegimeBaseAtrMultiplier(regime: Regime | null | undefined): number {
+  switch (regime) {
+    case 'trending':
+      return 0.9;
+    case 'breakout':
+      return 0.9;
+    case 'ranging':
+      return 0.9;
+    case 'compression':
+      return 0.9;
+    default:
+      return 0.9;
+  }
 }
 
 export function resolveGEXDirectionalScale(input: {
@@ -135,8 +150,18 @@ export function calculateAdaptiveStop(input: AdaptiveStopInput): AdaptiveStopOut
   const entryMid = (input.entryLow + input.entryHigh) / 2;
   const baseRisk = Math.max(MIN_STOP_DISTANCE_POINTS, Math.abs(entryMid - input.baseStop));
 
+  const explicitAtrStopMultiplier = toFiniteNumber(input.atrStopMultiplier);
+  const usesLegacyDefaultAtrOverride = (
+    explicitAtrStopMultiplier != null
+    && input.regime != null
+    && Math.abs(explicitAtrStopMultiplier - DEFAULT_ATR_STOP_MULTIPLIER) < Number.EPSILON
+  );
   const atrStopMultiplier = clamp(
-    toFiniteNumber(input.atrStopMultiplier) ?? DEFAULT_ATR_STOP_MULTIPLIER,
+    (
+      usesLegacyDefaultAtrOverride
+        ? getRegimeBaseAtrMultiplier(input.regime)
+        : explicitAtrStopMultiplier
+    ) ?? getRegimeBaseAtrMultiplier(input.regime),
     0.1,
     3,
   );
@@ -178,12 +203,18 @@ export function calculateAdaptiveStop(input: AdaptiveStopInput): AdaptiveStopOut
     );
     return Math.abs(entryMid - cappedStop);
   })();
-  const riskPoints = round(
+  let riskPoints = round(
     meanReversionCapPoints != null
       ? Math.min(uncappedRiskPoints, meanReversionCapPoints)
       : uncappedRiskPoints,
     2,
   );
+  const MAX_EFFECTIVE_ATR_MULTIPLE = 3.0;
+  const atr14Val = toFiniteNumber(input.atr14);
+  if (atr14Val != null && atr14Val > 0) {
+    const maxRiskFromAtr = atr14Val * MAX_EFFECTIVE_ATR_MULTIPLE;
+    riskPoints = round(Math.min(riskPoints, maxRiskFromAtr), 2);
+  }
   const stop = input.direction === 'bullish'
     ? round(entryMid - riskPoints, 2)
     : round(entryMid + riskPoints, 2);

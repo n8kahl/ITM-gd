@@ -3,7 +3,7 @@ import { getMinuteAggregates } from '../../config/massive';
 import { analyzeVWAPPosition, calculateVWAPBandSet } from '../levels/calculators/vwap';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
-import { calculateAtrFromBars } from './atrService';
+import { calculateAtrFromBars, getIntradayAtr } from './atrService';
 import { getFibLevels } from './fibEngine';
 import {
   deriveFlowWindowSignal,
@@ -186,14 +186,14 @@ const SETUP_SPECIFIC_GATE_FLOORS: Partial<Record<SetupType, SetupSpecificGateFlo
   mean_reversion: {
     // Mean reversion underperformed in historical replay unless calibrated pWin is higher.
     minConfluenceScore: 3,
-    minPWinCalibrated: 0.66,
+    minPWinCalibrated: 0.62, // Lowered from 0.66: empirical win rate 50.7%, old floor blocked 49% of setups
     minEvR: 0.2,
     maxFirstSeenMinuteEt: 330,
   },
   orb_breakout: {
     // A6: Restore ORB quality gates while retaining early-session EMA grace.
     minConfluenceScore: 3.5,
-    minPWinCalibrated: 0.56, // Was 0.61
+    minPWinCalibrated: 0.58, // Aligned to global floor (was 0.56, effectively 0.58 via Math.max)
     minEvR: 0.24, // Was 0.3
     requireFlowConfirmation: true,
     minAlignmentPct: 52,
@@ -2752,6 +2752,18 @@ export async function detectActiveSetups(options?: {
     regime: regimeState.regime,
     vixRegime: environmentGate?.vixRegime || 'unknown',
   });
+  let setupAtr14 = indicatorContext?.atr14 ?? null;
+  if (setupAtr14 == null && !hasHistoricalTimestamp) {
+    try {
+      setupAtr14 = await getIntradayAtr({
+        ticker: 'I:SPX',
+        asOfTimestamp: evaluationIso,
+        forceRefresh,
+      });
+    } catch {
+      setupAtr14 = null;
+    }
+  }
   const zoneQualityThreshold = minZoneQualityThreshold({
     regime: regimeState.regime,
     vixRegime: environmentGate?.vixRegime || 'unknown',
@@ -3070,7 +3082,7 @@ export async function detectActiveSetups(options?: {
       regime: regimeState.regime,
       netGex: gex.combined.netGex,
       setupType,
-      atr14: indicatorContext?.atr14 ?? null,
+      atr14: setupAtr14,
       vixRegime: environmentGate?.vixRegime ?? null,
       gexCallWall: gex.combined.callWall,
       gexPutWall: gex.combined.putWall,
@@ -3408,7 +3420,7 @@ export async function detectActiveSetups(options?: {
       stop,
       baseStop,
       geometryStopScale: geometryPolicy.stopScale,
-      atr14: indicatorContext?.atr14 ?? null,
+      atr14: setupAtr14,
       vixRegime: environmentGate?.vixRegime ?? 'unknown',
       netGex: gex.combined.netGex,
       gexNet: gex.combined.netGex,

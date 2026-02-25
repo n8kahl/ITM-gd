@@ -10,6 +10,11 @@ import {
   type SetupFinalOutcome,
   type SetupInstanceRow,
 } from './outcomeTracker';
+import {
+  calculateAdaptiveStop,
+  deriveNearestGEXDistanceBp,
+} from './stopEngine';
+import type { Regime, SPXVixRegime } from './types';
 
 type InternalBacktestSource = 'spx_setup_instances';
 
@@ -35,6 +40,7 @@ interface BacktestSetupCandidate {
     partialAtT1Pct: number;
     moveStopToBreakeven: boolean;
   } | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface EvaluatedSetup {
@@ -48,6 +54,7 @@ interface BacktestPauseFilters {
   pausedSetupTypes: Set<string>;
   pausedCombos: Set<string>;
   notes: string[];
+  optimizerProfile: Record<string, unknown> | null;
 }
 
 function round(value: number, decimals = 2): number {
@@ -70,6 +77,13 @@ function parseFloatEnv(value: string | undefined, fallback: number, min = 0): nu
   if (typeof value !== 'string') return fallback;
   const parsed = Number.parseFloat(value);
   if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, parsed);
+}
+
+function parseOptionalFloatEnv(value: string | undefined, min = 0): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return undefined;
   return Math.max(min, parsed);
 }
 
@@ -114,6 +128,16 @@ const DEFAULT_EXECUTION_MODEL: SPXBacktestExecutionModel = {
   commissionPerTradeR: parseFloatEnv(process.env.SPX_BACKTEST_COMMISSION_R, 0.04, 0),
   partialAtT1Pct: clamp(parseFloatEnv(process.env.SPX_BACKTEST_PARTIAL_AT_T1_PCT, 0.5, 0), 0, 1),
   moveStopToBreakevenAfterT1: parseBooleanEnv(process.env.SPX_BACKTEST_MOVE_STOP_TO_BREAKEVEN_AFTER_T1, true),
+};
+
+const DEFAULT_STOP_RECOMPUTE_PARAMS = {
+  atrStopFloorEnabled: parseBooleanEnv(process.env.SPX_SETUP_ATR_STOP_FLOOR_ENABLED, true),
+  atrStopMultiplier: (() => {
+    const parsed = parseOptionalFloatEnv(process.env.SPX_SETUP_ATR_STOP_MULTIPLIER, 0.1);
+    return parsed == null ? undefined : clamp(parsed, 0.1, 3);
+  })(),
+  vixStopScalingEnabled: parseBooleanEnv(process.env.SPX_SETUP_VIX_STOP_SCALING_ENABLED, true),
+  gexMagnitudeScalingEnabled: parseBooleanEnv(process.env.SPX_SETUP_GEX_MAGNITUDE_STOP_SCALING_ENABLED, true),
 };
 
 function resolveExecutionModel(
@@ -240,6 +264,325 @@ function resolveGeometryAdjustmentForSetup(
   return null;
 }
 
+type SetupDetectorGeometryBucket = 'opening' | 'midday' | 'late';
+
+interface BacktestSetupStopContext {
+  baseStop: number | null;
+  geometryStopScale: number | null;
+  atr14: number | null;
+  netGex: number | null;
+  vixRegime: SPXVixRegime | null;
+  gexDistanceBp: number | null;
+  gexCallWall: number | null;
+  gexPutWall: number | null;
+  gexFlipPoint: number | null;
+}
+
+interface RecomputeStopResult {
+  stopPrice: number;
+  changed: boolean;
+  usedBaseStopMetadata: boolean;
+  usedProfileStopScaleFallback: boolean;
+  atrAvailable: boolean;
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function findNestedNumberByKey(value: unknown, key: string, depth: number): number | null {
+  if (depth < 0) return null;
+  const record = getRecord(value);
+  if (!record) return null;
+
+  const direct = toFiniteNumber(record[key]);
+  if (direct != null) return direct;
+  if (depth === 0) return null;
+
+  for (const child of Object.values(record)) {
+    const nested = findNestedNumberByKey(child, key, depth - 1);
+    if (nested != null) return nested;
+  }
+  return null;
+}
+
+function findNestedStringByKey(value: unknown, key: string, depth: number): string | null {
+  if (depth < 0) return null;
+  const record = getRecord(value);
+  if (!record) return null;
+
+  const direct = record[key];
+  if (typeof direct === 'string' && direct.trim().length > 0) return direct.trim();
+  if (depth === 0) return null;
+
+  for (const child of Object.values(record)) {
+    const nested = findNestedStringByKey(child, key, depth - 1);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function toRegime(value: string | null | undefined): Regime | null {
+  if (value === 'compression' || value === 'ranging' || value === 'trending' || value === 'breakout') {
+    return value;
+  }
+  return null;
+}
+
+function toVixRegime(value: string | null): SPXVixRegime | null {
+  if (value === 'normal' || value === 'elevated' || value === 'extreme' || value === 'unknown') {
+    return value;
+  }
+  return null;
+}
+
+function toSetupDetectorGeometryBucket(firstSeenAtIso: string | null): SetupDetectorGeometryBucket {
+  const minuteSinceOpen = toSessionMinuteEt(firstSeenAtIso);
+  if (minuteSinceOpen == null) return 'midday';
+  if (minuteSinceOpen <= 90) return 'opening';
+  if (minuteSinceOpen <= 240) return 'midday';
+  return 'late';
+}
+
+function resolveGeometryStopScaleFromProfile(
+  setup: BacktestSetupCandidate,
+  profile: Record<string, unknown> | null,
+): number | null {
+  const geometryPolicy = getRecord(profile?.geometryPolicy);
+  if (!geometryPolicy) return null;
+  const bySetupType = getRecord(geometryPolicy.bySetupType);
+  const bySetupRegime = getRecord(geometryPolicy.bySetupRegime);
+  const bySetupRegimeTimeBucket = getRecord(geometryPolicy.bySetupRegimeTimeBucket);
+  const regime = setup.regime || 'unknown';
+  const bucket = toGeometryBucket(setup.firstSeenAt);
+  const detectorBucket = toSetupDetectorGeometryBucket(setup.firstSeenAt);
+  const dirSuffix = setup.direction ? `_${setup.direction}` : '';
+
+  const byTypeCandidates = [
+    ...(dirSuffix ? [`${setup.setupType}${dirSuffix}`] : []),
+    setup.setupType,
+  ];
+  let resolved = byTypeCandidates
+    .map((key) => toFiniteNumber(getRecord(bySetupType?.[key])?.stopScale))
+    .find((value): value is number => value != null) ?? null;
+
+  const byRegimeCandidates = [
+    ...(dirSuffix ? [`${setup.setupType}${dirSuffix}|${regime}`] : []),
+    `${setup.setupType}|${regime}`,
+  ];
+  for (const key of byRegimeCandidates) {
+    const candidate = toFiniteNumber(getRecord(bySetupRegime?.[key])?.stopScale);
+    if (candidate != null) {
+      resolved = candidate;
+      break;
+    }
+  }
+
+  const byRegimeBucketCandidates = [
+    ...(dirSuffix ? [
+      `${setup.setupType}${dirSuffix}|${regime}|${bucket}`,
+      `${setup.setupType}${dirSuffix}|${regime}|${detectorBucket}`,
+    ] : []),
+    `${setup.setupType}|${regime}|${bucket}`,
+    `${setup.setupType}|${regime}|${detectorBucket}`,
+  ];
+  for (const key of byRegimeBucketCandidates) {
+    const candidate = toFiniteNumber(getRecord(bySetupRegimeTimeBucket?.[key])?.stopScale);
+    if (candidate != null) {
+      resolved = candidate;
+      break;
+    }
+  }
+
+  return resolved == null ? null : clamp(resolved, 0.2, 4);
+}
+
+function extractStopContextFromMetadata(metadata: Record<string, unknown> | null): BacktestSetupStopContext {
+  if (!metadata) {
+    return {
+      baseStop: null,
+      geometryStopScale: null,
+      atr14: null,
+      netGex: null,
+      vixRegime: null,
+      gexDistanceBp: null,
+      gexCallWall: null,
+      gexPutWall: null,
+      gexFlipPoint: null,
+    };
+  }
+
+  const stopContext = getRecord(metadata.stopContext);
+  const stopEngine = getRecord(metadata.stopEngine);
+  const indicatorContext = getRecord(metadata.indicatorContext);
+  const indicators = getRecord(metadata.indicators);
+  const gexContext = getRecord(metadata.gex);
+  const environmentContext = getRecord(metadata.environmentGate);
+  const geometryPolicy = getRecord(metadata.geometryPolicy);
+
+  const baseStop = (
+    toFiniteNumber(stopContext?.baseStop)
+    ?? toFiniteNumber(stopContext?.base_stop)
+    ?? toFiniteNumber(stopEngine?.baseStop)
+    ?? toFiniteNumber(stopEngine?.base_stop)
+    ?? toFiniteNumber(metadata.baseStop)
+    ?? toFiniteNumber(metadata.base_stop)
+    ?? findNestedNumberByKey(stopContext, 'baseStop', 3)
+    ?? findNestedNumberByKey(stopEngine, 'baseStop', 3)
+    ?? findNestedNumberByKey(metadata, 'baseStop', 4)
+  );
+
+  const geometryStopScale = (
+    toFiniteNumber(stopContext?.geometryStopScale)
+    ?? toFiniteNumber(stopContext?.stopScale)
+    ?? toFiniteNumber(stopEngine?.geometryStopScale)
+    ?? toFiniteNumber(stopEngine?.stopScale)
+    ?? toFiniteNumber(geometryPolicy?.stopScale)
+    ?? toFiniteNumber(metadata.geometryStopScale)
+    ?? toFiniteNumber(metadata.stopScale)
+    ?? findNestedNumberByKey(stopContext, 'geometryStopScale', 3)
+    ?? findNestedNumberByKey(stopEngine, 'geometryStopScale', 3)
+    ?? findNestedNumberByKey(metadata, 'geometryStopScale', 4)
+    ?? findNestedNumberByKey(metadata, 'stopScale', 4)
+  );
+
+  const atr14Candidate = (
+    toFiniteNumber(metadata.atr14)
+    ?? toFiniteNumber(indicatorContext?.atr14)
+    ?? toFiniteNumber(indicators?.atr14)
+    ?? toFiniteNumber(stopContext?.atr14)
+    ?? toFiniteNumber(stopEngine?.atr14)
+    ?? findNestedNumberByKey(metadata, 'atr14', 4)
+  );
+
+  const netGex = (
+    toFiniteNumber(metadata.netGex)
+    ?? toFiniteNumber(stopContext?.netGex)
+    ?? toFiniteNumber(stopEngine?.netGex)
+    ?? toFiniteNumber(gexContext?.netGex)
+    ?? findNestedNumberByKey(metadata, 'netGex', 4)
+  );
+
+  const gexDistanceBp = (
+    toFiniteNumber(metadata.gexDistanceBp)
+    ?? toFiniteNumber(stopContext?.gexDistanceBp)
+    ?? toFiniteNumber(stopEngine?.gexDistanceBp)
+    ?? findNestedNumberByKey(metadata, 'gexDistanceBp', 4)
+  );
+
+  const gexCallWall = (
+    toFiniteNumber(metadata.gexCallWall)
+    ?? toFiniteNumber(stopContext?.gexCallWall)
+    ?? toFiniteNumber(gexContext?.callWall)
+    ?? findNestedNumberByKey(metadata, 'callWall', 4)
+  );
+  const gexPutWall = (
+    toFiniteNumber(metadata.gexPutWall)
+    ?? toFiniteNumber(stopContext?.gexPutWall)
+    ?? toFiniteNumber(gexContext?.putWall)
+    ?? findNestedNumberByKey(metadata, 'putWall', 4)
+  );
+  const gexFlipPoint = (
+    toFiniteNumber(metadata.gexFlipPoint)
+    ?? toFiniteNumber(stopContext?.gexFlipPoint)
+    ?? toFiniteNumber(gexContext?.flipPoint)
+    ?? findNestedNumberByKey(metadata, 'flipPoint', 4)
+  );
+
+  const vixRegime = toVixRegime(
+    (
+      typeof stopContext?.vixRegime === 'string'
+        ? stopContext.vixRegime
+        : null
+    ) || (
+      typeof stopEngine?.vixRegime === 'string'
+        ? stopEngine.vixRegime
+        : null
+    ) || (
+      typeof metadata.vixRegime === 'string'
+        ? metadata.vixRegime
+        : null
+    ) || (
+      typeof environmentContext?.vixRegime === 'string'
+        ? environmentContext.vixRegime
+        : null
+    ) || findNestedStringByKey(metadata, 'vixRegime', 4),
+  );
+
+  return {
+    baseStop,
+    geometryStopScale,
+    atr14: atr14Candidate != null && atr14Candidate > 0 ? atr14Candidate : null,
+    netGex,
+    vixRegime,
+    gexDistanceBp,
+    gexCallWall,
+    gexPutWall,
+    gexFlipPoint,
+  };
+}
+
+function recomputeStopPriceForBacktestSetup(input: {
+  setup: BacktestSetupCandidate;
+  optimizerProfile: Record<string, unknown> | null;
+}): RecomputeStopResult {
+  const stopContext = extractStopContextFromMetadata(input.setup.metadata);
+  const setupRegime = toRegime(input.setup.regime);
+  const profileStopScale = resolveGeometryStopScaleFromProfile(input.setup, input.optimizerProfile);
+  const hasBaseStopMetadata = stopContext.baseStop != null;
+
+  // If no persisted pre-adaptive base stop is available, avoid reapplying scale factors
+  // on top of an already-scaled persisted stop.
+  const geometryStopScale = clamp(
+    hasBaseStopMetadata
+      ? (stopContext.geometryStopScale ?? profileStopScale ?? 1)
+      : 1,
+    0.2,
+    4,
+  );
+  const entryMid = (input.setup.entryLow + input.setup.entryHigh) / 2;
+  const gexDistanceBp = stopContext.gexDistanceBp
+    ?? deriveNearestGEXDistanceBp({
+      referencePrice: entryMid,
+      callWall: stopContext.gexCallWall,
+      putWall: stopContext.gexPutWall,
+      flipPoint: stopContext.gexFlipPoint,
+    });
+
+  const recomputed = calculateAdaptiveStop({
+    direction: input.setup.direction,
+    entryLow: input.setup.entryLow,
+    entryHigh: input.setup.entryHigh,
+    baseStop: hasBaseStopMetadata ? (stopContext.baseStop as number) : input.setup.stopPrice,
+    geometryStopScale,
+    atr14: stopContext.atr14,
+    atrStopFloorEnabled: DEFAULT_STOP_RECOMPUTE_PARAMS.atrStopFloorEnabled,
+    atrStopMultiplier: DEFAULT_STOP_RECOMPUTE_PARAMS.atrStopMultiplier,
+    regime: setupRegime,
+    netGex: hasBaseStopMetadata ? stopContext.netGex : null,
+    setupType: input.setup.setupType,
+    vixRegime: hasBaseStopMetadata ? stopContext.vixRegime : null,
+    vixStopScalingEnabled: hasBaseStopMetadata
+      ? DEFAULT_STOP_RECOMPUTE_PARAMS.vixStopScalingEnabled
+      : false,
+    gexDistanceBp: hasBaseStopMetadata ? gexDistanceBp : null,
+    gexMagnitudeScalingEnabled: hasBaseStopMetadata
+      ? DEFAULT_STOP_RECOMPUTE_PARAMS.gexMagnitudeScalingEnabled
+      : false,
+  });
+
+  return {
+    stopPrice: recomputed.stop,
+    changed: Math.abs(recomputed.stop - input.setup.stopPrice) >= 0.0001,
+    usedBaseStopMetadata: hasBaseStopMetadata,
+    usedProfileStopScaleFallback: hasBaseStopMetadata
+      && stopContext.geometryStopScale == null
+      && profileStopScale != null,
+    atrAvailable: stopContext.atr14 != null,
+  };
+}
+
 export interface SPXWinRateBacktestResult {
   dateRange: { from: string; to: string };
   sourceUsed: InternalBacktestSource | 'none';
@@ -306,12 +649,15 @@ function parseStringSet(value: unknown): Set<string> {
 
 async function loadBacktestPauseFilters(input: {
   includePausedSetups: boolean;
+  requireOptimizerProfile?: boolean;
 }): Promise<BacktestPauseFilters> {
-  if (input.includePausedSetups) {
+  const requireOptimizerProfile = input.requireOptimizerProfile === true;
+  if (input.includePausedSetups && !requireOptimizerProfile) {
     return {
       pausedSetupTypes: new Set(),
       pausedCombos: new Set(),
       notes: [],
+      optimizerProfile: null,
     };
   }
 
@@ -329,6 +675,7 @@ async function loadBacktestPauseFilters(input: {
         notes: [
           'SPX optimizer state table unavailable; paused setup filters were not applied to backtest rows.',
         ],
+        optimizerProfile: null,
       };
     }
     logger.warn('SPX backtest failed to load optimizer pause filters', {
@@ -340,6 +687,7 @@ async function loadBacktestPauseFilters(input: {
       notes: [
         `Failed to load optimizer pause filters: ${error.message}`,
       ],
+      optimizerProfile: null,
     };
   }
 
@@ -352,6 +700,7 @@ async function loadBacktestPauseFilters(input: {
       pausedSetupTypes: new Set(),
       pausedCombos: new Set(),
       notes: [],
+      optimizerProfile: null,
     };
   }
 
@@ -363,9 +712,14 @@ async function loadBacktestPauseFilters(input: {
     : null;
 
   return {
-    pausedSetupTypes: parseStringSet(driftControl?.pausedSetupTypes),
-    pausedCombos: parseStringSet(regimeGate?.pausedCombos),
+    pausedSetupTypes: input.includePausedSetups
+      ? new Set()
+      : parseStringSet(driftControl?.pausedSetupTypes),
+    pausedCombos: input.includePausedSetups
+      ? new Set()
+      : parseStringSet(regimeGate?.pausedCombos),
     notes: [],
+    optimizerProfile: profile,
   };
 }
 
@@ -379,11 +733,15 @@ async function loadSetupsFromInstances(input: {
   includeBlockedSetups?: boolean;
   includeHiddenTiers?: boolean;
   includePausedSetups?: boolean;
-}): Promise<{ setups: BacktestSetupCandidate[]; notes: string[]; tableMissing: boolean }> {
+  requireOptimizerProfile?: boolean;
+}): Promise<{ setups: BacktestSetupCandidate[]; notes: string[]; tableMissing: boolean; optimizerProfile: Record<string, unknown> | null }> {
   const includeBlockedSetups = input.includeBlockedSetups === true;
   const includeHiddenTiers = input.includeHiddenTiers === true;
   const includePausedSetups = input.includePausedSetups === true;
-  const pauseFilters = await loadBacktestPauseFilters({ includePausedSetups });
+  const pauseFilters = await loadBacktestPauseFilters({
+    includePausedSetups,
+    requireOptimizerProfile: input.requireOptimizerProfile,
+  });
   const { data, error } = await supabase
     .from('spx_setup_instances')
     .select(
@@ -415,6 +773,7 @@ async function loadSetupsFromInstances(input: {
         ? 'spx_setup_instances table is not available in the connected Supabase project.'
         : `Failed to load spx_setup_instances: ${error.message}`],
       tableMissing,
+      optimizerProfile: pauseFilters.optimizerProfile,
     };
   }
 
@@ -494,6 +853,7 @@ async function loadSetupsFromInstances(input: {
       firstSeenAt: typeof row.first_seen_at === 'string' ? row.first_seen_at : null,
       triggeredAt: typeof row.triggered_at === 'string' ? row.triggered_at : null,
       tradeManagement,
+      metadata,
     });
   }
 
@@ -518,6 +878,7 @@ async function loadSetupsFromInstances(input: {
     setups,
     notes,
     tableMissing: false,
+    optimizerProfile: pauseFilters.optimizerProfile,
   };
 }
 
@@ -1001,11 +1362,13 @@ export async function runSPXWinRateBacktest(input: {
   includePausedSetups?: boolean;
   geometryBySetupType?: Record<string, SPXBacktestGeometryAdjustment>;
   executionModel?: Partial<SPXBacktestExecutionModel>;
+  recomputeStops?: boolean;
 }): Promise<SPXWinRateBacktestResult> {
   const from = normalizeDateInput(input.from);
   const to = normalizeDateInput(input.to);
   const resolution = input.resolution || 'second';
   const includeRows = input.includeRows === true;
+  const recomputeStops = input.recomputeStops === true;
   const executionModel = resolveExecutionModel(input.executionModel);
   const notes: string[] = [];
 
@@ -1020,6 +1383,7 @@ export async function runSPXWinRateBacktest(input: {
     includeBlockedSetups: input.includeBlockedSetups,
     includeHiddenTiers: input.includeHiddenTiers,
     includePausedSetups: input.includePausedSetups,
+    requireOptimizerProfile: recomputeStops,
   });
   notes.push(...instanceLoad.notes);
   selectedSource = 'spx_setup_instances';
@@ -1071,6 +1435,56 @@ export async function runSPXWinRateBacktest(input: {
     });
     if (geometryAdjustedCount > 0) {
       notes.push(`Applied geometry adjustments to ${geometryAdjustedCount} setups via geometryBySetupType.`);
+    }
+  }
+
+  if (recomputeStops) {
+    const optimizerProfile = instanceLoad.optimizerProfile;
+    let recomputeChangedCount = 0;
+    let recomputeUsedBaseStopMetadataCount = 0;
+    let recomputeUsedProfileStopScaleFallbackCount = 0;
+    let recomputeAtrAvailableCount = 0;
+
+    setups = setups.map((setup) => {
+      const recomputed = recomputeStopPriceForBacktestSetup({
+        setup,
+        optimizerProfile,
+      });
+      if (recomputed.changed) recomputeChangedCount += 1;
+      if (recomputed.usedBaseStopMetadata) recomputeUsedBaseStopMetadataCount += 1;
+      if (recomputed.usedProfileStopScaleFallback) recomputeUsedProfileStopScaleFallbackCount += 1;
+      if (recomputed.atrAvailable) recomputeAtrAvailableCount += 1;
+      return {
+        ...setup,
+        stopPrice: recomputed.stopPrice,
+      };
+    });
+
+    notes.push(
+      `Recomputed adaptive stops for ${setups.length} setups (changed ${recomputeChangedCount} stop prices).`,
+    );
+    if (recomputeUsedBaseStopMetadataCount > 0) {
+      notes.push(
+        `Recompute used persisted base-stop metadata for ${recomputeUsedBaseStopMetadataCount} setups.`,
+      );
+    } else {
+      notes.push(
+        'Recompute fallback: no persisted base-stop metadata found, so persisted stop_price was used as the base stop with neutral non-ATR scaling.',
+      );
+    }
+    if (recomputeUsedProfileStopScaleFallbackCount > 0) {
+      notes.push(
+        `Recompute used optimizer-profile geometry stopScale fallback for ${recomputeUsedProfileStopScaleFallbackCount} setups.`,
+      );
+    } else if (!optimizerProfile) {
+      notes.push(
+        'Optimizer profile unavailable during recompute; geometry stopScale fallback remained at 1 when setup metadata was missing.',
+      );
+    }
+    if (recomputeAtrAvailableCount === 0) {
+      notes.push(
+        'No ATR14 metadata found in recomputed setups; regime-aware ATR floor could not materially adjust stop distances for this dataset.',
+      );
     }
   }
 
@@ -1139,4 +1553,5 @@ export const __testables = {
   evaluateSetupAgainstBars,
   findEntryTriggerPrice,
   buildBarPath,
+  recomputeStopPriceForBacktestSetup,
 };

@@ -30,6 +30,7 @@ function baseSetup(overrides: Partial<Candidate> = {}): Candidate {
     firstSeenAt: '2026-02-20T14:30:00.000Z',
     triggeredAt: null,
     tradeManagement: null,
+    metadata: null,
     ...overrides,
   };
 }
@@ -201,5 +202,59 @@ describe('spx/winRateBacktest evaluateSetupAgainstBars', () => {
 
     expect(result.row.final_outcome).toBe('t1_before_stop');
     expect(result.row.realized_r).toBeCloseTo(1.0, 4);
+  });
+});
+
+describe('spx/winRateBacktest recomputeStopPriceForBacktestSetup', () => {
+  it('widens stop when ATR floor exceeds persisted risk and no metadata baseStop is available', () => {
+    const setup = baseSetup({
+      setupType: 'trend_pullback',
+      regime: 'trending',
+      stopPrice: 100.2,
+      metadata: {
+        atr14: 2.5,
+      },
+    });
+
+    const result = __testables.recomputeStopPriceForBacktestSetup({
+      setup,
+      optimizerProfile: null,
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.usedBaseStopMetadata).toBe(false);
+    expect(result.atrAvailable).toBe(true);
+    expect(result.stopPrice).toBeLessThan(setup.stopPrice);
+  });
+
+  it('uses persisted base stop metadata and profile stopScale fallback when available', () => {
+    const setup = baseSetup({
+      setupType: 'trend_pullback',
+      regime: 'trending',
+      stopPrice: 99.5,
+      metadata: {
+        stopContext: {
+          baseStop: 100.1,
+          atr14: 2.2,
+        },
+      },
+    });
+
+    const result = __testables.recomputeStopPriceForBacktestSetup({
+      setup,
+      optimizerProfile: {
+        geometryPolicy: {
+          bySetupType: {
+            trend_pullback: {
+              stopScale: 1.2,
+            },
+          },
+        },
+      },
+    });
+
+    expect(result.usedBaseStopMetadata).toBe(true);
+    expect(result.usedProfileStopScaleFallback).toBe(true);
+    expect(result.stopPrice).toBeLessThan(setup.stopPrice);
   });
 });
