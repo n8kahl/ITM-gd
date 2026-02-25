@@ -221,6 +221,16 @@ describe('spx/outcomeTracker touch persistence', () => {
         direction: 'bullish',
         entryZone: { low: 5000, high: 5001 },
         stop: 4998.5,
+        baseStop: 4998.9,
+        geometryStopScale: 1.05,
+        atr14: 12.7,
+        vixRegime: 'low',
+        netGex: 1250000,
+        gexNet: 1250000,
+        gexDistanceBp: 2.8,
+        gexCallWall: 5020,
+        gexPutWall: 4980,
+        gexFlipPoint: 5005,
         target1: { price: 5003, label: 'Target 1' },
         target2: { price: 5005, label: 'Target 2' },
         confluenceScore: 4,
@@ -253,6 +263,30 @@ describe('spx/outcomeTracker touch persistence', () => {
       } as any,
     ], {
       observedAt: '2026-02-23T14:31:30.000Z',
+    });
+
+    expect(setupInstancesTable.upsert).toHaveBeenCalledTimes(1);
+    const [trackedRows] = setupInstancesTable.upsert.mock.calls[0];
+    expect(Array.isArray(trackedRows)).toBe(true);
+    expect(trackedRows[0]?.metadata).toMatchObject({
+      atr14: 12.7,
+      baseStop: 4998.9,
+      geometryStopScale: 1.05,
+      vixRegime: 'low',
+      netGex: 1250000,
+      gexNet: 1250000,
+      gexDistanceBp: 2.8,
+      gexCallWall: 5020,
+      gexPutWall: 4980,
+      gexFlipPoint: 5005,
+      stopContext: {
+        atr14: 12.7,
+        baseStop: 4998.9,
+        geometryStopScale: 1.05,
+        vixRegime: 'low',
+        netGex: 1250000,
+        gexDistanceBp: 2.8,
+      },
     });
 
     expect(levelTouchesTable.upsert).toHaveBeenCalledTimes(1);
