@@ -41,6 +41,7 @@ interface SetupRuntimeState {
   lastTransitionAtMs: number;
   stopBreachStreak: number;
   sequence: number;
+  previousTickPrice: number | null;
 }
 
 const DEFAULT_MIN_TRANSITION_GAP_MS = 1000;
@@ -77,8 +78,18 @@ function toSetupStatus(phase: TransitionPhase): Setup['status'] {
   return 'ready';
 }
 
-function isInsideEntryZone(setup: Setup, price: number): boolean {
-  return price >= setup.entryZone.low && price <= setup.entryZone.high;
+function isInsideEntryZone(setup: Setup, price: number, prevPrice?: number | null): boolean {
+  if (price >= setup.entryZone.low && price <= setup.entryZone.high) {
+    return true;
+  }
+
+  if (prevPrice == null) return false;
+
+  if (setup.direction === 'bullish') {
+    return prevPrice > setup.entryZone.high && price < setup.entryZone.low;
+  }
+
+  return prevPrice < setup.entryZone.low && price > setup.entryZone.high;
 }
 
 function stopBreached(setup: Setup, price: number, phase: TransitionPhase): boolean {
@@ -138,12 +149,13 @@ function resolveTransition(
   phase: TransitionPhase,
   setup: Setup,
   price: number,
+  prevPrice?: number | null,
 ): { toPhase: TransitionPhase; reason: SetupTransitionEvent['reason'] } | null {
   if (phase === 'ready') {
     if (stopBreached(setup, price, phase)) {
       return { toPhase: 'invalidated', reason: 'stop' };
     }
-    if (isInsideEntryZone(setup, price)) {
+    if (isInsideEntryZone(setup, price, prevPrice)) {
       return { toPhase: 'triggered', reason: 'entry' };
     }
     return null;
@@ -189,6 +201,7 @@ export function syncTickEvaluatorSetups(setups: Setup[]): void {
         lastTransitionAtMs: 0,
         stopBreachStreak: 0,
         sequence: 0,
+        previousTickPrice: null,
       });
       continue;
     }
@@ -245,6 +258,8 @@ export function evaluateTickSetupTransitions(
   for (const state of setupStateById.values()) {
     if (TERMINAL_PHASES.has(state.phase)) continue;
     if (tick.symbol !== 'SPX') continue;
+    const prevPrice = state.previousTickPrice;
+    state.previousTickPrice = tick.price;
 
     if (stopBreached(state.setup, tick.price, state.phase)) {
       state.stopBreachStreak += 1;
@@ -252,7 +267,7 @@ export function evaluateTickSetupTransitions(
       state.stopBreachStreak = 0;
     }
 
-    const transition = resolveTransition(state.phase, state.setup, tick.price);
+    const transition = resolveTransition(state.phase, state.setup, tick.price, prevPrice);
     if (!transition) continue;
     if (transition.toPhase === 'invalidated' && transition.reason === 'stop' && state.stopBreachStreak < minStopBreachTicks) {
       continue;
