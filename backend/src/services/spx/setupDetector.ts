@@ -91,6 +91,7 @@ const DEFAULT_SNIPER_PRIMARY_EV_R = 0.35;
 const DEFAULT_SNIPER_SECONDARY_EV_R = 0.2;
 const DEFAULT_MIN_SETUP_SCORE_FLOOR = 65;
 const DEFAULT_LATE_SESSION_HARD_GATE_MINUTE_ET = 270;
+const SHADOW_GATE_MIN_CONFLUENCE_SCORE = 2.995;
 const EMA_FAST_PERIOD = 21;
 const EMA_SLOW_PERIOD = 55;
 const EMA_MIN_BARS = 8;
@@ -346,11 +347,22 @@ type LevelData = {
   generatedAt: string;
 };
 const WIN_RATE_BY_SCORE: Record<number, number> = {
-  1: 35,
-  2: 45,
-  3: 58,
-  4: 71,
-  5: 82,
+  1: 40,
+  2: 50,
+  3: 55,
+  4: 57,
+  5: 60,
+};
+const SETUP_TYPE_WIN_ADJUSTMENT: Partial<Record<SetupType, number>> = {
+  fade_at_wall: 0.12,
+  flip_reclaim: 0.08,
+  mean_reversion: 0,
+  trend_pullback: -0.05,
+  orb_breakout: -0.10,
+  breakout_vacuum: -0.12,
+  trend_continuation: 0,
+  vwap_reclaim: 0,
+  vwap_fade_at_band: 0,
 };
 
 function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
@@ -372,6 +384,13 @@ function parseFloatEnv(value: string | undefined, fallback: number, minimum = 0)
   if (typeof value !== 'string') return fallback;
   const parsed = Number.parseFloat(value);
   if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(parsed, minimum);
+}
+
+function parseOptionalFloatEnv(value: string | undefined, minimum = 0): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return undefined;
   return Math.max(parsed, minimum);
 }
 
@@ -2025,11 +2044,10 @@ function applyStopGeometryPolicy(input: {
   gexFlipPoint?: number;
 }): number {
   const atrStopFloorEnabled = parseBooleanEnv(process.env.SPX_SETUP_ATR_STOP_FLOOR_ENABLED, true);
-  const atrStopMultiplier = clamp(
-    parseFloatEnv(process.env.SPX_SETUP_ATR_STOP_MULTIPLIER, 0.9, 0.1),
-    0.1,
-    3,
-  );
+  const atrStopMultiplierOverride = parseOptionalFloatEnv(process.env.SPX_SETUP_ATR_STOP_MULTIPLIER, 0.1);
+  const atrStopMultiplier = atrStopMultiplierOverride == null
+    ? undefined
+    : clamp(atrStopMultiplierOverride, 0.1, 3);
   const vixStopScalingEnabled = parseBooleanEnv(process.env.SPX_SETUP_VIX_STOP_SCALING_ENABLED, true);
   const gexMagnitudeScalingEnabled = parseBooleanEnv(
     process.env.SPX_SETUP_GEX_MAGNITUDE_STOP_SCALING_ENABLED,
@@ -2767,7 +2785,7 @@ export async function detectActiveSetups(options?: {
 
   const sessionDate = toEasternTime(evaluationDate).dateStr;
 
-  const setups: Setup[] = await Promise.all(candidateZones.map(async ({ zone, quality }) => {
+  const setupResults = await Promise.all(candidateZones.map(async ({ zone, quality }) => {
     const direction = setupDirection(zone, currentPrice);
     const zoneCenter = (zone.priceLow + zone.priceHigh) / 2;
     const regimeConflict = hasRegimeConflict(
@@ -3035,6 +3053,12 @@ export async function detectActiveSetups(options?: {
     const baseStop = direction === 'bullish'
       ? round(zone.priceLow - stopBuffer, 2)
       : round(zone.priceHigh + stopBuffer, 2);
+    const gexDistanceBp = deriveNearestGEXDistanceBp({
+      referencePrice: entryMid,
+      callWall: gex.combined.callWall,
+      putWall: gex.combined.putWall,
+      flipPoint: gex.combined.flipPoint,
+    });
     const derivedStop = applyStopGeometryPolicy({
       direction,
       entryLow,
@@ -3223,7 +3247,8 @@ export async function detectActiveSetups(options?: {
       }
       : undefined;
 
-    const baselineWin = (WIN_RATE_BY_SCORE[confluenceScore] || 32) / 100;
+    const setupTypeAdj = SETUP_TYPE_WIN_ADJUSTMENT[setupType] ?? 0;
+    const baselineWin = ((WIN_RATE_BY_SCORE[confluenceScore] || 32) / 100) + setupTypeAdj;
     const scoreAdjustment = (finalScore - 50) / 220;
     const flowAdjustment = alignmentPct == null ? 0 : ((alignmentPct - 50) / 240);
     const pWinCalibrated = clamp(
@@ -3279,12 +3304,18 @@ export async function detectActiveSetups(options?: {
       vwapPrice: indicatorContext?.vwapPrice,
       vwapDeviation: indicatorContext?.vwapDeviation,
     });
-    const gateStatus: Setup['gateStatus'] = gateReasons.length > 0 ? 'blocked' : 'eligible';
-    const gatedStatus: Setup['status'] = gateStatus === 'blocked' ? 'forming' : lifecycle.status;
-    const gatedTriggeredAt = gateStatus === 'blocked' && !previous?.triggeredAt
+    const isGateBlocked = gateReasons.length > 0;
+    const isShadowBlocked = isGateBlocked && confluenceScore >= SHADOW_GATE_MIN_CONFLUENCE_SCORE;
+    const gateStatus: Setup['gateStatus'] = isShadowBlocked
+      ? 'shadow_blocked'
+      : isGateBlocked
+        ? 'blocked'
+        : 'eligible';
+    const gatedStatus: Setup['status'] = isGateBlocked ? 'forming' : lifecycle.status;
+    const gatedTriggeredAt = isGateBlocked && !previous?.triggeredAt
       ? null
       : triggeredAt;
-    const gatedLifecycle = gateStatus === 'blocked'
+    const gatedLifecycle = isGateBlocked
       ? resolveLifecycleMetadata({
         nowMs,
         currentStatus: 'forming',
@@ -3303,7 +3334,7 @@ export async function detectActiveSetups(options?: {
         config: scoringConfig,
       })
       : (gatedStatus === 'ready' || gatedStatus === 'triggered') ? 'watchlist' : 'hidden';
-    const gatedTier = gateStatus === 'blocked'
+    const gatedTier = isGateBlocked
       ? 'hidden'
       : (gatedStatus === 'triggered' && tier === 'hidden')
         ? 'watchlist'
@@ -3366,13 +3397,23 @@ export async function detectActiveSetups(options?: {
       ? `Trigger ${triggerContext.triggerBarPatternType} ${Math.round(triggerContext.triggerLatencyMs / 1000)}s ago`
       : null;
 
-    return {
+    const setup: Setup = {
       id: setupId,
       stableIdHash: resolvedStableIdHash,
       type: setupType,
       direction,
       entryZone: { low: entryLow, high: entryHigh },
       stop,
+      baseStop,
+      geometryStopScale: geometryPolicy.stopScale,
+      atr14: indicatorContext?.atr14 ?? null,
+      vixRegime: environmentGate?.vixRegime ?? 'unknown',
+      netGex: gex.combined.netGex,
+      gexNet: gex.combined.netGex,
+      gexDistanceBp,
+      gexCallWall: gex.combined.callWall,
+      gexPutWall: gex.combined.putWall,
+      gexFlipPoint: gex.combined.flipPoint,
       target1: { price: target1, label: 'Target 1' },
       target2: { price: target2, label: 'Target 2' },
       confluenceScore,
@@ -3480,7 +3521,17 @@ export async function detectActiveSetups(options?: {
         && indicatorContext.minutesSinceOpen <= ORB_GRACE_MAX_FIRST_SEEN_MINUTE
       ) || undefined,
     };
+
+    return {
+      setup: isShadowBlocked ? null : setup,
+      shadowSetup: isShadowBlocked ? setup : null,
+    };
   }));
+
+  const shadowBlockedSetups: Setup[] = setupResults
+    .flatMap((result) => (result.shadowSetup ? [result.shadowSetup] : []));
+  const setups: Setup[] = setupResults
+    .flatMap((result) => (result.setup ? [result.setup] : []));
 
   // Preserve recently active setups that dropped from the candidate list as expired.
   const setupIds = new Set(setups.map((setup) => setup.id));
@@ -3567,6 +3618,19 @@ export async function detectActiveSetups(options?: {
         error: error instanceof Error ? error.message : String(error),
       });
     });
+
+    if (shadowBlockedSetups.length > 0) {
+      logger.info('SPX shadow-blocked setup persistence batch', {
+        setupCount: shadowBlockedSetups.length,
+        minConfluenceScore: SHADOW_GATE_MIN_CONFLUENCE_SCORE,
+      });
+      await persistSetupInstancesForWinRate(shadowBlockedSetups).catch((error) => {
+        logger.warn('SPX shadow-blocked setup persistence failed', {
+          setupCount: shadowBlockedSetups.length,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
   }
 
   const invalidationReasons = rankedSetups
@@ -3598,6 +3662,7 @@ export async function detectActiveSetups(options?: {
     watchlist: rankedSetups.filter((setup) => setup.tier === 'watchlist').length,
     hidden: rankedSetups.filter((setup) => setup.tier === 'hidden').length,
     optimizerBlocked: rankedSetups.filter((setup) => setup.gateStatus === 'blocked').length,
+    optimizerShadowBlocked: shadowBlockedSetups.length,
     diversificationEnabled: diversificationConfig.enabled,
     diversificationRecoveryCombosEnabled: diversificationConfig.allowRecoveryCombos,
     diversificationFadeReadyMaxShare: diversificationConfig.fadeReadyMaxShare,

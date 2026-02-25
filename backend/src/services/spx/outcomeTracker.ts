@@ -83,6 +83,29 @@ function toSessionDate(value: string | null | undefined): string {
 }
 
 function toTrackedRow(setup: Setup, observedAt: string) {
+  const atr14 = setup.atr14 ?? null;
+  const baseStop = setup.baseStop ?? null;
+  const geometryStopScale = setup.geometryStopScale ?? null;
+  const vixRegime = setup.vixRegime ?? null;
+  const netGex = setup.netGex ?? setup.gexNet ?? null;
+  const gexNet = setup.gexNet ?? setup.netGex ?? null;
+  const gexDistanceBp = setup.gexDistanceBp ?? null;
+  const gexCallWall = setup.gexCallWall ?? null;
+  const gexPutWall = setup.gexPutWall ?? null;
+  const gexFlipPoint = setup.gexFlipPoint ?? null;
+
+  const stopContext = {
+    baseStop,
+    geometryStopScale,
+    atr14,
+    netGex,
+    vixRegime,
+    gexDistanceBp,
+    gexCallWall,
+    gexPutWall,
+    gexFlipPoint,
+  };
+
   return {
     engine_setup_id: setup.id,
     session_date: toSessionDate(setup.createdAt || observedAt),
@@ -130,6 +153,36 @@ function toTrackedRow(setup: Setup, observedAt: string) {
       volumeTrend: setup.volumeTrend ?? null,
       minutesSinceOpen: setup.minutesSinceOpen ?? null,
       emaFastSlope: setup.emaFastSlope ?? null,
+      atr14,
+      baseStop,
+      geometryStopScale,
+      vixRegime,
+      netGex,
+      gexNet,
+      gexDistanceBp,
+      gexCallWall,
+      gexPutWall,
+      gexFlipPoint,
+      stopContext,
+      stopEngine: stopContext,
+      geometryPolicy: {
+        stopScale: geometryStopScale,
+      },
+      indicators: {
+        atr14,
+      },
+      indicatorContext: {
+        atr14,
+      },
+      gex: {
+        netGex,
+        callWall: gexCallWall,
+        putWall: gexPutWall,
+        flipPoint: gexFlipPoint,
+      },
+      environmentGate: {
+        vixRegime,
+      },
       microstructureSnapshot: setup.microstructureSnapshot ?? null,
     },
     updated_at: observedAt,

@@ -496,7 +496,7 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
   generatedAt: new Date(0).toISOString(),
   qualityGate: {
     minConfluenceScore: 3,
-    minPWinCalibrated: 0.62,
+    minPWinCalibrated: 0.58,
     minEvR: 0.2,
     actionableStatuses: ['ready', 'triggered'],
   },
