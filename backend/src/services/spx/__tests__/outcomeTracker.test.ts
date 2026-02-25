@@ -1,5 +1,7 @@
 import { supabase } from '../../../config/database';
 import { persistSetupInstancesForWinRate, summarizeSPXWinRateRows } from '../outcomeTracker';
+import type { SetupInstanceRow } from '../outcomeTracker';
+import type { Setup } from '../types';
 
 jest.mock('../../../config/database', () => ({
   supabase: {
@@ -300,5 +302,212 @@ describe('spx/outcomeTracker touch persistence', () => {
       candle_pattern: 'hammer',
       volume: 1400,
     });
+  });
+});
+
+describe('spx/outcomeTracker outcome classification edges', () => {
+  const mockFrom = supabase.from as jest.MockedFunction<typeof supabase.from>;
+
+  function makeSetup(overrides?: Partial<Setup>): Setup {
+    return {
+      id: 'setup-1',
+      type: 'mean_reversion',
+      direction: 'bullish',
+      entryZone: { low: 5000, high: 5001 },
+      stop: 4998.5,
+      target1: { price: 5003, label: 'Target 1' },
+      target2: { price: 5005, label: 'Target 2' },
+      confluenceScore: 4,
+      confluenceSources: ['ema_alignment'],
+      clusterZone: {
+        id: 'zone-1',
+        priceLow: 5000,
+        priceHigh: 5001,
+        clusterScore: 4,
+        type: 'defended',
+        sources: [],
+        testCount: 0,
+        lastTestAt: null,
+        held: null,
+        holdRate: null,
+      },
+      regime: 'ranging',
+      status: 'triggered',
+      probability: 63,
+      recommendedContract: null,
+      createdAt: '2026-02-24T14:30:00.000Z',
+      triggeredAt: '2026-02-24T14:31:00.000Z',
+      ...overrides,
+    };
+  }
+
+  function makeTrackedRow(overrides?: Partial<SetupInstanceRow>): SetupInstanceRow {
+    return {
+      id: 'instance-1',
+      engine_setup_id: 'setup-1',
+      session_date: '2026-02-24',
+      setup_type: 'mean_reversion',
+      direction: 'bullish',
+      regime: 'ranging',
+      tier: 'sniper_primary',
+      triggered_at: '2026-02-24T14:31:00.000Z',
+      final_outcome: null,
+      t1_hit_at: null,
+      t2_hit_at: null,
+      stop_hit_at: null,
+      ...overrides,
+    };
+  }
+
+  function installPersistenceMocks(trackedRows: SetupInstanceRow[]) {
+    const setupInstancesTable = {
+      upsert: jest.fn().mockResolvedValue({ error: null }),
+      select: jest.fn(),
+      in: jest.fn().mockResolvedValue({ data: trackedRows, error: null }),
+      update: jest.fn(),
+      eq: jest.fn(),
+    };
+    setupInstancesTable.select.mockReturnValue(setupInstancesTable as any);
+    setupInstancesTable.update.mockReturnValue(setupInstancesTable as any);
+    setupInstancesTable.eq.mockReturnValue(setupInstancesTable as any);
+
+    const levelTouchesTable = {
+      upsert: jest.fn().mockResolvedValue({ error: null }),
+    };
+
+    mockFrom.mockImplementation(((table: string) => {
+      if (table === 'spx_setup_instances') return setupInstancesTable as any;
+      if (table === 'spx_level_touches') return levelTouchesTable as any;
+      throw new Error(`Unexpected table ${table}`);
+    }) as any);
+
+    return {
+      setupInstancesTable,
+      levelTouchesTable,
+    };
+  }
+
+  beforeEach(() => {
+    mockFrom.mockReset();
+  });
+
+  it('classifies triggered + target1 + stop as t1_before_stop', async () => {
+    const { setupInstancesTable } = installPersistenceMocks([
+      makeTrackedRow({
+        t1_hit_at: '2026-02-24T14:33:00.000Z',
+        stop_hit_at: '2026-02-24T14:35:00.000Z',
+      }),
+    ]);
+
+    await persistSetupInstancesForWinRate([
+      makeSetup({
+        status: 'invalidated',
+        invalidationReason: 'stop_breach_confirmed',
+        statusUpdatedAt: '2026-02-24T14:35:00.000Z',
+      }),
+    ], {
+      observedAt: '2026-02-24T14:36:00.000Z',
+    });
+
+    const [patch] = setupInstancesTable.update.mock.calls[0];
+    expect(patch.final_outcome).toBe('t1_before_stop');
+    expect(patch.final_reason).toBe('stop_after_target1');
+  });
+
+  it('classifies triggered stop-before-target as stop_before_t1', async () => {
+    const { setupInstancesTable } = installPersistenceMocks([makeTrackedRow()]);
+    const statusUpdatedAt = '2026-02-24T14:35:00.000Z';
+
+    await persistSetupInstancesForWinRate([
+      makeSetup({
+        status: 'invalidated',
+        invalidationReason: 'stop_breach_confirmed',
+        statusUpdatedAt,
+      }),
+    ], {
+      observedAt: '2026-02-24T14:36:00.000Z',
+    });
+
+    const [patch] = setupInstancesTable.update.mock.calls[0];
+    expect(patch.stop_hit_at).toBe(statusUpdatedAt);
+    expect(patch.final_outcome).toBe('stop_before_t1');
+    expect(patch.final_reason).toBe('stop_breach_confirmed');
+  });
+
+  it('classifies target2 hit as t2_before_stop', async () => {
+    const { setupInstancesTable } = installPersistenceMocks([
+      makeTrackedRow({
+        t1_hit_at: '2026-02-24T14:33:00.000Z',
+        t2_hit_at: '2026-02-24T14:34:00.000Z',
+      }),
+    ]);
+
+    await persistSetupInstancesForWinRate([
+      makeSetup({
+        status: 'expired',
+        statusUpdatedAt: '2026-02-24T14:35:00.000Z',
+      }),
+    ], {
+      observedAt: '2026-02-24T14:36:00.000Z',
+    });
+
+    const [patch] = setupInstancesTable.update.mock.calls[0];
+    expect(patch.final_outcome).toBe('t2_before_stop');
+    expect(patch.final_reason).toBe('target2_hit');
+  });
+
+  it('classifies triggered-but-unresolved expiry as expired_unresolved', async () => {
+    const { setupInstancesTable } = installPersistenceMocks([makeTrackedRow()]);
+
+    await persistSetupInstancesForWinRate([
+      makeSetup({
+        status: 'expired',
+        statusUpdatedAt: '2026-02-24T14:35:00.000Z',
+      }),
+    ], {
+      observedAt: '2026-02-24T14:36:00.000Z',
+    });
+
+    const [patch] = setupInstancesTable.update.mock.calls[0];
+    expect(patch.final_outcome).toBe('expired_unresolved');
+    expect(patch.final_reason).toBe('expired_without_target_hit');
+  });
+
+  it('does not resolve an outcome when the setup never had a trigger timestamp', async () => {
+    const { setupInstancesTable } = installPersistenceMocks([
+      makeTrackedRow({
+        triggered_at: null,
+      }),
+    ]);
+
+    await persistSetupInstancesForWinRate([
+      makeSetup({
+        status: 'expired',
+        triggeredAt: null,
+        statusUpdatedAt: '2026-02-24T14:35:00.000Z',
+      }),
+    ], {
+      observedAt: '2026-02-24T14:36:00.000Z',
+    });
+
+    expect(setupInstancesTable.update).not.toHaveBeenCalled();
+  });
+
+  it('classifies triggered invalidation without stop as invalidated_other', async () => {
+    const { setupInstancesTable } = installPersistenceMocks([makeTrackedRow()]);
+
+    await persistSetupInstancesForWinRate([
+      makeSetup({
+        status: 'invalidated',
+        invalidationReason: 'regime_conflict',
+        statusUpdatedAt: '2026-02-24T14:35:00.000Z',
+      }),
+    ], {
+      observedAt: '2026-02-24T14:36:00.000Z',
+    });
+
+    const [patch] = setupInstancesTable.update.mock.calls[0];
+    expect(patch.final_outcome).toBe('invalidated_other');
+    expect(patch.final_reason).toBe('regime_conflict');
   });
 });
