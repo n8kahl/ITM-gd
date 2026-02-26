@@ -221,6 +221,8 @@ export interface SPXOptimizerHistoryEntry {
 interface SPXOptimizerScanResponse {
   profile: Record<string, unknown>
   scorecard: SPXOptimizerScorecard
+  /** When true, the scan was computed but NOT persisted to the active profile. */
+  dryRun?: boolean
 }
 
 interface SPXOptimizerHistoryResponse {
@@ -367,7 +369,7 @@ export function useSPXOptimizer() {
     },
   )
 
-  const runScan = useCallback(async () => {
+  const runScan = useCallback(async (options?: { dryRun?: boolean }) => {
     const token = session?.access_token
     if (!token) {
       throw new Error('Session unavailable')
@@ -376,10 +378,15 @@ export function useSPXOptimizer() {
     setIsScanning(true)
     setScanError(null)
     try {
-      const response = await postSPX<SPXOptimizerScanResponse>('/api/spx/analytics/optimizer/scan', token, {})
-      await scorecardQuery.mutate(response.scorecard, { revalidate: false })
-      await scheduleQuery.mutate()
-      await historyQuery.mutate()
+      const response = await postSPX<SPXOptimizerScanResponse>('/api/spx/analytics/optimizer/scan', token, {
+        ...(options?.dryRun ? { dryRun: true } : {}),
+      })
+      // Only update caches if this was NOT a dry run
+      if (!response.dryRun) {
+        await scorecardQuery.mutate(response.scorecard, { revalidate: false })
+        await scheduleQuery.mutate()
+        await historyQuery.mutate()
+      }
       return response
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Optimizer scan failed'

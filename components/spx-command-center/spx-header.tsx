@@ -87,29 +87,32 @@ export function SPXHeader({
 
   return (
     <header
-      className="pointer-events-auto absolute inset-x-0 top-0 z-40 flex items-center justify-between px-5 py-3"
+      className="pointer-events-auto absolute inset-x-0 top-0 z-40 flex items-center justify-between px-3 py-2 md:px-5 md:py-3"
       style={{
         background: 'linear-gradient(180deg, rgba(10,10,11,0.88) 0%, rgba(10,10,11,0.4) 70%, transparent 100%)',
         backdropFilter: 'blur(8px)',
       }}
       data-testid="spx-header-overlay"
     >
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
-          <span className="font-serif text-sm font-bold tracking-wider text-white">
+      <div className="flex min-w-0 items-center gap-2 md:gap-4">
+        <div className="flex items-center gap-1.5 md:gap-2">
+          <div className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+          <span className="hidden font-serif text-sm font-bold tracking-wider text-white md:inline">
             SPX Command Center
           </span>
+          <span className="font-serif text-xs font-bold tracking-wider text-white md:hidden">
+            SPX
+          </span>
         </div>
-        <div className="h-4 w-px bg-white/10" />
-        <span className="font-mono text-lg font-bold text-white">
-          {spxPrice > 0 ? `SPX ${spxPrice.toFixed(2)}` : 'SPX --'}
+        <div className="hidden h-4 w-px bg-white/10 md:block" />
+        <span className="font-mono text-sm font-bold text-white md:text-lg">
+          {spxPrice > 0 ? `${spxPrice.toFixed(2)}` : '--'}
         </span>
         <FeedHealthIndicator />
         <span
           data-testid="spx-header-regime-chip"
           className={cn(
-          'rounded-md border px-2.5 py-0.5 text-[9px] font-mono uppercase tracking-[0.1em]',
+          'rounded-md border px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-[0.1em] md:px-2.5 md:text-[9px]',
           regime === 'trending'
             ? 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
             : regime === 'compression'
@@ -121,8 +124,9 @@ export function SPXHeader({
         </span>
       </div>
 
-      <div className="flex items-center gap-2.5" aria-live="polite">
-        <div className="rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right">
+      <div className="flex items-center gap-1.5 md:gap-2.5" aria-live="polite">
+        {/* Basis, Health, Feed chips — hidden on mobile */}
+        <div className="hidden rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right md:block">
           <div className="text-[8px] uppercase tracking-[0.1em] text-white/45">Basis</div>
           <div className="font-mono text-[11px] text-white/78">
             {basis ? `${basis.current >= 0 ? '+' : ''}${basis.current.toFixed(2)}` : '--'}
@@ -131,7 +135,7 @@ export function SPXHeader({
         <div
           data-testid="spx-header-health-chip"
           className={cn(
-            'rounded border px-2 py-1 text-right',
+            'hidden rounded border px-2 py-1 text-right md:block',
             healthTone(dataHealth),
           )}
         >
@@ -143,7 +147,7 @@ export function SPXHeader({
             </div>
           )}
         </div>
-        <div data-testid="spx-header-feed-chip" className="rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right">
+        <div data-testid="spx-header-feed-chip" className="hidden rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right md:block">
           <div className="text-[8px] uppercase tracking-[0.1em] text-white/45">Feed</div>
           <div className={cn(
             'font-mono text-[11px]',
@@ -169,7 +173,7 @@ export function SPXHeader({
           type="button"
           onClick={onToggleLevelOverlay}
           data-testid="spx-header-levels-chip"
-          className="rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60"
+          className="hidden rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60 md:block"
         >
           <div className="text-[8px] uppercase tracking-[0.1em] text-white/45">Levels</div>
           <div className="font-mono text-[11px] text-white/78">
@@ -180,19 +184,20 @@ export function SPXHeader({
           type="button"
           onClick={onOpenSettings}
           data-testid="spx-settings-trigger"
-          className="flex min-h-[36px] items-center gap-1.5 rounded-lg border border-emerald-300/25 bg-emerald-500/[0.08] px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/[0.15] hover:text-emerald-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60"
+          className="flex min-h-[44px] items-center gap-1.5 rounded-lg border border-emerald-300/25 bg-emerald-500/[0.08] px-2 py-1.5 text-[9px] font-mono uppercase tracking-[0.08em] text-emerald-100 transition-colors hover:bg-emerald-500/[0.15] hover:text-emerald-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60 md:min-h-[36px] md:px-2.5"
         >
           <Settings2 className="h-3.5 w-3.5" />
-          Settings
+          <span className="hidden md:inline">Settings</span>
         </button>
         <button
           type="button"
           onClick={onOpenCommandPalette}
           data-testid="spx-command-palette-trigger"
-          className="flex min-h-[36px] items-center gap-1.5 rounded-lg border border-white/12 bg-white/[0.03] px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-[0.08em] text-white/68 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60"
+          className="flex min-h-[44px] items-center gap-1.5 rounded-lg border border-white/12 bg-white/[0.03] px-2 py-1.5 text-[9px] font-mono uppercase tracking-[0.08em] text-white/68 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-300/60 md:min-h-[36px] md:px-2.5"
         >
-          <span className="rounded border border-white/20 bg-black/30 px-1.5 py-0.5 text-[8px]">⌘K</span>
-          Commands
+          <span className="hidden rounded border border-white/20 bg-black/30 px-1.5 py-0.5 text-[8px] md:inline">⌘K</span>
+          <span className="hidden md:inline">Commands</span>
+          <span className="md:hidden">⌘</span>
         </button>
       </div>
     </header>

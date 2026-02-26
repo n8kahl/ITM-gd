@@ -148,6 +148,7 @@ export function getSystemPrompt(userContext?: {
   earningsWarnings?: string | null;
   economicWarnings?: string | null;
   newsDigest?: string | null;
+  spxCommandCenterContext?: string | null;
   marketContext?: {
     isMarketOpen: boolean;
     marketStatus: string; // 'Open', 'Closed', 'Pre-market', 'After-hours'
@@ -224,6 +225,20 @@ export function getSystemPrompt(userContext?: {
 
     prompt += '\n\nUse this context to answer basic market questions immediately without calling tools. If the user asks for more specific details or data for other tickers, use the toolset.';
   }
+
+  // SPX Command Center shared context — ensures coach advice aligns with what trader sees
+  if (userContext?.spxCommandCenterContext) {
+    prompt += '\n\n## SPX COMMAND CENTER LIVE STATE (shared with trader\'s dashboard)';
+    prompt += `\n${userContext.spxCommandCenterContext}`;
+    prompt += '\n\nIMPORTANT: This is the same data the trader sees on their SPX Command Center dashboard. When discussing SPX setups, levels, or regime, reference THESE specific values. Do not contradict what the trader sees on screen.';
+  }
+
+  // Hallucination guardrail (Audit #10 HIGH-2)
+  prompt += '\n\n## DATA ACCURACY GUARDRAIL';
+  prompt += '\nYou MUST only reference price levels, strike prices, implied volatility values, and contract details that appear in data provided by your tools or the context above. NEVER invent, estimate, or hallucinate specific price levels, strikes, or market data. If you do not have data for a specific value, say "I don\'t have that data right now" and offer to fetch it with the appropriate tool. When providing analysis from screenshot uploads, cross-reference extracted values against available tool data before presenting them as facts.';
+
+  // Freshness timestamp (Audit #10 MEDIUM-1)
+  prompt += `\n\nSystem prompt generated at: ${new Date().toISOString()}. All market context above reflects data as of this timestamp. If the user asks about data freshness, reference this timestamp.`;
 
   return prompt;
 }

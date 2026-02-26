@@ -1,5 +1,7 @@
 import type { Setup } from './types';
 import type { NormalizedMarketTick } from '../tickCache';
+import { cacheGet, cacheSet } from '../../config/redis';
+import { logger } from '../../lib/logger';
 import { nowIso } from './utils';
 
 type TransitionPhase =
@@ -297,6 +299,82 @@ export function evaluateTickSetupTransitions(
   }
 
   return events;
+}
+
+// ── Redis persistence (Audit CRITICAL-2, Lifecycle domain) ──────────────
+// Persist setupStateById to Redis so stop breach streaks and transition
+// state survive backend restarts.
+
+const TICK_STATE_REDIS_KEY = 'spx:tick_evaluator:state';
+const TICK_STATE_REDIS_TTL_SECONDS = 24 * 3600; // 24h TTL
+
+interface SerializedSetupRuntimeState {
+  setupId: string;
+  phase: TransitionPhase;
+  setup: Setup;
+  lastTransitionAtMs: number;
+  stopBreachStreak: number;
+  sequence: number;
+  previousTickPrice: number | null;
+}
+
+export async function persistTickEvaluatorState(): Promise<void> {
+  if (setupStateById.size === 0) return;
+
+  try {
+    const serialized: SerializedSetupRuntimeState[] = [];
+    for (const state of setupStateById.values()) {
+      serialized.push({
+        setupId: state.setupId,
+        phase: state.phase,
+        setup: state.setup,
+        lastTransitionAtMs: state.lastTransitionAtMs,
+        stopBreachStreak: state.stopBreachStreak,
+        sequence: state.sequence,
+        previousTickPrice: state.previousTickPrice,
+      });
+    }
+    await cacheSet(TICK_STATE_REDIS_KEY, serialized, TICK_STATE_REDIS_TTL_SECONDS);
+  } catch (error) {
+    logger.warn('SPX tick evaluator: failed to persist state to Redis', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+export async function restoreTickEvaluatorState(): Promise<number> {
+  try {
+    const serialized = await cacheGet<SerializedSetupRuntimeState[]>(TICK_STATE_REDIS_KEY);
+    if (!serialized || !Array.isArray(serialized)) return 0;
+
+    let restoredCount = 0;
+    for (const item of serialized) {
+      if (!item.setupId || !item.phase || !item.setup) continue;
+      // Only restore non-terminal states
+      if (TERMINAL_PHASES.has(item.phase)) continue;
+
+      setupStateById.set(item.setupId, {
+        setupId: item.setupId,
+        phase: item.phase,
+        setup: item.setup,
+        lastTransitionAtMs: item.lastTransitionAtMs || 0,
+        stopBreachStreak: item.stopBreachStreak || 0,
+        sequence: item.sequence || 0,
+        previousTickPrice: item.previousTickPrice ?? null,
+      });
+      restoredCount++;
+    }
+
+    if (restoredCount > 0) {
+      logger.info('SPX tick evaluator: restored state from Redis', { restoredCount });
+    }
+    return restoredCount;
+  } catch (error) {
+    logger.warn('SPX tick evaluator: failed to restore state from Redis', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return 0;
+  }
 }
 
 export function resetTickEvaluatorState(): void {

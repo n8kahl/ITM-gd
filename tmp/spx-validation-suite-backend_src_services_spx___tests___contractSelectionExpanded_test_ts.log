@@ -1,0 +1,10 @@
+ WARN  Unsupported engine: wanted: {"node":">=22.0.0"} (current: {"node":"v20.19.5","pnpm":"10.29.1"})
+
+ RUN  v4.0.18 /Users/natekahl/ITM-gd
+
+No test files found, exiting with code 0
+
+filter: backend/src/services/spx/__tests__/contractSelectionExpanded.test.ts
+include: lib/**/__tests__/**/*.test.ts, lib/validation/**/__tests__/**/*.test.ts, components/**/__tests__/**/*.test.ts
+exclude:  backend/**, e2e/**, node_modules/**
+

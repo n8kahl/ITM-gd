@@ -265,7 +265,7 @@ export function useSPXQuery<T>(
     fetcher,
     {
       revalidateOnFocus: true,
-      dedupingInterval: 1500,
+      dedupingInterval: 500, // Reduced from 1500ms for faster snapshot refresh (Audit #7)
       errorRetryCount: 1,
       errorRetryInterval: 5000,
       ...(config || {}),

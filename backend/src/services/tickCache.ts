@@ -17,6 +17,7 @@ export interface NormalizedMarketTick {
 }
 
 const DEFAULT_MAX_TICKS_PER_SYMBOL = 6000;
+const DEFAULT_TICK_HEALTH_MAX_AGE_MS = 12_000;
 
 let maxTicksPerSymbol = DEFAULT_MAX_TICKS_PER_SYMBOL;
 const latestTickBySymbol = new Map<string, NormalizedMarketTick>();
@@ -173,6 +174,44 @@ export function ingestTick(tick: NormalizedMarketTick): boolean {
 
 export function getLatestTick(symbol: string): NormalizedMarketTick | null {
   return latestTickBySymbol.get(normalizeTickSymbol(symbol)) || null;
+}
+
+export interface TickStreamHealth {
+  healthy: boolean;
+  ageMs: number | null;
+  reason: 'fresh' | 'stale' | 'no_tick';
+  latestTimestamp: number | null;
+}
+
+/**
+ * Basic stream freshness health check for snapshot gating.
+ * Returns stale/no_tick when the most recent tick is too old or missing.
+ */
+export function isTickStreamHealthy(
+  symbol: string,
+  options?: { maxAgeMs?: number; nowMs?: number },
+): TickStreamHealth {
+  const latest = getLatestTick(symbol);
+  if (!latest) {
+    return {
+      healthy: false,
+      ageMs: null,
+      reason: 'no_tick',
+      latestTimestamp: null,
+    };
+  }
+
+  const nowMs = Number.isFinite(options?.nowMs) ? Number(options?.nowMs) : Date.now();
+  const maxAgeMs = Math.max(1000, Math.floor(options?.maxAgeMs ?? DEFAULT_TICK_HEALTH_MAX_AGE_MS));
+  const ageMs = Math.max(0, nowMs - latest.timestamp);
+  const healthy = ageMs <= maxAgeMs;
+
+  return {
+    healthy,
+    ageMs,
+    reason: healthy ? 'fresh' : 'stale',
+    latestTimestamp: latest.timestamp,
+  };
 }
 
 export function getRecentTicks(symbol: string, limit: number = 250): NormalizedMarketTick[] {

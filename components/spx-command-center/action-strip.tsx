@@ -121,7 +121,89 @@ export function ActionStrip(props: ActionStripProps) {
         backdropFilter: 'blur(8px)',
       }}
     >
-      <div className="flex items-center justify-between gap-2">
+      {/* Mobile layout: primary CTA on top, controls below */}
+      <div className="flex flex-col gap-1.5 md:hidden">
+        {/* Mobile primary action row */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={!props.primaryActionEnabled}
+            onClick={props.onPrimaryAction}
+            data-testid="spx-action-primary-cta"
+            title={!props.primaryActionEnabled ? (props.primaryActionBlockedReason || 'Action unavailable') : undefined}
+            className={cn(
+              'flex-1 min-h-[44px] rounded-md border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.07em] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+              props.primaryActionMode === 'in_trade'
+                ? 'border-rose-300/40 bg-rose-500/16 text-rose-100 hover:bg-rose-500/24'
+                : props.primaryActionMode === 'evaluate'
+                  ? 'border-emerald-300/40 bg-emerald-500/16 text-emerald-100 hover:bg-emerald-500/24'
+                  : 'border-champagne/40 bg-champagne/14 text-champagne hover:bg-champagne/20',
+            )}
+          >
+            {props.primaryActionLabel}
+          </button>
+          <button
+            type="button"
+            onClick={props.onShowWhy}
+            data-testid="spx-action-primary-why"
+            className="min-h-[44px] rounded-md border border-white/18 bg-white/[0.03] px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.07em] text-white/72 transition-colors hover:text-white"
+          >
+            Why
+          </button>
+          <span
+            data-testid="spx-action-decision-state"
+            className="rounded border border-white/18 bg-white/[0.04] px-2 py-1.5 font-mono text-[9px] uppercase tracking-[0.07em] text-white/78"
+          >
+            {decisionStateLabel}
+          </span>
+        </div>
+        {/* Mobile secondary controls row */}
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {quickTimeframes.map((timeframe) => (
+            <button
+              key={timeframe}
+              type="button"
+              onClick={() => {
+                setChartTimeframe(timeframe)
+                trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+                  surface: 'action_strip_timeframe',
+                  timeframe,
+                })
+              }}
+              className={cn(
+                'min-h-[44px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                selectedTimeframe === timeframe
+                  ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
+                  : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+              )}
+            >
+              {timeframe}
+            </button>
+          ))}
+          <div className="mx-0.5 h-5 w-px shrink-0 bg-white/10" />
+          <button
+            type="button"
+            aria-pressed={props.showLevels}
+            disabled={!(overlayCapability.levels ?? true)}
+            onClick={() => {
+              if (!(overlayCapability.levels ?? true)) return
+              props.onToggleLevels()
+            }}
+            data-testid="spx-action-overlay-levels"
+            className={cn(
+              'min-h-[44px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+              props.showLevels
+                ? 'border-champagne/30 bg-champagne/10 text-champagne'
+                : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+              !(overlayCapability.levels ?? true) && 'cursor-not-allowed border-white/10 bg-white/[0.015] text-white/25',
+            )}
+          >
+            Levels
+          </button>
+        </div>
+      </div>
+      {/* Desktop layout: single row (unchanged) */}
+      <div className="hidden items-center justify-between gap-2 md:flex">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-2">
           {quickTimeframes.map((timeframe) => (
             <button
@@ -188,7 +270,7 @@ export function ActionStrip(props: ActionStripProps) {
             type="button"
             disabled={!props.primaryActionEnabled}
             onClick={props.onPrimaryAction}
-            data-testid="spx-action-primary-cta"
+            data-testid="spx-action-primary-cta-desktop"
             title={!props.primaryActionEnabled ? (props.primaryActionBlockedReason || 'Action unavailable') : undefined}
             className={cn(
               'ml-1 min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
@@ -204,7 +286,7 @@ export function ActionStrip(props: ActionStripProps) {
           <button
             type="button"
             onClick={props.onShowWhy}
-            data-testid="spx-action-primary-why"
+            data-testid="spx-action-primary-why-desktop"
             className="min-h-[36px] rounded-md border border-white/18 bg-white/[0.03] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] text-white/72 transition-colors hover:text-white"
           >
             Why
@@ -233,7 +315,8 @@ export function ActionStrip(props: ActionStripProps) {
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        {/* Advanced HUD + View Mode — hidden on mobile to prevent overflow */}
+        <div className="hidden items-center gap-1.5 md:flex">
           <button
             type="button"
               onClick={() => {

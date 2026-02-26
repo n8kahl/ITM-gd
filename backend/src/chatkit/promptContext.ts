@@ -6,6 +6,8 @@ import { getMarketIndicesSnapshot } from '../services/marketIndices';
 import { massiveClient, getTickerNews } from '../config/massive';
 import { getEarningsCalendar } from '../services/earnings';
 import { getEconomicCalendar } from '../services/economic';
+import { getSPXSnapshot } from '../services/spx';
+import type { LevelStrength, SPXLevel } from '../services/spx/types';
 
 interface PromptProfile {
   tier?: string;
@@ -23,6 +25,14 @@ const TIER_CANONICAL_MAP: Record<string, string> = {
   pro: 'pro',
   premium: 'premium',
   elite: 'premium',
+};
+
+const LEVEL_STRENGTH_ORDER: Record<LevelStrength, number> = {
+  strong: 0,
+  critical: 1,
+  moderate: 2,
+  dynamic: 3,
+  weak: 4,
 };
 
 export type SessionPhase =
@@ -183,6 +193,39 @@ function normalizeSymbols(symbols: string[]): string[] {
   )];
 }
 
+function formatSourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    opening_range_high: 'OR-High',
+    opening_range_low: 'OR-Low',
+    spx_zero_gamma: 'SPX Zero Gamma',
+    spy_zero_gamma: 'SPY Zero Gamma',
+    zero_gamma: 'Zero Gamma',
+    call_wall: 'Call Wall',
+    put_wall: 'Put Wall',
+    flip_point: 'Flip Point',
+    vwap: 'VWAP',
+  };
+  const normalized = source.trim().toLowerCase();
+  if (labels[normalized]) return labels[normalized];
+  return normalized
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatLevelLabel(level: SPXLevel): string {
+  return level.chartStyle?.labelFormat?.trim() || formatSourceLabel(level.source);
+}
+
+function formatRegimeLabel(regime: string): string {
+  return regime
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export async function getEarningsProximityWarnings(symbols: string[]): Promise<string | null> {
   const normalized = normalizeSymbols(symbols).slice(0, 10);
   if (normalized.length === 0) return null;
@@ -276,6 +319,73 @@ async function loadPromptProfile(userId: string): Promise<PromptProfile> {
   return profile;
 }
 
+async function loadSPXCommandCenterContext(): Promise<string | null> {
+  try {
+    const snapshot = await getSPXSnapshot({ forceRefresh: false });
+    if (!snapshot) return null;
+
+    const lines: string[] = [];
+    const freshness = snapshot.generatedAt
+      ? `Data as of: ${snapshot.generatedAt}`
+      : `Data as of: ${new Date().toISOString()}`;
+    lines.push(freshness);
+
+    // Regime
+    if (snapshot.regime) {
+      const r = snapshot.regime;
+      lines.push(`Regime: ${formatRegimeLabel(r.regime || 'unknown')} (confidence: ${typeof r.confidence === 'number' ? `${r.confidence.toFixed(0)}%` : 'N/A'})`);
+    }
+
+    // Key levels (top 8 by strength)
+    if (snapshot.levels?.length > 0) {
+      const topLevels = snapshot.levels
+        .filter((l) => l.price > 0)
+        .sort((a, b) => {
+          return LEVEL_STRENGTH_ORDER[a.strength] - LEVEL_STRENGTH_ORDER[b.strength];
+        })
+        .slice(0, 8);
+      if (topLevels.length > 0) {
+        lines.push('Key levels: ' + topLevels.map((l) => `${formatLevelLabel(l)} ${l.price.toFixed(2)} (${l.strength})`).join(', '));
+      }
+    }
+
+    // GEX
+    if (snapshot.gex?.spx) {
+      const g = snapshot.gex.spx;
+      const parts = [`spot ${g.spotPrice?.toFixed(2) || 'N/A'}`];
+      if (g.flipPoint) parts.push(`flip ${g.flipPoint.toFixed(2)}`);
+      if (g.callWall) parts.push(`call wall ${g.callWall.toFixed(2)}`);
+      if (g.putWall) parts.push(`put wall ${g.putWall.toFixed(2)}`);
+      lines.push('GEX: ' + parts.join(', '));
+    }
+
+    // Active setups summary
+    if (snapshot.setups?.length > 0) {
+      const active = snapshot.setups.filter((s) => ['ready', 'triggered', 'forming'].includes(s.status));
+      if (active.length > 0) {
+        lines.push(`Active setups: ${active.length} (${active.map((s) => `${s.direction} ${s.status} @ ${s.entryZone?.low?.toFixed(2)}-${s.entryZone?.high?.toFixed(2)}`).join('; ')})`);
+      }
+    }
+
+    // Prediction pWin
+    if (snapshot.prediction) {
+      const p = snapshot.prediction;
+      const bullish = Number.isFinite(p.direction?.bullish) ? p.direction.bullish : 0;
+      const bearish = Number.isFinite(p.direction?.bearish) ? p.direction.bearish : 0;
+      const bias = bullish === bearish ? 'neutral' : bullish > bearish ? 'bullish' : 'bearish';
+      const directionalWinProb = Math.max(bullish, bearish);
+      lines.push(`Prediction pWin: ${directionalWinProb.toFixed(1)}% (bias: ${bias})`);
+    }
+
+    return lines.join('\n');
+  } catch (error) {
+    logger.debug('Failed to load SPX command center context for coach', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 export async function buildSystemPromptForUser(
   userId: string,
   options?: { isMobile?: boolean; recentSymbols?: string[]; activeChartSymbol?: string },
@@ -286,7 +396,7 @@ export async function buildSystemPromptForUser(
     ...(options?.recentSymbols || []),
   ]);
 
-  const [profile, indicesResponse, marketContextText, earningsWarnings, economicWarnings, newsDigest] = await Promise.all([
+  const [profile, indicesResponse, marketContextText, earningsWarnings, economicWarnings, newsDigest, spxContext] = await Promise.all([
     loadPromptProfile(userId),
     getMarketIndicesSnapshot().catch((err) => {
       logger.warn('Failed to fetch indices for prompt context', { error: err });
@@ -296,6 +406,7 @@ export async function buildSystemPromptForUser(
     getEarningsProximityWarnings(symbols),
     getEconomicEventWarnings(2),
     getNewsDigest(symbols),
+    loadSPXCommandCenterContext(),
   ]);
 
   const spxQuote = indicesResponse?.quotes?.find((quote) => quote.symbol === 'SPX');
@@ -326,5 +437,6 @@ export async function buildSystemPromptForUser(
     earningsWarnings,
     economicWarnings,
     newsDigest,
+    spxCommandCenterContext: spxContext,
   });
 }

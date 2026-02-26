@@ -40,6 +40,10 @@ import { initWebSocket, shutdownWebSocket } from './services/websocket';
 import { startMassiveTickStream, stopMassiveTickStream } from './services/massiveTickStream';
 import { initializeMarketHolidays } from './services/marketHours';
 import { startSPXNewsSentimentPolling } from './services/spx/newsSentimentService';
+import { startSpxEodCleanupWorker, stopSpxEodCleanupWorker } from './workers/spxEodCleanupWorker';
+import { startSpxTtlEnforcementWorker, stopSpxTtlEnforcementWorker } from './workers/spxTtlEnforcementWorker';
+import { restoreTickEvaluatorState, persistTickEvaluatorState } from './services/spx/tickEvaluator';
+import { getSPXSnapshot } from './services/spx';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -233,6 +237,15 @@ async function start() {
     startSPXDataLoop();
     startSPXOptimizerWorker();
     startPortfolioSyncWorker();
+    startSpxEodCleanupWorker();
+    startSpxTtlEnforcementWorker();
+
+    // Restore tick evaluator state from Redis (survives backend restarts)
+    restoreTickEvaluatorState().then((count) => {
+      if (count > 0) logger.info('Restored tick evaluator state from Redis', { count });
+    }).catch((err) => {
+      logger.warn('Failed to restore tick evaluator state', { error: err instanceof Error ? err.message : String(err) });
+    });
     if (env.SPX_NEWS_SENTIMENT_ENABLED) {
       stopNewsSentimentPolling = startSPXNewsSentimentPolling();
       logger.info('SPX news sentiment polling enabled');
@@ -240,6 +253,15 @@ async function start() {
 
     // Initialize market holidays (async, but don't block server start completely)
     initializeMarketHolidays().catch(err => logger.error('Failed to init market holidays', { error: err }));
+
+    // Cache warm-up: pre-populate SPX snapshot so first 60s of trading isn't degraded (Audit #7)
+    getSPXSnapshot({ forceRefresh: true }).then(() => {
+      logger.info('SPX cache warm-up complete');
+    }).catch((err) => {
+      logger.warn('SPX cache warm-up failed (will populate on first request)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
   } catch (error) {
     logger.error('Failed to start server', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
@@ -262,6 +284,13 @@ async function gracefulShutdown(signal: string) {
     stopSPXDataLoop();
     stopSPXOptimizerWorker();
     stopPortfolioSyncWorker();
+    stopSpxEodCleanupWorker();
+    stopSpxTtlEnforcementWorker();
+
+    // Persist tick evaluator state before shutdown
+    await persistTickEvaluatorState().catch((err) => {
+      logger.warn('Failed to persist tick evaluator state on shutdown', { error: err instanceof Error ? err.message : String(err) });
+    });
     if (stopNewsSentimentPolling) {
       stopNewsSentimentPolling();
       stopNewsSentimentPolling = null;

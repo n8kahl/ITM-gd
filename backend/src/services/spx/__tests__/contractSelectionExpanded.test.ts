@@ -1,15 +1,15 @@
-jest.mock('../../../config/redis', () => ({
-  cacheGet: jest.fn(),
-  cacheSet: jest.fn(),
+vi.mock('../../../config/redis', () => ({
+  cacheGet: vi.fn(),
+  cacheSet: vi.fn(),
 }));
 
-jest.mock('../../options/optionsChainFetcher', () => ({
-  fetchExpirationDates: jest.fn(),
-  fetchOptionsChain: jest.fn(),
+vi.mock('../../options/optionsChainFetcher', () => ({
+  fetchExpirationDates: vi.fn(),
+  fetchOptionsChain: vi.fn(),
 }));
 
-jest.mock('../../options/ivAnalysis', () => ({
-  analyzeIVProfile: jest.fn(),
+vi.mock('../../options/ivAnalysis', () => ({
+  analyzeIVProfile: vi.fn(),
 }));
 
 import { cacheGet, cacheSet } from '../../../config/redis';
@@ -19,11 +19,11 @@ import { analyzeIVProfile } from '../../options/ivAnalysis';
 import { getContractRecommendation } from '../contractSelector';
 import type { Setup } from '../types';
 
-const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
-const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
-const mockFetchExpirationDates = fetchExpirationDates as jest.MockedFunction<typeof fetchExpirationDates>;
-const mockFetchOptionsChain = fetchOptionsChain as jest.MockedFunction<typeof fetchOptionsChain>;
-const mockAnalyzeIVProfile = analyzeIVProfile as jest.MockedFunction<typeof analyzeIVProfile>;
+const mockCacheGet = cacheGet as vi.MockedFunction<typeof cacheGet>;
+const mockCacheSet = cacheSet as vi.MockedFunction<typeof cacheSet>;
+const mockFetchExpirationDates = fetchExpirationDates as vi.MockedFunction<typeof fetchExpirationDates>;
+const mockFetchOptionsChain = fetchOptionsChain as vi.MockedFunction<typeof fetchOptionsChain>;
+const mockAnalyzeIVProfile = analyzeIVProfile as vi.MockedFunction<typeof analyzeIVProfile>;
 
 function makeSetup(overrides: Partial<Setup> = {}): Setup {
   return {
@@ -128,9 +128,9 @@ async function getSingleRecommendation(params: {
 
 describe('contract selector expanded pipeline coverage', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-02-25T15:00:00.000Z'));
-    jest.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-25T15:00:00.000Z'));
+    vi.clearAllMocks();
 
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockResolvedValue();
@@ -141,7 +141,7 @@ describe('contract selector expanded pipeline coverage', () => {
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('contract sizing', () => {

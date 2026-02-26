@@ -40,6 +40,7 @@ export type SetupInvalidationReason =
   | 'flow_gate_blocked'
   | 'drift_control_paused'
   | 'ttl_expired'
+  | 'market_closed'
   | 'manual'
   | 'unknown';
 

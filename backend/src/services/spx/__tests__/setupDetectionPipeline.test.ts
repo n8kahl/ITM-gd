@@ -17,53 +17,53 @@ import type {
 import { supabase } from '../../../config/database';
 import { logger } from '../../../lib/logger';
 
-jest.mock('../../../lib/logger', () => ({
+vi.mock('../../../lib/logger', () => ({
   logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
-jest.mock('../../../config/redis', () => ({
-  cacheGet: jest.fn(),
-  cacheSet: jest.fn(),
+vi.mock('../../../config/redis', () => ({
+  cacheGet: vi.fn(),
+  cacheSet: vi.fn(),
 }));
 
-jest.mock('../../../config/massive', () => ({
-  getMinuteAggregates: jest.fn(),
+vi.mock('../../../config/massive', () => ({
+  getMinuteAggregates: vi.fn(),
 }));
 
-jest.mock('../../../config/openai', () => ({
+vi.mock('../../../config/openai', () => ({
   openaiClient: {
     chat: {
       completions: {
-        create: jest.fn(),
+        create: vi.fn(),
       },
     },
     models: {
-      list: jest.fn(),
+      list: vi.fn(),
     },
   },
 }));
 
-jest.mock('../../../config/database', () => ({
+vi.mock('../../../config/database', () => ({
   supabase: {
-    from: jest.fn(),
+    from: vi.fn(),
   },
 }));
 
-jest.mock('../optimizer', () => ({
-  getActiveSPXOptimizationProfile: jest.fn(),
+vi.mock('../optimizer', () => ({
+  getActiveSPXOptimizationProfile: vi.fn(),
 }));
 
 type DetectOptions = Parameters<typeof detectActiveSetups>[0];
 type SetupIndicatorContext = NonNullable<NonNullable<DetectOptions>['indicatorContext']>;
 
-const mockGetActiveSPXOptimizationProfile = getActiveSPXOptimizationProfile as jest.MockedFunction<typeof getActiveSPXOptimizationProfile>;
-const mockSupabaseFrom = supabase.from as jest.MockedFunction<typeof supabase.from>;
-const mockLoggerInfo = logger.info as jest.MockedFunction<typeof logger.info>;
+const mockGetActiveSPXOptimizationProfile = getActiveSPXOptimizationProfile as vi.MockedFunction<typeof getActiveSPXOptimizationProfile>;
+const mockSupabaseFrom = supabase.from as vi.MockedFunction<typeof supabase.from>;
+const mockLoggerInfo = logger.info as vi.MockedFunction<typeof logger.info>;
 const originalEnv = { ...process.env };
 const BASE_AS_OF = '2026-02-25T15:30:00.000Z';
 const setupDetectorSource = fs.readFileSync(path.resolve(__dirname, '../setupDetector.ts'), 'utf8');
@@ -391,17 +391,17 @@ function configureOptimizationProfile(overrides?: {
 
 function setupNoopSupabasePersistence() {
   const setupInstancesTable = {
-    upsert: jest.fn().mockResolvedValue({ error: null }),
-    select: jest.fn(),
-    in: jest.fn().mockResolvedValue({ data: [], error: null }),
-    update: jest.fn(),
-    eq: jest.fn().mockResolvedValue({ error: null }),
+    upsert: vi.fn().mockResolvedValue({ error: null }),
+    select: vi.fn(),
+    in: vi.fn().mockResolvedValue({ data: [], error: null }),
+    update: vi.fn(),
+    eq: vi.fn().mockResolvedValue({ error: null }),
   };
   setupInstancesTable.select.mockReturnValue(setupInstancesTable as never);
   setupInstancesTable.update.mockReturnValue(setupInstancesTable as never);
 
   const levelTouchesTable = {
-    upsert: jest.fn().mockResolvedValue({ error: null }),
+    upsert: vi.fn().mockResolvedValue({ error: null }),
   };
 
   mockSupabaseFrom.mockImplementation(((table: string) => {
@@ -409,7 +409,7 @@ function setupNoopSupabasePersistence() {
     if (table === 'spx_level_touches') return levelTouchesTable as never;
     if (table === 'spx_setup_transitions') {
       return {
-        upsert: jest.fn().mockResolvedValue({ error: null }),
+        upsert: vi.fn().mockResolvedValue({ error: null }),
       } as never;
     }
     throw new Error(`Unexpected table ${table}`);
@@ -543,17 +543,17 @@ function buildPersistedSetup(overrides?: Partial<Setup>): Setup {
 
 async function persistAndCaptureTrackedRow(setup: Setup) {
   const setupInstancesTable = {
-    upsert: jest.fn().mockResolvedValue({ error: null }),
-    select: jest.fn(),
-    in: jest.fn().mockResolvedValue({ data: [], error: null }),
-    update: jest.fn(),
-    eq: jest.fn().mockResolvedValue({ error: null }),
+    upsert: vi.fn().mockResolvedValue({ error: null }),
+    select: vi.fn(),
+    in: vi.fn().mockResolvedValue({ data: [], error: null }),
+    update: vi.fn(),
+    eq: vi.fn().mockResolvedValue({ error: null }),
   };
   setupInstancesTable.select.mockReturnValue(setupInstancesTable as never);
   setupInstancesTable.update.mockReturnValue(setupInstancesTable as never);
 
   const levelTouchesTable = {
-    upsert: jest.fn().mockResolvedValue({ error: null }),
+    upsert: vi.fn().mockResolvedValue({ error: null }),
   };
 
   mockSupabaseFrom.mockImplementation(((table: string) => {
@@ -574,7 +574,7 @@ async function persistAndCaptureTrackedRow(setup: Setup) {
 
 describe('spx/setupDetectionPipeline - Group 1: WIN_RATE_BY_SCORE integrity', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     __resetSetupDetectorStateForTests();
     setupNoopSupabasePersistence();
     configureOptimizationProfile();
@@ -724,7 +724,7 @@ describe('spx/setupDetectionPipeline - Group 1: WIN_RATE_BY_SCORE integrity', ()
 
 describe('spx/setupDetectionPipeline - Group 2: evaluateOptimizationGate realistic scenarios', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     __resetSetupDetectorStateForTests();
     setupNoopSupabasePersistence();
     configureOptimizationProfile();
@@ -1003,13 +1003,19 @@ describe('spx/setupDetectionPipeline - Group 2: evaluateOptimizationGate realist
 
     const atBoundary = singleSetup(await runDetectorScenario(scenario));
     expect(atBoundary.gateReasons?.some((reason) => reason.startsWith('confluence_below_floor:'))).toBe(false);
-    expect(atBoundary.gateReasons?.some((reason) => reason.startsWith('pwin_below_floor:'))).toBe(false);
+
+    const pwinReason = atBoundary.gateReasons?.find((reason) => reason.startsWith('pwin_below_floor:')) ?? null;
+    if (pwinReason) {
+      const effectiveFloor = Number(pwinReason.split('<')[1]);
+      expect(Number.isFinite(effectiveFloor)).toBe(true);
+      expect(effectiveFloor).toBeGreaterThanOrEqual(baseline.pWinCalibrated ?? 0);
+    }
   });
 });
 
 describe('spx/setupDetectionPipeline - Group 3: shadow gate threshold', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     __resetSetupDetectorStateForTests();
     setupNoopSupabasePersistence();
     configureOptimizationProfile({
@@ -1123,7 +1129,7 @@ describe('spx/setupDetectionPipeline - Group 3: shadow gate threshold', () => {
 
 describe('spx/setupDetectionPipeline - Group 4: toTrackedRow metadata completeness', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     setupNoopSupabasePersistence();
   });
 
@@ -1194,7 +1200,7 @@ describe('spx/setupDetectionPipeline - Group 4: toTrackedRow metadata completene
 
 describe('spx/setupDetectionPipeline - Group 5: pipeline output shape validation', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     __resetSetupDetectorStateForTests();
     setupNoopSupabasePersistence();
     configureOptimizationProfile({

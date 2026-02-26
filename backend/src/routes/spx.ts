@@ -18,6 +18,7 @@ import {
   getSPXOptimizerScorecard,
   getActiveSPXOptimizationProfile,
   runSPXOptimizerScan,
+  revertSPXOptimizationProfile,
 } from '../services/spx/optimizer';
 import { getSPXOptimizerWorkerStatus } from '../workers/spxOptimizerWorker';
 import {
@@ -402,8 +403,9 @@ router.post('/analytics/optimizer/scan', async (req: Request, res: Response) => 
   try {
     const from = parseISODateInput(req.body?.from) || undefined;
     const to = parseISODateInput(req.body?.to) || undefined;
+    const dryRun = req.body?.dryRun === true;
 
-    const result = await runSPXOptimizerScan({ from, to });
+    const result = await runSPXOptimizerScan({ from, to, dryRun });
     return res.json(result);
   } catch (error) {
     logger.error('SPX optimizer scan endpoint failed', {
@@ -412,6 +414,37 @@ router.post('/analytics/optimizer/scan', async (req: Request, res: Response) => 
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to run SPX optimizer scan.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.post('/analytics/optimizer/revert', async (req: Request, res: Response) => {
+  try {
+    const historyId = parseFiniteNumber(req.body?.historyId);
+    if (!historyId || !Number.isInteger(historyId) || historyId < 1) {
+      return res.status(400).json({
+        error: 'Invalid input',
+        message: 'historyId must be a positive integer referencing an optimizer history entry.',
+      });
+    }
+
+    const result = await revertSPXOptimizationProfile(historyId);
+    if (!result.success) {
+      return res.status(404).json({
+        error: 'Revert failed',
+        message: result.message,
+      });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    logger.error('SPX optimizer revert endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to revert SPX optimizer profile.',
       retryAfter: 10,
     });
   }

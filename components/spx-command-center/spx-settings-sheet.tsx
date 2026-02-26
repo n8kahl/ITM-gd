@@ -6,6 +6,7 @@ import { useSPXOptimizer } from '@/hooks/use-spx-optimizer'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import { cn } from '@/lib/utils'
 import { BrokerTab } from './broker-tab'
+import { SystemHealthTab } from './system-health-tab'
 
 interface SPXSettingsSheetProps {
   open: boolean
@@ -95,7 +96,7 @@ function formatBucketLabel(value: string): string {
 }
 
 export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) {
-  const [activeTab, setActiveTab] = useState<'optimizer' | 'broker'>('optimizer')
+  const [activeTab, setActiveTab] = useState<'optimizer' | 'broker' | 'health'>('optimizer')
   const [activeRevertId, setActiveRevertId] = useState<number | null>(null)
   const {
     scorecard,
@@ -297,6 +298,19 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
             )}
           >
             Broker
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('health')}
+            data-testid="spx-settings-tab-health"
+            className={cn(
+              'rounded-md px-3 py-1.5 text-[10px] uppercase tracking-[0.08em] transition-colors',
+              activeTab === 'health'
+                ? 'border border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+                : 'border border-white/10 bg-white/[0.03] text-white/55 hover:text-white/80',
+            )}
+          >
+            System Health
           </button>
         </div>
 
@@ -744,6 +758,8 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
         </>)}
 
         {activeTab === 'broker' && <BrokerTab />}
+
+        {activeTab === 'health' && <SystemHealthTab />}
       </div>
     </div>
   )

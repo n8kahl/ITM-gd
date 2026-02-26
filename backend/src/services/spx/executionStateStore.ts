@@ -287,6 +287,29 @@ export async function loadOpenStatesWithOrders(userId: string): Promise<Executio
 }
 
 /**
+ * Returns the set of setup IDs with active (non-closed) execution states.
+ * Used by the optimizer to isolate in-flight trades from profile changes.
+ */
+export async function getInFlightSetupIds(): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('spx_execution_active_states')
+    .select('setup_id')
+    .is('closed_at', null)
+    .in('status', ['active', 'partial_fill', 'filled']);
+
+  if (error) {
+    const normalized = error.message.toLowerCase();
+    if (normalized.includes('relation') && normalized.includes('does not exist')) {
+      return new Set();
+    }
+    logger.error('Failed to load in-flight setup IDs', { error: error.message });
+    return new Set();
+  }
+
+  return new Set((data || []).map((row: { setup_id: string }) => row.setup_id));
+}
+
+/**
  * Mark an execution state as failed (e.g., order rejected).
  */
 export async function markStateFailed(

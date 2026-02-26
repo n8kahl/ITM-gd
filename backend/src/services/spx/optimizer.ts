@@ -5,6 +5,7 @@ import { toEasternTime } from '../marketHours';
 import type { SetupStatus, SetupType } from './types';
 import type { SetupFinalOutcome } from './outcomeTracker';
 import { runSPXWinRateBacktest } from './winRateBacktest';
+import { getInFlightSetupIds } from './executionStateStore';
 import {
   loadBarsBySession,
   sweepGeometryForFamiliesDirectional,
@@ -50,6 +51,8 @@ export interface SPXOptimizationProfile {
     minTradesPerCombo: number;
     minT1WinRatePct: number;
     pausedCombos: string[];
+    /** Manually-pinned regime combos that survive optimizer overrides. */
+    manualPausedCombos?: string[];
   };
   tradeManagement: {
     partialAtT1Pct: number;
@@ -116,12 +119,16 @@ export interface SPXOptimizationProfile {
     minQuarantineOpportunities: number;
     minTriggerRatePct: number;
     pausedSetupTypes: string[];
+    /** Manually-pinned setup type pauses that survive optimizer overrides. */
+    manualPausedSetupTypes?: string[];
   };
 }
 
 export interface SPXOptimizationScanResult {
   profile: SPXOptimizationProfile;
   scorecard: SPXOptimizerScorecard;
+  /** When true, the scan was computed but NOT persisted to the active profile. */
+  dryRun?: boolean;
 }
 
 export interface SPXConfidenceInterval {
@@ -184,6 +191,16 @@ export interface SPXOptimizerScorecard {
   };
   optimizationApplied: boolean;
   geometryOptimization?: SPXGeometrySweepSummary;
+  /** Data quality tag — tracks strict vs fallback replay fidelity (Audit CRITICAL-3, Optimizer domain). */
+  dataQuality?: {
+    strictReplayCount: number;
+    fallbackReplayCount: number;
+    mixedFidelity: boolean;
+    replayFidelity: 'strict' | 'fallback' | 'mixed' | 'none';
+    usedMassiveMinuteBars: boolean;
+    fallbackSharePct: number;
+    fallbackDominant: boolean;
+  };
   notes: string[];
 }
 
@@ -273,6 +290,7 @@ interface OutcomeOverride {
 }
 
 interface PreparedOptimizationRow {
+  setupId: string;
   sessionDate: string;
   setupType: string;
   regime: string;
@@ -513,7 +531,7 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     maxFirstSeenMinuteBySetupType: { ...DEFAULT_MAX_FIRST_SEEN_MINUTE_BY_SETUP_TYPE },
   },
   regimeGate: {
-    minTradesPerCombo: 12,
+    minTradesPerCombo: 30,
     minT1WinRatePct: 48,
     pausedCombos: [],
   },
@@ -574,7 +592,7 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
   walkForward: {
     trainingDays: 20,
     validationDays: 5,
-    minTrades: 12,
+    minTrades: 30,
     objectiveWeights: {
       t1: 0.62,
       t2: 0.38,
@@ -602,6 +620,7 @@ const PROMOTION_MIN_T1_DELTA_PCT = 3;
 const PROMOTION_MIN_T2_DELTA_PCT = 2;
 const PROMOTION_MIN_EXPECTANCY_DELTA_R = 0.10;
 const PROMOTION_MAX_FAILURE_DELTA_PCT = 1;
+const MAX_FALLBACK_SHARE_FOR_APPLY_PCT = 50;
 const WILSON_Z_95 = 1.96;
 const ADD_SETUP_MIN_T1_LOWER_BOUND_PCT = 52;
 
@@ -870,6 +889,9 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
       pausedCombos: Array.isArray(candidate.regimeGate?.pausedCombos)
         ? candidate.regimeGate.pausedCombos.filter((item): item is string => typeof item === 'string' && item.length > 0)
         : [],
+      manualPausedCombos: Array.isArray(candidate.regimeGate?.manualPausedCombos)
+        ? candidate.regimeGate.manualPausedCombos.filter((item): item is string => typeof item === 'string' && item.length > 0)
+        : [],
     },
     tradeManagement: {
       partialAtT1Pct: Math.min(0.9, Math.max(
@@ -922,6 +944,9 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
       )),
       pausedSetupTypes: Array.isArray(candidate.driftControl?.pausedSetupTypes)
         ? candidate.driftControl.pausedSetupTypes.filter((item): item is string => typeof item === 'string' && item.length > 0)
+        : [],
+      manualPausedSetupTypes: Array.isArray(candidate.driftControl?.manualPausedSetupTypes)
+        ? candidate.driftControl.manualPausedSetupTypes.filter((item): item is string => typeof item === 'string' && item.length > 0)
         : [],
     },
   };
@@ -1001,6 +1026,7 @@ function toPreparedRow(row: OptimizationRow): PreparedOptimizationRow {
   }
 
   return {
+    setupId: row.engine_setup_id,
     sessionDate: row.session_date,
     setupType,
     regime,
@@ -1033,7 +1059,17 @@ function optimizationRowKey(engineSetupId: string, sessionDate: string): string 
   return `${engineSetupId}:${sessionDate}`;
 }
 
-async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promise<Map<string, OutcomeOverride>> {
+interface OutcomeOverrideResult {
+  overrides: Map<string, OutcomeOverride>;
+  replayQuality: {
+    strictCount: number;
+    fallbackCount: number;
+    usedMassiveMinuteBars: boolean;
+    fallbackSessions: string[];
+  };
+}
+
+async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promise<OutcomeOverrideResult> {
   try {
     const backtest = await runSPXWinRateBacktest({
       from,
@@ -1057,14 +1093,29 @@ async function loadOutcomeOverridesFromBacktest(from: string, to: string): Promi
       });
     }
 
-    return map;
+    const totalSessions = backtest.evaluatedSetupCount || 0;
+    const fallbackCount = backtest.resolutionFallbackSessions?.length || 0;
+    const strictCount = Math.max(0, totalSessions - fallbackCount);
+
+    return {
+      overrides: map,
+      replayQuality: {
+        strictCount,
+        fallbackCount,
+        usedMassiveMinuteBars: backtest.usedMassiveMinuteBars,
+        fallbackSessions: backtest.resolutionFallbackSessions || [],
+      },
+    };
   } catch (error) {
     logger.warn('SPX optimizer failed to load outcome overrides from backtest', {
       from,
       to,
       error: error instanceof Error ? error.message : String(error),
     });
-    return new Map();
+    return {
+      overrides: new Map(),
+      replayQuality: { strictCount: 0, fallbackCount: 0, usedMassiveMinuteBars: false, fallbackSessions: [] },
+    };
   }
 }
 
@@ -1688,7 +1739,7 @@ export async function getSPXOptimizerScorecard(): Promise<SPXOptimizerScorecard>
 
   const profile = await getActiveSPXOptimizationProfile();
   const { from, to } = defaultScanRange(profile);
-  const outcomeOverrides = await loadOutcomeOverridesFromBacktest(from, to);
+  const { overrides: outcomeOverrides } = await loadOutcomeOverridesFromBacktest(from, to);
   const { prepared: rows } = await loadOptimizationRows(from, to, outcomeOverrides);
   const baselineCandidate: ThresholdCandidate = {
     requireFlowConfirmation: profile.flowGate.requireFlowConfirmation,
@@ -1752,6 +1803,8 @@ export async function runSPXOptimizerScan(input?: {
   from?: string;
   to?: string;
   mode?: 'manual' | 'weekly_auto' | 'nightly_auto';
+  /** When true, compute the scan but do NOT persist the resulting profile. */
+  dryRun?: boolean;
 }): Promise<SPXOptimizationScanResult> {
   const currentProfile = await getActiveSPXOptimizationProfile();
   const fallbackRange = defaultScanRange(currentProfile);
@@ -1768,10 +1821,29 @@ export async function runSPXOptimizerScan(input?: {
   const trainingTo = shiftDate(validationFrom, -1);
   const trainingFrom = shiftDate(trainingTo, -(trainingDays - 1));
 
-  const outcomeOverrides = await loadOutcomeOverridesFromBacktest(trainingFrom, validationTo);
+  const [{ overrides: outcomeOverrides, replayQuality }, inFlightSetupIds] = await Promise.all([
+    loadOutcomeOverridesFromBacktest(trainingFrom, validationTo),
+    getInFlightSetupIds(),
+  ]);
   const { prepared: rows, raw: rawRows } = await loadOptimizationRows(trainingFrom, validationTo, outcomeOverrides);
   const trainingRows = rows.filter((row) => row.sessionDate >= trainingFrom && row.sessionDate <= trainingTo);
   const validationRows = rows.filter((row) => row.sessionDate >= validationFrom && row.sessionDate <= validationTo);
+
+  // In-flight trade isolation: exclude setups that are currently in active trades
+  // from the optimization rows so their parameters aren't changed mid-trade.
+  const inFlightIsolatedCount = inFlightSetupIds.size;
+  const isolatedRows = inFlightIsolatedCount > 0
+    ? rows.filter((row) => !inFlightSetupIds.has(row.setupId))
+    : rows;
+  const isolatedTrainingRows = inFlightIsolatedCount > 0
+    ? trainingRows.filter((row) => !inFlightSetupIds.has(row.setupId))
+    : trainingRows;
+  const isolatedValidationRows = inFlightIsolatedCount > 0
+    ? validationRows.filter((row) => !inFlightSetupIds.has(row.setupId))
+    : validationRows;
+  if (inFlightIsolatedCount > 0) {
+    logger.info(`In-flight trade isolation: excluded ${inFlightIsolatedCount} active setup(s) from optimization.`);
+  }
 
   const baselineCandidate: ThresholdCandidate = {
     requireFlowConfirmation: profileForScan.flowGate.requireFlowConfirmation,
@@ -1789,14 +1861,14 @@ export async function runSPXOptimizerScan(input?: {
 
   let bestCandidate = baselineCandidate;
   let bestTrainingMetrics = toMetrics(
-    trainingRows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap })),
+    isolatedTrainingRows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap })),
     profileForScan.walkForward.objectiveWeights,
     { partialAtT1Pct: baselineCandidate.partialAtT1Pct, moveStopToBreakeven: baselineCandidate.moveStopToBreakeven },
   );
   let hasQualifiedTrainingCandidate = bestTrainingMetrics.tradeCount >= profileForScan.walkForward.minTrades;
 
   for (const candidate of candidateGrid()) {
-    const eligible = trainingRows.filter((row) => passesCandidate(row, candidate, { timingMap }));
+    const eligible = isolatedTrainingRows.filter((row) => passesCandidate(row, candidate, { timingMap }));
     const metrics = toMetrics(eligible, profileForScan.walkForward.objectiveWeights, {
       partialAtT1Pct: candidate.partialAtT1Pct,
       moveStopToBreakeven: candidate.moveStopToBreakeven,
@@ -1813,13 +1885,13 @@ export async function runSPXOptimizerScan(input?: {
   }
 
   const baselineValidationMetrics = toMetrics(
-    validationRows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap })),
+    isolatedValidationRows.filter((row) => passesCandidate(row, baselineCandidate, { timingMap })),
     profileForScan.walkForward.objectiveWeights,
     { partialAtT1Pct: baselineCandidate.partialAtT1Pct, moveStopToBreakeven: baselineCandidate.moveStopToBreakeven },
   );
 
   const optimizedValidationMetrics = toMetrics(
-    validationRows.filter((row) => passesCandidate(row, bestCandidate, { timingMap })),
+    isolatedValidationRows.filter((row) => passesCandidate(row, bestCandidate, { timingMap })),
     profileForScan.walkForward.objectiveWeights,
     { partialAtT1Pct: bestCandidate.partialAtT1Pct, moveStopToBreakeven: bestCandidate.moveStopToBreakeven },
   );
@@ -1842,6 +1914,12 @@ export async function runSPXOptimizerScan(input?: {
   const t1WinRateDelta = round(optimizedValidationMetrics.t1WinRatePct - baselineValidationMetrics.t1WinRatePct, 2);
   const t2WinRateDelta = round(optimizedValidationMetrics.t2WinRatePct - baselineValidationMetrics.t2WinRatePct, 2);
   const failureRateDelta = round(optimizedValidationMetrics.failureRatePct - baselineValidationMetrics.failureRatePct, 2);
+  const replayCount = replayQuality.strictCount + replayQuality.fallbackCount;
+  const fallbackSharePct = replayCount > 0
+    ? round((replayQuality.fallbackCount / replayCount) * 100, 2)
+    : 0;
+  const fallbackDominant = replayCount > 0 && fallbackSharePct > MAX_FALLBACK_SHARE_FOR_APPLY_PCT;
+  const fallbackDominanceGuardrailPassed = !fallbackDominant;
   const weeklyGuardrailPassed = !automatedMode || (
     objectiveDelta >= WEEKLY_AUTO_MIN_OBJECTIVE_DELTA
     && objectiveConservativeDelta >= 0
@@ -1867,6 +1945,7 @@ export async function runSPXOptimizerScan(input?: {
     )
     && weeklyGuardrailPassed
     && promotionGuardrailPassed
+    && fallbackDominanceGuardrailPassed
   );
 
   const activeCandidate = optimizationApplied ? bestCandidate : baselineCandidate;
@@ -1879,11 +1958,14 @@ export async function runSPXOptimizerScan(input?: {
   ) as Record<SweepFamily, DirectionSweepFamilyResult | null>;
   let geometrySweepSummary: SPXGeometrySweepSummary | undefined;
 
-  const manualPausedForSweep = new Set(
-    profileForScan.driftControl.pausedSetupTypes.filter(
+  const manualPausedForSweep = new Set([
+    ...(profileForScan.driftControl.manualPausedSetupTypes ?? []).filter(
       (s) => typeof s === 'string' && s.length > 0,
     ),
-  );
+    ...profileForScan.driftControl.pausedSetupTypes.filter(
+      (s) => typeof s === 'string' && s.length > 0,
+    ),
+  ]);
   const sweepFamilies = ALL_SWEEP_FAMILIES.filter(
     (family) => !manualPausedForSweep.has(family),
   );
@@ -1966,23 +2048,28 @@ export async function runSPXOptimizerScan(input?: {
   }
 
   const setupTypePerformance = evaluateBuckets(
-    rows.filter((row) => passesCandidate(row, activeCandidate, { timingMap })),
+    isolatedRows.filter((row) => passesCandidate(row, activeCandidate, { timingMap })),
     (row) => row.setupType,
     profileForScan.walkForward.objectiveWeights,
     activeCandidate.partialAtT1Pct,
     activeCandidate.moveStopToBreakeven,
   );
   const setupComboPerformance = evaluateBuckets(
-    rows.filter((row) => passesCandidate(row, activeCandidate, { timingMap })),
+    isolatedRows.filter((row) => passesCandidate(row, activeCandidate, { timingMap })),
     (row) => row.comboKey,
     profileForScan.walkForward.objectiveWeights,
     activeCandidate.partialAtT1Pct,
     activeCandidate.moveStopToBreakeven,
   );
 
-  const pausedCombos = resolvePausedCombos(setupComboPerformance, profileForScan);
+  const autoPausedCombos = resolvePausedCombos(setupComboPerformance, profileForScan);
+  // Manual combo pauses are pinned and always preserved
+  const manualPausedCombos = profileForScan.regimeGate.manualPausedCombos ?? [];
+  const pausedCombos = Array.from(
+    new Set([...manualPausedCombos, ...autoPausedCombos]),
+  ).sort();
   const driftAlerts = resolveDriftAlerts(
-    rows.filter((row) => passesCandidate(row, activeCandidate, {
+    isolatedRows.filter((row) => passesCandidate(row, activeCandidate, {
       pausedCombos: new Set(pausedCombos),
       timingMap,
     })),
@@ -1991,7 +2078,7 @@ export async function runSPXOptimizerScan(input?: {
     activeCandidate.partialAtT1Pct,
     activeCandidate.moveStopToBreakeven,
   );
-  const opportunityRowsForQuarantine = rows.filter((row) => passesCandidateOpportunity(row, activeCandidate, {
+  const opportunityRowsForQuarantine = isolatedRows.filter((row) => passesCandidateOpportunity(row, activeCandidate, {
     pausedCombos: new Set(pausedCombos),
     timingMap,
   }));
@@ -2000,12 +2087,25 @@ export async function runSPXOptimizerScan(input?: {
     profileForScan,
     validationTo,
   );
-  const manualPausedSetupTypes = profileForScan.driftControl.pausedSetupTypes
-    .filter((setupType) => typeof setupType === 'string' && setupType.length > 0);
+  // Manual pauses are pinned and always preserved across optimizer runs.
+  // They come from the dedicated manualPausedSetupTypes field (if present),
+  // falling back to the legacy pausedSetupTypes for backward compatibility.
+  const manualPausedSetupTypes = (
+    Array.isArray(profileForScan.driftControl.manualPausedSetupTypes)
+    && profileForScan.driftControl.manualPausedSetupTypes.length > 0
+  )
+    ? profileForScan.driftControl.manualPausedSetupTypes
+    : profileForScan.driftControl.pausedSetupTypes
+        .filter((setupType) => typeof setupType === 'string' && setupType.length > 0);
   const driftPausedSetupTypes = Array.from(new Set(driftAlerts.map((alert) => alert.setupType))).sort();
   const quarantinePausedSetupTypes = Array.from(new Set(triggerRateQuarantines.map((alert) => alert.setupType))).sort();
+  // Auto-pauses are drift + quarantine only (manual pauses are pinned separately)
+  const autoPausedSetupTypes = Array.from(
+    new Set([...driftPausedSetupTypes, ...quarantinePausedSetupTypes]),
+  ).sort();
+  // Merged set includes both manual (pinned) and auto-detected pauses
   const mergedPausedSetupTypes = Array.from(
-    new Set([...manualPausedSetupTypes, ...driftPausedSetupTypes, ...quarantinePausedSetupTypes]),
+    new Set([...manualPausedSetupTypes, ...autoPausedSetupTypes]),
   ).sort();
 
   const nextProfile: SPXOptimizationProfile = withDateRangeProfile({
@@ -2034,6 +2134,7 @@ export async function runSPXOptimizerScan(input?: {
     regimeGate: {
       ...profileForScan.regimeGate,
       pausedCombos,
+      manualPausedCombos,
     },
     tradeManagement: {
       ...profileForScan.tradeManagement,
@@ -2095,6 +2196,7 @@ export async function runSPXOptimizerScan(input?: {
     driftControl: {
       ...profileForScan.driftControl,
       pausedSetupTypes: mergedPausedSetupTypes,
+      manualPausedSetupTypes,
     },
   }, new Date().toISOString());
 
@@ -2108,7 +2210,7 @@ export async function runSPXOptimizerScan(input?: {
     optimizedCandidate: activeCandidate,
     toDate: validationTo,
     profile: profileForScan,
-    rows,
+    rows: isolatedRows,
   });
 
   const scorecard: SPXOptimizerScorecard = {
@@ -2131,6 +2233,21 @@ export async function runSPXOptimizerScan(input?: {
     setupActions,
     optimizationApplied,
     geometryOptimization: geometrySweepSummary,
+    dataQuality: {
+      strictReplayCount: replayQuality.strictCount,
+      fallbackReplayCount: replayQuality.fallbackCount,
+      mixedFidelity: replayQuality.strictCount > 0 && replayQuality.fallbackCount > 0,
+      replayFidelity: replayQuality.strictCount > 0 && replayQuality.fallbackCount > 0
+        ? 'mixed'
+        : replayQuality.fallbackCount > 0
+          ? 'fallback'
+          : replayQuality.strictCount > 0
+            ? 'strict'
+            : 'none',
+      usedMassiveMinuteBars: replayQuality.usedMassiveMinuteBars,
+      fallbackSharePct,
+      fallbackDominant,
+    },
     notes: [
       optimizationApplied
         ? `Walk-forward optimization applied to active profile (validation trades=${optimizedValidationMetrics.tradeCount}, minimum required=${requiredValidationTrades}).`
@@ -2139,6 +2256,10 @@ export async function runSPXOptimizerScan(input?: {
         ? `Automated guardrails: objective delta >= ${WEEKLY_AUTO_MIN_OBJECTIVE_DELTA}, conservative objective delta >= 0, expectancy delta >= 0, T1 delta >= 0, T2 delta >= -${WEEKLY_AUTO_MAX_T2_DROP_PCT}, validation trades >= ${requiredValidationTrades}.`
         : 'Automated guardrails not enforced for this scan mode.',
       `Promotion guardrails: T1 delta >= ${PROMOTION_MIN_T1_DELTA_PCT}, T2 delta >= ${PROMOTION_MIN_T2_DELTA_PCT}, expectancy delta >= ${PROMOTION_MIN_EXPECTANCY_DELTA_R}, failure delta <= ${PROMOTION_MAX_FAILURE_DELTA_PCT}, conservative objective delta >= 0.`,
+      `Replay data fidelity: strict=${replayQuality.strictCount}, fallback=${replayQuality.fallbackCount}, fallback share=${fallbackSharePct}%, usedMassiveMinuteBars=${replayQuality.usedMassiveMinuteBars}.`,
+      fallbackDominanceGuardrailPassed
+        ? `Fallback dominance guardrail passed (fallback share <= ${MAX_FALLBACK_SHARE_FOR_APPLY_PCT}%).`
+        : `Fallback dominance guardrail failed (fallback share ${fallbackSharePct}% > ${MAX_FALLBACK_SHARE_FOR_APPLY_PCT}%); optimization apply blocked.`,
       `Validation objective: baseline ${baselineValidationMetrics.objectiveScore} (conservative ${baselineValidationMetrics.objectiveScoreConservative}) vs optimized ${optimizedValidationMetrics.objectiveScore} (conservative ${optimizedValidationMetrics.objectiveScoreConservative}).`,
       `Validation expectancy(R): baseline ${baselineValidationMetrics.expectancyR} (lower bound ${baselineValidationMetrics.expectancyLowerBoundR}) vs optimized ${optimizedValidationMetrics.expectancyR} (lower bound ${optimizedValidationMetrics.expectancyLowerBoundR}).`,
       `Validation win/failure deltas: T1 ${t1WinRateDelta}, T2 ${t2WinRateDelta}, failure ${failureRateDelta}.`,
@@ -2166,28 +2287,154 @@ export async function runSPXOptimizerScan(input?: {
         ]
         : ['Stage 2 geometry sweep: skipped (insufficient training setups or no eligible families).']
       ),
-      `Drift control paused ${driftPausedSetupTypes.length} setup types and trigger-rate quarantine paused ${quarantinePausedSetupTypes.length} setup types; merged paused setup types=${mergedPausedSetupTypes.length}.`,
-      `Regime gate paused ${pausedCombos.length} setup/regime combos.`,
+      `Drift control auto-paused ${driftPausedSetupTypes.length} setup types and trigger-rate quarantine auto-paused ${quarantinePausedSetupTypes.length} setup types; manual-pinned ${manualPausedSetupTypes.length}; merged total=${mergedPausedSetupTypes.length}.`,
+      `Regime gate paused ${pausedCombos.length} setup/regime combos (${manualPausedCombos.length} manual-pinned, ${autoPausedCombos.length} auto-detected).`,
+      inFlightIsolatedCount > 0
+        ? `In-flight trade isolation: ${inFlightIsolatedCount} active setup(s) excluded from optimization to prevent mid-trade parameter changes.`
+        : 'In-flight trade isolation: no active trades detected.',
     ],
   };
 
-  await persistOptimizerState({
-    profile: nextProfile,
-    scorecard,
-    scanRange: { from: scanFrom, to: scanTo },
-    trainingRange: { from: trainingFrom, to: trainingTo },
-    validationRange: { from: validationFrom, to: validationTo },
-  });
+  const isDryRun = input?.dryRun === true;
 
-  try {
-    await cacheSet(OPTIMIZER_PROFILE_CACHE_KEY, nextProfile, OPTIMIZER_PROFILE_CACHE_TTL_SECONDS);
-  } catch {
-    // noop
+  if (!isDryRun) {
+    await persistOptimizerState({
+      profile: nextProfile,
+      scorecard,
+      scanRange: { from: scanFrom, to: scanTo },
+      trainingRange: { from: trainingFrom, to: trainingTo },
+      validationRange: { from: validationFrom, to: validationTo },
+    });
+
+    try {
+      await cacheSet(OPTIMIZER_PROFILE_CACHE_KEY, nextProfile, OPTIMIZER_PROFILE_CACHE_TTL_SECONDS);
+    } catch {
+      // noop
+    }
+  } else {
+    logger.info('Optimizer scan completed in dry-run mode; profile NOT persisted.');
+    scorecard.notes.push('DRY RUN: Results computed but NOT applied to active profile.');
   }
 
   return {
     profile: nextProfile,
     scorecard,
+    ...(isDryRun ? { dryRun: true } : {}),
+  };
+}
+
+/**
+ * Revert the active optimization profile to a previous version stored in
+ * `spx_setup_optimizer_history`. Looks up the history entry by `historyId`,
+ * restores the `previous_profile` from that row as the active profile, writes
+ * a new history entry recording the revert, and refreshes the cache.
+ */
+export async function revertSPXOptimizationProfile(historyId: number): Promise<{
+  success: boolean;
+  message: string;
+  restoredGeneratedAt?: string;
+}> {
+  // 1. Load the history row
+  const { data: historyRow, error: historyError } = await supabase
+    .from('spx_setup_optimizer_history')
+    .select('id, previous_profile, next_profile, scorecard')
+    .eq('id', historyId)
+    .maybeSingle();
+
+  if (historyError) {
+    logger.error('SPX optimizer revert: failed to load history row', {
+      historyId,
+      error: historyError.message,
+    });
+    return { success: false, message: 'Failed to load optimizer history entry.' };
+  }
+
+  if (!historyRow) {
+    return { success: false, message: `Optimizer history entry #${historyId} not found.` };
+  }
+
+  const previousProfile = historyRow.previous_profile;
+  if (!previousProfile || typeof previousProfile !== 'object' || Array.isArray(previousProfile)) {
+    return { success: false, message: `History entry #${historyId} has no restorable previous profile.` };
+  }
+
+  const restoredProfile = normalizeProfile(previousProfile as SPXOptimizationProfile);
+  const currentProfile = await getActiveSPXOptimizationProfile();
+
+  // 2. Persist the restored profile as the active optimizer state
+  const currentState = await readPersistedOptimizerState();
+  await persistOptimizerState({
+    profile: restoredProfile,
+    scorecard: (currentState?.scorecard as SPXOptimizerScorecard) || {
+      generatedAt: new Date().toISOString(),
+      scanRange: { from: '', to: '' },
+      trainingRange: { from: '', to: '' },
+      validationRange: { from: '', to: '' },
+      baseline: {} as SPXOptimizerScorecard['baseline'],
+      optimized: {} as SPXOptimizerScorecard['optimized'],
+      improvementPct: {
+        t1WinRateDelta: 0,
+        t2WinRateDelta: 0,
+        objectiveDelta: 0,
+        objectiveConservativeDelta: 0,
+        expectancyRDelta: 0,
+      },
+      driftAlerts: [],
+      setupTypePerformance: [],
+      regimePerformance: [],
+      timeBucketPerformance: [],
+      notes: [],
+      optimizationApplied: false,
+    },
+    scanRange: {
+      from: currentState?.scan_range_from || '',
+      to: currentState?.scan_range_to || '',
+    },
+    trainingRange: {
+      from: currentState?.training_from || '',
+      to: currentState?.training_to || '',
+    },
+    validationRange: {
+      from: currentState?.validation_from || '',
+      to: currentState?.validation_to || '',
+    },
+  });
+
+  // 3. Refresh the profile cache
+  try {
+    await cacheSet(OPTIMIZER_PROFILE_CACHE_KEY, restoredProfile, OPTIMIZER_PROFILE_CACHE_TTL_SECONDS);
+  } catch {
+    // noop — cache miss will reload from Supabase
+  }
+
+  // 4. Write a new history entry recording the revert
+  try {
+    await supabase.from('spx_setup_optimizer_history').insert({
+      mode: 'manual',
+      action: 'revert',
+      optimization_applied: true,
+      actor: 'user',
+      reason: `Reverted to profile from history entry #${historyId}`,
+      reverted_from_history_id: historyId,
+      previous_profile: currentProfile,
+      next_profile: restoredProfile,
+      scorecard: historyRow.scorecard || {},
+    });
+  } catch (histError) {
+    logger.warn('SPX optimizer revert: failed to write history entry for revert', {
+      error: histError instanceof Error ? histError.message : String(histError),
+    });
+  }
+
+  logger.info('SPX optimizer: reverted to previous profile', {
+    historyId,
+    restoredGeneratedAt: restoredProfile.generatedAt,
+  });
+
+  return {
+    success: true,
+    message: `Successfully reverted to profile from history entry #${historyId}.`,
+    restoredGeneratedAt: restoredProfile.generatedAt,
   };
 }
 
