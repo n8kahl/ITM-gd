@@ -48,6 +48,12 @@ interface EvaluatedSetup {
   ambiguityCount: number;
   missingTarget2: boolean;
   realizedR: number | null;
+  /** Confidence weight for this result (reduced for ambiguous bars). Audit #3C */
+  confidenceWeight: number;
+  /** Regime re-classified from historical bars for this session. Audit #3C */
+  reclassifiedRegime?: string | null;
+  /** VWAP at trigger time, reconstructed from cumulative volume. Audit #3C */
+  reconstructedVwap?: number | null;
 }
 
 interface BacktestPauseFilters {
@@ -942,6 +948,69 @@ function findEntryTriggerPrice(
   return null;
 }
 
+/**
+ * Reconstruct VWAP from cumulative volume across bars (Audit #3C).
+ * Returns the VWAP at the end of the given bar range.
+ */
+function reconstructVWAPFromBars(bars: MassiveAggregate[]): number | null {
+  let cumulativeTPV = 0;
+  let cumulativeVolume = 0;
+
+  for (const bar of bars) {
+    const v = bar.v ?? 0;
+    if (v <= 0) continue;
+    const typicalPrice = ((bar.h ?? 0) + (bar.l ?? 0) + (bar.c ?? 0)) / 3;
+    if (!Number.isFinite(typicalPrice) || typicalPrice <= 0) continue;
+    cumulativeTPV += typicalPrice * v;
+    cumulativeVolume += v;
+  }
+
+  if (cumulativeVolume <= 0) return null;
+  const vwap = cumulativeTPV / cumulativeVolume;
+  return Number.isFinite(vwap) ? round(vwap, 2) : null;
+}
+
+/**
+ * Classify regime from historical bars using simple trend/compression heuristic (Audit #3C).
+ * This is a lightweight version of the live regime classifier that works with OHLC bars only.
+ * Returns 'trending' | 'compression' | 'neutral'.
+ */
+function classifyRegimeFromHistoricalBars(bars: MassiveAggregate[]): string {
+  if (bars.length < 20) return 'neutral';
+
+  const recentBars = bars.slice(-30);
+  const closes = recentBars.map((b) => b.c).filter((c) => Number.isFinite(c) && c > 0);
+  if (closes.length < 15) return 'neutral';
+
+  // EMA-based trend detection (simplified from regimeClassifier.trendStrengthFromBars)
+  const emaPeriodFast = Math.min(8, closes.length);
+  const emaPeriodSlow = Math.min(21, closes.length);
+  let emaFast = closes[0];
+  let emaSlow = closes[0];
+  const kFast = 2 / (emaPeriodFast + 1);
+  const kSlow = 2 / (emaPeriodSlow + 1);
+
+  for (let i = 1; i < closes.length; i++) {
+    emaFast = closes[i] * kFast + emaFast * (1 - kFast);
+    emaSlow = closes[i] * kSlow + emaSlow * (1 - kSlow);
+  }
+
+  const spread = Math.abs(emaFast - emaSlow);
+  const avgPrice = closes[closes.length - 1];
+  const spreadPct = avgPrice > 0 ? spread / avgPrice : 0;
+
+  // Range compression detection
+  const rangeHighs = recentBars.slice(-15).map((b) => b.h).filter((h) => Number.isFinite(h));
+  const rangeLows = recentBars.slice(-15).map((b) => b.l).filter((l) => Number.isFinite(l));
+  const maxH = Math.max(...rangeHighs);
+  const minL = Math.min(...rangeLows);
+  const rangePct = avgPrice > 0 ? (maxH - minL) / avgPrice : 0;
+
+  if (spreadPct > 0.002 && rangePct > 0.005) return 'trending';
+  if (rangePct < 0.003) return 'compression';
+  return 'neutral';
+}
+
 function barContainsAmbiguity(
   setup: BacktestSetupCandidate,
   bar: MassiveAggregate,
@@ -1178,13 +1247,32 @@ function evaluateSetupAgainstBars(
     realizedR = round(realizedR, 4);
   }
 
+  // Regime re-classification from historical bars (Audit #3C)
+  const reclassifiedRegime = bars.length >= 20 ? classifyRegimeFromHistoricalBars(bars) : null;
+
+  // Reconstruct VWAP at trigger time from cumulative volume (Audit #3C)
+  let reconstructedVwap: number | null = null;
+  if (triggered && triggeredAt) {
+    const triggerMs = Date.parse(triggeredAt);
+    if (Number.isFinite(triggerMs)) {
+      const barsUpToTrigger = bars.filter((b) => b.t <= triggerMs);
+      reconstructedVwap = barsUpToTrigger.length > 0
+        ? reconstructVWAPFromBars(barsUpToTrigger)
+        : reconstructVWAPFromBars(bars);
+    }
+  }
+
+  // Confidence weight: reduce for ambiguous bars (Audit #3C)
+  // Each ambiguous bar reduces confidence by 25% (minimum 0.25)
+  const confidenceWeight = Math.max(0.25, 1 - (ambiguityCount * 0.25));
+
   return {
     row: {
       engine_setup_id: setup.engineSetupId,
       session_date: setup.sessionDate,
       setup_type: setup.setupType,
       direction: setup.direction,
-      regime: setup.regime,
+      regime: reclassifiedRegime || setup.regime,
       tier: setup.tier,
       triggered_at: triggered ? (triggeredAt || setup.firstSeenAt || null) : null,
       final_outcome: triggered ? finalOutcome : null,
@@ -1197,6 +1285,9 @@ function evaluateSetupAgainstBars(
     ambiguityCount,
     missingTarget2: setup.target2Price == null,
     realizedR,
+    confidenceWeight,
+    reclassifiedRegime,
+    reconstructedVwap,
   };
 }
 
@@ -1314,8 +1405,14 @@ function buildProfitabilityMetrics(evaluated: EvaluatedSetup[]): SPXBacktestProf
   const resolvedCount = triggered.filter((entry) => entry.row.final_outcome != null).length;
   const realizedRows = triggered.filter((entry) => typeof entry.realizedR === 'number' && Number.isFinite(entry.realizedR));
   const realizedValues = realizedRows.map((entry) => entry.realizedR as number);
+  // Use confidence-weighted R values for averages (Audit #3C: ambiguous bars get reduced weight)
+  const weights = realizedRows.map((entry) => entry.confidenceWeight);
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  const weightedCumulativeR = realizedRows.reduce((sum, entry, i) =>
+    sum + (entry.realizedR as number) * weights[i], 0,
+  );
   const cumulativeRealizedR = realizedValues.reduce((sum, value) => sum + value, 0);
-  const averageRealizedR = realizedValues.length > 0 ? cumulativeRealizedR / realizedValues.length : 0;
+  const averageRealizedR = totalWeight > 0 ? weightedCumulativeR / totalWeight : 0;
   const positiveRealizedCount = realizedValues.filter((value) => value > 0).length;
 
   const bySetupTypeMap = new Map<string, { count: number; cumulative: number }>();

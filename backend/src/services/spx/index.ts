@@ -10,8 +10,8 @@ import { getMergedLevels } from './levelEngine';
 import { logger } from '../../lib/logger';
 import { classifyCurrentRegime } from './regimeClassifier';
 import { detectActiveSetups, getLatestSetupEnvironmentState } from './setupDetector';
-import { applyTickStateToSetups, evaluateTickSetupTransitions, syncTickEvaluatorSetups } from './tickEvaluator';
-import { getLatestTick } from '../tickCache';
+import { applyTickStateToSetups, evaluateTickSetupTransitions, syncTickEvaluatorSetups, persistTickEvaluatorState } from './tickEvaluator';
+import { getLatestTick, isTickStreamHealthy } from '../tickCache';
 import type {
   BasisState,
   CoachMessage,
@@ -24,9 +24,13 @@ import type {
 import { nowIso } from './utils';
 
 let snapshotInFlight: Promise<SPXSnapshot> | null = null;
+let snapshotInFlightStartedAt = 0;
 const SNAPSHOT_CONTRACT_ENRICHMENT_BUDGET_MS = 2500;
 const SNAPSHOT_MAX_INLINE_RECOMMENDATIONS = 2;
 const SNAPSHOT_BACKGROUND_REFRESH_MS = 20_000;
+const SNAPSHOT_MAX_FALLBACK_AGE_MS = 5 * 60 * 1000; // 5-minute max age for fallback snapshot
+const SNAPSHOT_INFLIGHT_STALENESS_MS = 10_000; // 10s — discard stale in-flight promise
+const SNAPSHOT_TICK_HEALTH_MAX_AGE_MS = 12_000;
 const SNAPSHOT_STAGE_TIMEOUTS_MS = {
   gex: 12_000,
   flow: 4_000,
@@ -57,6 +61,20 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
       clearTimeout(timeoutHandle);
     }
   }
+}
+
+// Throttled tick evaluator persistence — at most once per 30s
+const TICK_PERSIST_THROTTLE_MS = 30_000;
+let lastTickPersistAtMs = 0;
+function throttledPersistTickState(): void {
+  const now = Date.now();
+  if (now - lastTickPersistAtMs < TICK_PERSIST_THROTTLE_MS) return;
+  lastTickPersistAtMs = now;
+  persistTickEvaluatorState().catch((err) => {
+    logger.warn('Throttled tick evaluator persist failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 }
 
 function createNeutralGexProfile(
@@ -192,7 +210,24 @@ async function withStageFallback<T>(input: {
 }
 
 async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
-  const fallbackSnapshot = lastGoodSnapshot;
+  // Bound fallback snapshot age to 5 minutes max (Audit CRITICAL-3, Cache domain).
+  // If the last good snapshot is older than 5 minutes, stages that fail should
+  // NOT return 20+ minute old data — they'll get null/empty defaults instead.
+  const fallbackAge = Date.now() - lastGoodSnapshotAt;
+  const fallbackSnapshot = (lastGoodSnapshot && fallbackAge <= SNAPSHOT_MAX_FALLBACK_AGE_MS)
+    ? lastGoodSnapshot
+    : null;
+  const tickHealth = isTickStreamHealthy('SPX', {
+    maxAgeMs: SNAPSHOT_TICK_HEALTH_MAX_AGE_MS,
+  });
+  if (!tickHealth.healthy) {
+    logger.warn('SPX snapshot tick freshness gate active', {
+      reason: tickHealth.reason,
+      ageMs: tickHealth.ageMs,
+      maxAgeMs: SNAPSHOT_TICK_HEALTH_MAX_AGE_MS,
+      hasFallbackSnapshot: Boolean(fallbackSnapshot),
+    });
+  }
 
   const [gex, flow] = await Promise.all([
     withStageFallback({
@@ -242,7 +277,13 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   const levelData = await withStageFallback({
     stage: 'levels',
     forceRefresh,
-    run: () => getMergedLevels({ forceRefresh, basisState: basis, gexLandscape: gex, fibLevels }),
+    run: () => {
+      // Freshness guard: do not compute fresh levels when tick stream is stale/missing.
+      if (!tickHealth.healthy) {
+        throw new Error(`Tick stream unhealthy: ${tickHealth.reason}`);
+      }
+      return getMergedLevels({ forceRefresh, basisState: basis, gexLandscape: gex, fibLevels });
+    },
     fallback: () => ({
       levels: fallbackSnapshot?.levels || [],
       clusters: fallbackSnapshot?.clusters || [],
@@ -273,7 +314,11 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   syncTickEvaluatorSetups(setupsRaw);
   const latestSpxTick = getLatestTick('SPX');
   if (latestSpxTick) {
-    evaluateTickSetupTransitions(latestSpxTick);
+    const transitions = evaluateTickSetupTransitions(latestSpxTick);
+    // Persist tick evaluator state to Redis after transitions (throttled to once per 30s)
+    if (transitions.length > 0) {
+      throttledPersistTickState();
+    }
   }
   const setupsTickAdjusted = applyTickStateToSetups(setupsRaw);
 
@@ -350,10 +395,21 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
 }
 
 function refreshSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
+  // Discard stale in-flight promise if it's been running longer than 10 seconds
+  // (Audit CRITICAL-2, Cache domain). Prevents new requests from receiving
+  // data that's aging while a slow GEX/flow stage holds up the promise.
   if (snapshotInFlight) {
-    return snapshotInFlight;
+    const inFlightAge = Date.now() - snapshotInFlightStartedAt;
+    if (inFlightAge <= SNAPSHOT_INFLIGHT_STALENESS_MS) {
+      return snapshotInFlight;
+    }
+    logger.warn('SPX snapshot in-flight promise stale; starting fresh build', {
+      inFlightAgeMs: inFlightAge,
+    });
+    // Let the old promise resolve on its own; start a new one
   }
 
+  snapshotInFlightStartedAt = Date.now();
   snapshotInFlight = buildSnapshot(forceRefresh)
     .then((snapshot) => {
       lastGoodSnapshot = snapshot;

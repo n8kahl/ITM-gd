@@ -6,10 +6,16 @@ import { CLUSTER_RADIUS_POINTS, nowIso, round } from './utils';
 import { getBasisState } from './crossReference';
 
 const FIB_CACHE_KEY = 'spx_command_center:fib_levels';
-const FIB_CACHE_TTL_SECONDS = 30;
+const FIB_CACHE_TTL_SECONDS = 15; // Reduced from 30s for faster intraday swing refresh (Audit #8 HIGH-3)
 const fibInFlightByKey = new Map<string, Promise<FibLevel[]>>();
 const MIN_DAILY_30_BARS = 25;
 const MIN_DAILY_90_BARS = 60;
+
+// Intraday swing tracking for significant-move triggered recalculation (Audit #8 HIGH-3)
+const SIGNIFICANT_MOVE_THRESHOLD = 0.003; // 0.3% swing change triggers recalc
+let lastIntradayHigh = 0;
+let lastIntradayLow = 0;
+let lastIntradayDate = '';
 
 interface AggregateBar {
   o: number;
@@ -184,14 +190,64 @@ async function computeFibSet(input: {
   return levels;
 }
 
+/**
+ * Check if intraday swing extremes have shifted enough to warrant a fib recalc.
+ * Returns true if high or low has moved by more than SIGNIFICANT_MOVE_THRESHOLD.
+ */
+function hasSignificantIntradaySwingChange(currentHigh: number, currentLow: number, asOfDate: string): boolean {
+  if (asOfDate !== lastIntradayDate) {
+    // New trading day — reset tracking
+    lastIntradayHigh = currentHigh;
+    lastIntradayLow = currentLow;
+    lastIntradayDate = asOfDate;
+    return false;
+  }
+
+  if (lastIntradayHigh <= 0 || lastIntradayLow <= 0) {
+    lastIntradayHigh = currentHigh;
+    lastIntradayLow = currentLow;
+    return false;
+  }
+
+  const highShift = Math.abs(currentHigh - lastIntradayHigh) / lastIntradayHigh;
+  const lowShift = Math.abs(currentLow - lastIntradayLow) / lastIntradayLow;
+  const significant = highShift >= SIGNIFICANT_MOVE_THRESHOLD || lowShift >= SIGNIFICANT_MOVE_THRESHOLD;
+
+  if (significant) {
+    lastIntradayHigh = currentHigh;
+    lastIntradayLow = currentLow;
+  }
+
+  return significant;
+}
+
 export async function getFibLevels(options?: {
   forceRefresh?: boolean;
   basisState?: BasisState;
   basisCurrent?: number;
   asOfDate?: string;
+  intradayHigh?: number;
+  intradayLow?: number;
 }): Promise<FibLevel[]> {
-  const forceRefresh = options?.forceRefresh === true;
   const asOfDate = normalizeAsOfDate(options?.asOfDate);
+
+  // Check if intraday swing has shifted significantly — force refresh if so
+  let forceRefresh = options?.forceRefresh === true;
+  if (!forceRefresh
+    && typeof options?.intradayHigh === 'number' && options.intradayHigh > 0
+    && typeof options?.intradayLow === 'number' && options.intradayLow > 0
+  ) {
+    if (hasSignificantIntradaySwingChange(options.intradayHigh, options.intradayLow, asOfDate)) {
+      logger.info('SPX fibonacci: significant intraday swing change detected, forcing recalc', {
+        high: options.intradayHigh,
+        low: options.intradayLow,
+        prevHigh: lastIntradayHigh,
+        prevLow: lastIntradayLow,
+      });
+      forceRefresh = true;
+    }
+  }
+
   const cacheKey = `${FIB_CACHE_KEY}:${asOfDate}`;
   const hasPrecomputedBasis = Boolean(options?.basisState)
     || (typeof options?.basisCurrent === 'number' && Number.isFinite(options.basisCurrent));

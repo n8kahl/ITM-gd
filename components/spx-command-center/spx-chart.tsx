@@ -56,12 +56,20 @@ function labelFromSource(source: string): string {
   if (normalized.includes('put_wall')) return 'Put Wall'
   if (normalized.includes('flip_point')) return 'Flip'
   if (normalized.includes('zero_gamma')) return 'Zero Gamma'
+  if (normalized === 'opening_range_high') return 'OR-High'
+  if (normalized === 'opening_range_low') return 'OR-Low'
   if (normalized.startsWith('fib_')) return source.replace(/^fib_/, '').replace(/_/g, ' ').toUpperCase()
   return source.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
-function chartLevelLabel(level: SPXLevel): string {
+function chartLevelLabel(level: SPXLevel, compact = false): string {
   const base = labelFromSource(level.source)
+  if (compact) {
+    // Abbreviated labels for mobile — prevent overlap on narrow viewports (Audit #9 CRITICAL-3)
+    if (isSpyDerivedLevel(level)) return `S→${base}`
+    if (level.category === 'options') return base
+    return base
+  }
   if (isSpyDerivedLevel(level)) return `SPY→SPX ${base}`
   if (level.category === 'options') return `Options ${base}`
   return base
@@ -356,12 +364,15 @@ export function SPXChart({
     return tradeMode === 'in_trade' || selectedSetup.status === 'ready' || selectedSetup.status === 'triggered'
   }, [selectedSetup, tradeMode])
 
+  // Extract last bar close as a stable primitive for memo dependency (Audit #8 MEDIUM-3)
+  const lastBarClose = renderedBars[renderedBars.length - 1]?.close ?? null
+
   const scenarioLanes = useMemo(() => {
     if (!renderLevelAnnotations) return []
     if (!actionableSetupVisible) return []
-    const referencePrice = renderedBars[renderedBars.length - 1]?.close ?? (spxPrice > 0 ? spxPrice : null)
+    const referencePrice = lastBarClose ?? (spxPrice > 0 ? spxPrice : null)
     return buildSPXScenarioLanes(selectedSetup, referencePrice)
-  }, [actionableSetupVisible, renderLevelAnnotations, renderedBars, selectedSetup, spxPrice])
+  }, [actionableSetupVisible, lastBarClose, renderLevelAnnotations, selectedSetup, spxPrice])
 
   useEffect(() => {
     const signature = scenarioLanes.map((lane) => `${lane.type}:${lane.price}`).join('|')
@@ -376,6 +387,7 @@ export function SPXChart({
   }, [focusMode, replayEnabled, scenarioLanes, selectedSetup?.id])
 
   const levelAnnotations = useMemo<LevelAnnotation[]>(() => {
+    const compact = typeof window !== 'undefined' && window.innerWidth < 768
     return levels.map((level) => ({
       ...(isVWAPLevel(level)
         ? {
@@ -386,14 +398,14 @@ export function SPXChart({
           type: 'vwap',
         }
         : {
-          label: chartLevelLabel(level),
-          color: isSpyDerivedLevel(level) ? 'rgba(245, 237, 204, 0.72)' : level.chartStyle.color,
-          lineStyle: toLineStyle(isSpyDerivedLevel(level) ? 'dot-dash' : level.chartStyle.lineStyle),
+          label: chartLevelLabel(level, compact),
+          color: level.chartStyle.color,
+          lineStyle: toLineStyle(level.chartStyle.lineStyle),
           lineWidth: level.chartStyle.lineWidth,
           type: level.category,
         }),
       price: level.price,
-      axisLabelVisible: true,
+      axisLabelVisible: !compact || level.strength === 'strong',
       strength: level.strength,
       description: typeof level.metadata.description === 'string'
         ? level.metadata.description
@@ -547,22 +559,23 @@ export function SPXChart({
 
     return chartAnnotations.reduce<LevelAnnotation[]>((acc, annotation) => {
       if (annotation.type === 'entry_zone' && annotation.priceLow != null && annotation.priceHigh != null) {
+        // Subtle boundary lines — the filled rectangle is rendered by PriorityLevelOverlay
         acc.push(
           {
             price: annotation.priceLow,
             label: `${annotation.label} Low`,
-            color: 'rgba(16,185,129,0.75)',
+            color: 'rgba(16,185,129,0.35)',
             lineStyle: 'dashed',
-            lineWidth: 1,
+            lineWidth: 0.75,
             axisLabelVisible: true,
             type: annotation.type,
           },
           {
             price: annotation.priceHigh,
             label: `${annotation.label} High`,
-            color: 'rgba(16,185,129,0.75)',
+            color: 'rgba(16,185,129,0.35)',
             lineStyle: 'dashed',
-            lineWidth: 1,
+            lineWidth: 0.75,
             axisLabelVisible: true,
             type: annotation.type,
           },

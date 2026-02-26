@@ -34,10 +34,10 @@ import {
  */
 
 // Market-data caching (Phase 3.7): keep options data very fresh.
-
-// Market-data caching (Phase 3.7): keep options data very fresh.
-const OPTIONS_CHAIN_CACHE_TTL = 60; // 60 seconds
-const OPTIONS_MATRIX_CACHE_TTL = 60; // 60 seconds
+// Reduced from 60s to 20s — in fast markets, 60s-old Greeks cause wrong
+// contract recommendations (Audit CRITICAL-1, Cache domain).
+const OPTIONS_CHAIN_CACHE_TTL = 20; // 20 seconds
+const OPTIONS_MATRIX_CACHE_TTL = 20; // 20 seconds
 const DEFAULT_MATRIX_EXPIRATIONS = 5;
 const DEFAULT_MATRIX_STRIKE_RANGE = 50;
 const MATRIX_FETCH_CONCURRENCY = 2;

@@ -6,6 +6,7 @@ import { getMarketIndicesSnapshot } from '../services/marketIndices';
 import { massiveClient, getTickerNews } from '../config/massive';
 import { getEarningsCalendar } from '../services/earnings';
 import { getEconomicCalendar } from '../services/economic';
+import { getSPXSnapshot } from '../services/spx';
 
 interface PromptProfile {
   tier?: string;
@@ -276,6 +277,72 @@ async function loadPromptProfile(userId: string): Promise<PromptProfile> {
   return profile;
 }
 
+async function loadSPXCommandCenterContext(): Promise<string | null> {
+  try {
+    const snapshot = await getSPXSnapshot({ forceRefresh: false });
+    if (!snapshot) return null;
+
+    const lines: string[] = [];
+    const freshness = snapshot.generatedAt
+      ? `Data as of: ${snapshot.generatedAt}`
+      : `Data as of: ${new Date().toISOString()}`;
+    lines.push(freshness);
+
+    // Regime
+    if (snapshot.regime) {
+      const r = snapshot.regime;
+      lines.push(`Regime: ${r.label || r.regime || 'unknown'} (confidence: ${typeof r.confidence === 'number' ? `${(r.confidence * 100).toFixed(0)}%` : 'N/A'})`);
+    }
+
+    // Key levels (top 8 by strength)
+    if (snapshot.levels?.length > 0) {
+      const topLevels = snapshot.levels
+        .filter((l) => l.price > 0)
+        .sort((a, b) => {
+          const strengthOrder = { strong: 0, moderate: 1, weak: 2 };
+          return (strengthOrder[a.strength] ?? 2) - (strengthOrder[b.strength] ?? 2);
+        })
+        .slice(0, 8);
+      if (topLevels.length > 0) {
+        lines.push('Key levels: ' + topLevels.map((l) => `${l.label || l.type} ${l.price.toFixed(2)} (${l.strength})`).join(', '));
+      }
+    }
+
+    // GEX
+    if (snapshot.gex?.spx) {
+      const g = snapshot.gex.spx;
+      const parts = [`spot ${g.spotPrice?.toFixed(2) || 'N/A'}`];
+      if (g.flipPoint) parts.push(`flip ${g.flipPoint.toFixed(2)}`);
+      if (g.callWall) parts.push(`call wall ${g.callWall.toFixed(2)}`);
+      if (g.putWall) parts.push(`put wall ${g.putWall.toFixed(2)}`);
+      lines.push('GEX: ' + parts.join(', '));
+    }
+
+    // Active setups summary
+    if (snapshot.setups?.length > 0) {
+      const active = snapshot.setups.filter((s) => ['ready', 'triggered', 'forming'].includes(s.status));
+      if (active.length > 0) {
+        lines.push(`Active setups: ${active.length} (${active.map((s) => `${s.direction} ${s.status} @ ${s.entryZone?.low?.toFixed(2)}-${s.entryZone?.high?.toFixed(2)}`).join('; ')})`);
+      }
+    }
+
+    // Prediction pWin
+    if (snapshot.prediction) {
+      const p = snapshot.prediction;
+      if (typeof p.pWin === 'number') {
+        lines.push(`Prediction pWin: ${(p.pWin * 100).toFixed(1)}% (bias: ${p.bias || 'neutral'})`);
+      }
+    }
+
+    return lines.join('\n');
+  } catch (error) {
+    logger.debug('Failed to load SPX command center context for coach', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 export async function buildSystemPromptForUser(
   userId: string,
   options?: { isMobile?: boolean; recentSymbols?: string[]; activeChartSymbol?: string },
@@ -286,7 +353,7 @@ export async function buildSystemPromptForUser(
     ...(options?.recentSymbols || []),
   ]);
 
-  const [profile, indicesResponse, marketContextText, earningsWarnings, economicWarnings, newsDigest] = await Promise.all([
+  const [profile, indicesResponse, marketContextText, earningsWarnings, economicWarnings, newsDigest, spxContext] = await Promise.all([
     loadPromptProfile(userId),
     getMarketIndicesSnapshot().catch((err) => {
       logger.warn('Failed to fetch indices for prompt context', { error: err });
@@ -296,6 +363,7 @@ export async function buildSystemPromptForUser(
     getEarningsProximityWarnings(symbols),
     getEconomicEventWarnings(2),
     getNewsDigest(symbols),
+    loadSPXCommandCenterContext(),
   ]);
 
   const spxQuote = indicesResponse?.quotes?.find((quote) => quote.symbol === 'SPX');
@@ -326,5 +394,6 @@ export async function buildSystemPromptForUser(
     earningsWarnings,
     economicWarnings,
     newsDigest,
+    spxCommandCenterContext: spxContext,
   });
 }

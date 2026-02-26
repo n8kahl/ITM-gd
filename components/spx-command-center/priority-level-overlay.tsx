@@ -37,9 +37,18 @@ interface RenderLine {
   showLabel: boolean
 }
 
+interface RenderZone {
+  id: string
+  yTop: number
+  yBottom: number
+  label: string
+  color: string
+}
+
 interface RenderState {
   width: number
   lines: RenderLine[]
+  zones: RenderZone[]
 }
 
 const REFRESH_INTERVAL_MS = 120
@@ -67,6 +76,8 @@ function labelFromSource(source: string): string {
   if (normalized.includes('put_wall')) return 'Put Wall'
   if (normalized.includes('flip_point')) return 'Flip'
   if (normalized.includes('zero_gamma')) return 'Zero Gamma'
+  if (normalized === 'opening_range_high') return 'OR-High'
+  if (normalized === 'opening_range_low') return 'OR-Low'
   if (normalized.startsWith('fib_')) return source.replace(/^fib_/, '').replace(/_/g, ' ').toUpperCase()
   return source.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
@@ -84,7 +95,7 @@ function levelKey(level: Pick<OverlayLevel, 'label' | 'price' | 'type'>): string
 
 function renderStateEquals(left: RenderState | null, right: RenderState | null): boolean {
   if (!left || !right) return left === right
-  if (left.width !== right.width || left.lines.length !== right.lines.length) return false
+  if (left.width !== right.width || left.lines.length !== right.lines.length || left.zones.length !== right.zones.length) return false
   for (let index = 0; index < left.lines.length; index += 1) {
     const l = left.lines[index]
     const r = right.lines[index]
@@ -98,6 +109,14 @@ function renderStateEquals(left: RenderState | null, right: RenderState | null):
       || l.lineWidth !== r.lineWidth
       || l.showLabel !== r.showLabel
     ) {
+      return false
+    }
+  }
+  for (let index = 0; index < left.zones.length; index += 1) {
+    const l = left.zones[index]
+    const r = right.zones[index]
+    if (!l || !r) return false
+    if (l.id !== r.id || l.yTop !== r.yTop || l.yBottom !== r.yBottom || l.label !== r.label || l.color !== r.color) {
       return false
     }
   }
@@ -126,7 +145,7 @@ export function PriorityLevelOverlay({
       label: chartLevelLabel(level),
       color: isVWAPLevel(level.source)
         ? 'rgba(234,179,8,0.92)'
-        : (isSpyDerivedLevel(level) ? 'rgba(245,237,204,0.9)' : level.chartStyle.color),
+        : level.chartStyle.color,
       lineStyle: isVWAPLevel(level.source)
         ? 'dashed'
         : (level.chartStyle.lineStyle === 'dot-dash' ? 'dashed' : level.chartStyle.lineStyle),
@@ -181,19 +200,35 @@ export function PriorityLevelOverlay({
     return Array.from(merged.values())
   }, [marketLevelAnnotations, selectedSetup, spxPrice])
 
+  const entryZones = useMemo(() => {
+    if (!actionableSetupVisible) return []
+    return chartAnnotations
+      .filter((a) => a.type === 'entry_zone' && a.priceLow != null && a.priceHigh != null)
+      .map((a) => ({
+        id: `zone:${a.id}`,
+        priceLow: a.priceLow!,
+        priceHigh: a.priceHigh!,
+        label: a.label,
+        color: 'rgba(16,185,129,0.18)',
+        borderColor: 'rgba(16,185,129,0.6)',
+      }))
+  }, [actionableSetupVisible, chartAnnotations])
+
   const setupAnnotations = useMemo<OverlayLevel[]>(() => {
     if (!actionableSetupVisible) return []
     const overlays: OverlayLevel[] = []
     for (const annotation of chartAnnotations) {
       if (annotation.type === 'entry_zone' && annotation.priceLow != null && annotation.priceHigh != null) {
+        // Entry zones are rendered as filled rectangles via entryZones memo —
+        // still emit thin border lines for axis label visibility
         overlays.push(
           {
             id: `${annotation.id}:low`,
             price: annotation.priceLow,
             label: `${annotation.label} Low`,
-            color: 'rgba(16,185,129,0.9)',
+            color: 'rgba(16,185,129,0.5)',
             lineStyle: 'dashed',
-            lineWidth: 1.4,
+            lineWidth: 0.8,
             axisLabelVisible: true,
             type: annotation.type,
           },
@@ -201,9 +236,9 @@ export function PriorityLevelOverlay({
             id: `${annotation.id}:high`,
             price: annotation.priceHigh,
             label: `${annotation.label} High`,
-            color: 'rgba(16,185,129,0.9)',
+            color: 'rgba(16,185,129,0.5)',
             lineStyle: 'dashed',
-            lineWidth: 1.4,
+            lineWidth: 0.8,
             axisLabelVisible: true,
             type: annotation.type,
           },
@@ -308,9 +343,28 @@ export function PriorityLevelOverlay({
       })
     }
 
-    const nextState: RenderState = { width, lines }
+    const zones: RenderZone[] = []
+    for (const zone of entryZones) {
+      const yLow = coordinates.priceToPixel(zone.priceLow)
+      const yHigh = coordinates.priceToPixel(zone.priceHigh)
+      if (yLow != null && yHigh != null && Number.isFinite(yLow) && Number.isFinite(yHigh)) {
+        const top = clamp(Math.min(yLow, yHigh), 0, height)
+        const bottom = clamp(Math.max(yLow, yHigh), 0, height)
+        if (bottom - top >= 1) {
+          zones.push({
+            id: zone.id,
+            yTop: top,
+            yBottom: bottom,
+            label: zone.label,
+            color: zone.color,
+          })
+        }
+      }
+    }
+
+    const nextState: RenderState = { width, lines, zones }
     setRenderState((previous) => (renderStateEquals(previous, nextState) ? previous : nextState))
-  }, [coordinatesRef, focusMode, showAllRelevantLevels, visibleLevels])
+  }, [coordinatesRef, entryZones, focusMode, showAllRelevantLevels, visibleLevels])
 
   useEffect(() => {
     let rafId = 0
@@ -333,6 +387,33 @@ export function PriorityLevelOverlay({
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[25]" data-testid="spx-priority-level-overlay" aria-hidden>
+      {/* Entry zone filled rectangles */}
+      {renderState.zones.map((zone) => (
+        <div
+          key={zone.id}
+          className="absolute left-0"
+          style={{
+            top: zone.yTop,
+            width: renderState.width,
+            height: zone.yBottom - zone.yTop,
+            background: zone.color,
+            borderTop: '1px dashed rgba(16,185,129,0.5)',
+            borderBottom: '1px dashed rgba(16,185,129,0.5)',
+          }}
+        >
+          <span
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 font-mono text-[10px]"
+            style={{
+              color: 'rgba(16,185,129,0.85)',
+              background: 'rgba(8,10,12,0.65)',
+              textShadow: '0 0 6px rgba(0,0,0,0.4)',
+            }}
+          >
+            {zone.label}
+          </span>
+        </div>
+      ))}
+
       {renderState.lines.map((line) => (
         <div
           key={line.id}

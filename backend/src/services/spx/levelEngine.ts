@@ -1,4 +1,5 @@
 import { cacheGet, cacheSet } from '../../config/redis';
+import { getMinuteAggregates } from '../../config/massive';
 import { logger } from '../../lib/logger';
 import { calculateLevels } from '../levels';
 import type { LevelItem } from '../levels';
@@ -17,7 +18,7 @@ import {
 } from './utils';
 
 const LEVEL_CACHE_KEY = 'spx_command_center:levels';
-const LEVEL_CACHE_TTL_SECONDS = 30;
+const LEVEL_CACHE_TTL_SECONDS = 15; // Reduced from 30s to limit compound staleness (Audit #7 HIGH-1)
 let levelsInFlight: Promise<{
   levels: SPXLevel[];
   clusters: ClusterZone[];
@@ -116,10 +117,162 @@ function mapLegacyLevel(
 }
 
 function collectLegacyLevels(levels: Awaited<ReturnType<typeof calculateLevels>>): LevelItem[] {
-  return [
+  const items = [
     ...levels.levels.resistance,
     ...levels.levels.support,
   ];
+
+  // Ensure VWAP is always present as a level — even if it wasn't placed into
+  // resistance/support by the levels calculator (Audit CRITICAL-1, Chart domain).
+  // The indicators.vwap field holds the numeric value; synthesize a LevelItem
+  // if no VWAP-typed entry already exists in the resistance/support arrays.
+  const vwapPrice = levels.levels.indicators?.vwap;
+  if (typeof vwapPrice === 'number' && Number.isFinite(vwapPrice) && vwapPrice > 0) {
+    const hasVwap = items.some((item) => item.type === 'VWAP');
+    if (!hasVwap) {
+      items.push({
+        type: 'VWAP',
+        price: vwapPrice,
+        strength: 'dynamic',
+        description: 'Volume Weighted Average Price',
+        testsToday: 0,
+        lastTest: null,
+      } as LevelItem);
+    }
+  }
+
+  return items;
+}
+
+/**
+ * Calculate Opening Range (OR) for SPX.
+ * The Opening Range is the high/low of the first 30 minutes of regular
+ * trading (9:30 AM - 10:00 AM ET). Returns null if market hasn't reached
+ * 10:00 AM yet or if data is unavailable.
+ * Addresses Audit #8 CRITICAL-2: "Opening Range levels not calculated."
+ */
+const OR_CACHE_KEY = 'spx_command_center:opening_range';
+const OR_CACHE_TTL_SECONDS = 60;
+const MARKET_OPEN_HOUR = 9;
+const MARKET_OPEN_MINUTE = 30;
+const OR_END_MINUTE = 60; // 30 minutes after open = 10:00 AM
+
+interface OpeningRange {
+  high: number;
+  low: number;
+  computedAt: string;
+}
+
+async function calculateOpeningRange(asOfDate?: string): Promise<OpeningRange | null> {
+  const dateStr = asOfDate || new Date().toISOString().slice(0, 10);
+
+  // Check cache first
+  const cacheKey = `${OR_CACHE_KEY}:${dateStr}`;
+  const cached = await cacheGet<OpeningRange>(cacheKey);
+  if (cached) return cached;
+
+  // Check if it's past 10:00 AM ET today
+  const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const isToday = dateStr === new Date(nowET).toISOString().slice(0, 10);
+  if (isToday) {
+    const currentMinutesSinceOpen = (nowET.getHours() - MARKET_OPEN_HOUR) * 60 + (nowET.getMinutes() - MARKET_OPEN_MINUTE);
+    if (currentMinutesSinceOpen < OR_END_MINUTE - MARKET_OPEN_MINUTE) {
+      // Not yet 10:00 AM ET — OR is still forming
+      return null;
+    }
+  }
+
+  try {
+    const bars = await getMinuteAggregates('I:SPX', dateStr);
+    if (!bars?.results?.length) return null;
+
+    // Filter to first 30 minutes of trading (9:30-10:00 AM ET)
+    const openMs = new Date(`${dateStr}T09:30:00-05:00`).getTime();
+    const orEndMs = openMs + 30 * 60 * 1000; // +30 minutes
+
+    const orBars = bars.results.filter((bar: { t: number }) =>
+      bar.t >= openMs && bar.t < orEndMs
+    );
+
+    if (orBars.length === 0) return null;
+
+    let high = -Infinity;
+    let low = Infinity;
+    for (const bar of orBars) {
+      if (typeof bar.h === 'number' && bar.h > high) high = bar.h;
+      if (typeof bar.l === 'number' && bar.l < low) low = bar.l;
+    }
+
+    if (!Number.isFinite(high) || !Number.isFinite(low)) return null;
+
+    const result: OpeningRange = {
+      high: round(high, 2),
+      low: round(low, 2),
+      computedAt: nowIso(),
+    };
+
+    // Cache for 60s (OR doesn't change after 10 AM)
+    await cacheSet(cacheKey, result, OR_CACHE_TTL_SECONDS);
+    logger.info('SPX Opening Range calculated', { date: dateStr, high: result.high, low: result.low });
+    return result;
+  } catch (error) {
+    logger.warn('Failed to calculate Opening Range', {
+      error: error instanceof Error ? error.message : String(error),
+      date: dateStr,
+    });
+    return null;
+  }
+}
+
+function buildOpeningRangeLevels(or: OpeningRange | null): SPXLevel[] {
+  if (!or) return [];
+  const levels: SPXLevel[] = [];
+
+  if (Number.isFinite(or.high) && or.high > 0) {
+    levels.push({
+      id: uuid('spx_level'),
+      symbol: 'SPX',
+      category: 'intraday',
+      source: 'opening_range_high',
+      price: or.high,
+      strength: 'strong',
+      timeframe: '0dte',
+      metadata: {
+        description: 'Opening Range High (9:30–10:00 AM)',
+        computedAt: or.computedAt,
+      },
+      chartStyle: {
+        color: 'rgba(16, 185, 129, 0.65)',
+        lineStyle: 'dashed',
+        lineWidth: 1.5,
+        labelFormat: 'OR-High',
+      },
+    });
+  }
+
+  if (Number.isFinite(or.low) && or.low > 0) {
+    levels.push({
+      id: uuid('spx_level'),
+      symbol: 'SPX',
+      category: 'intraday',
+      source: 'opening_range_low',
+      price: or.low,
+      strength: 'strong',
+      timeframe: '0dte',
+      metadata: {
+        description: 'Opening Range Low (9:30–10:00 AM)',
+        computedAt: or.computedAt,
+      },
+      chartStyle: {
+        color: 'rgba(239, 68, 68, 0.65)',
+        lineStyle: 'dashed',
+        lineWidth: 1.5,
+        labelFormat: 'OR-Low',
+      },
+    });
+  }
+
+  return levels;
 }
 
 function buildGexDerivedLevels(input: {
@@ -163,10 +316,14 @@ function buildGexDerivedLevels(input: {
   addLevel('SPX', 'options', 'spx_call_wall', gex.spx.callWall, 'critical', { gex: gex.spx.netGex });
   addLevel('SPX', 'options', 'spx_put_wall', gex.spx.putWall, 'critical', { gex: gex.spx.netGex });
   addLevel('SPX', 'options', 'spx_flip_point', gex.spx.flipPoint, 'dynamic', { gex: gex.spx.netGex });
+  // Zero Gamma — critical options S/R level (Audit HIGH-1, Chart domain).
+  // Was present in GEX profile but never mapped to an SPXLevel for chart rendering.
+  addLevel('SPX', 'options', 'spx_zero_gamma', gex.spx.zeroGamma, 'strong', { gex: gex.spx.netGex });
 
   addLevel('SPY', 'spy_derived', 'spy_call_wall', gex.spy.callWall, 'critical', { gex: gex.spy.netGex });
   addLevel('SPY', 'spy_derived', 'spy_put_wall', gex.spy.putWall, 'critical', { gex: gex.spy.netGex });
   addLevel('SPY', 'spy_derived', 'spy_flip_point', gex.spy.flipPoint, 'dynamic', { gex: gex.spy.netGex });
+  addLevel('SPY', 'spy_derived', 'spy_zero_gamma', gex.spy.zeroGamma, 'strong', { gex: gex.spy.netGex });
 
   for (const keyLevel of gex.combined.keyLevels.slice(0, 5)) {
     addLevel('SPX', 'options', `combined_${keyLevel.type}`, keyLevel.strike, 'strong', {
@@ -425,7 +582,18 @@ export async function getMergedLevels(options?: {
     const optionLevels = gex ? buildGexDerivedLevels({ gex }) : [];
     const fibMappedLevels = fibLevels ? buildFibLevelsAsSPXLevels(fibLevels) : [];
 
-    const allLevels = [...spxLevels, ...spyDerivedLevels, ...optionLevels, ...fibMappedLevels]
+    // Opening Range levels (OR-High / OR-Low) — Audit #8 CRITICAL-2
+    let orLevels: SPXLevel[] = [];
+    try {
+      const openingRange = await calculateOpeningRange();
+      orLevels = buildOpeningRangeLevels(openingRange);
+    } catch (error) {
+      logger.debug('Opening Range levels unavailable', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const allLevels = [...spxLevels, ...spyDerivedLevels, ...optionLevels, ...fibMappedLevels, ...orLevels]
       .sort((a, b) => a.price - b.price);
 
     const clusters = buildClusterZones(allLevels);

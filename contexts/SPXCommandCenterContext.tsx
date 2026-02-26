@@ -1893,6 +1893,20 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const enterTrade = useCallback((setup?: Setup | null) => {
     const target = setup || selectedSetup
     if (!target) return
+    // CRITICAL-4 guard: prevent concurrent trade entry (position size blowup risk)
+    if (inTradeSetupId !== null) {
+      toast.error('Trade entry blocked: already in an active trade', {
+        description: 'Exit or flatten your current position before entering a new trade.',
+        duration: 5_000,
+      })
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+        surface: 'trade_focus',
+        action: 'enter_rejected_concurrent',
+        setupId: target.id,
+        currentTradeSetupId: inTradeSetupId,
+      }, { level: 'warning', persist: true })
+      return
+    }
     const streamTrustStateNow = marketDataOrchestratorRef.current.evaluate(Date.now(), stream.isConnected)
     const liveFeedHealth = resolveSPXFeedHealth({
       snapshotIsDegraded,
@@ -2051,6 +2065,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     }
   }, [
     appendEphemeralCoachMessage,
+    inTradeSetupId,
     reportExecutionFill,
     selectedContractBySetupId,
     selectedSetup,
