@@ -130,4 +130,23 @@ describe('massiveTickStream helpers', () => {
     expect(__testables.shouldProcessTickEvent('authenticating')).toBe(false);
     expect(__testables.shouldProcessTickEvent('subscribing')).toBe(false);
   });
+
+  it('detects provider max-connections status messages', () => {
+    expect(__testables.isMaxConnectionsStatus({
+      status: 'max_connections',
+      message: 'Maximum number of websocket connections exceeded',
+    })).toBe(true);
+
+    expect(__testables.isMaxConnectionsStatus({
+      status: 'error',
+      message: 'Maximum number of websocket connections exceeded',
+    })).toBe(true);
+  });
+
+  it('does not classify unrelated statuses as max-connections', () => {
+    expect(__testables.isMaxConnectionsStatus({
+      status: 'success',
+      message: 'subscribed',
+    })).toBe(false);
+  });
 });

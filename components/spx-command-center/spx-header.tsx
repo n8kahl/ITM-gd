@@ -115,6 +115,7 @@ export function SPXHeader({
     spxPriceAgeMs,
     priceStreamConnected,
     priceStreamConnectionStatus,
+    priceStreamFeedHealth,
     priceStreamError,
   } = useSPXPriceContext()
   const fallbackReasonLabel = formatSPXFeedFallbackReasonCode(feedFallbackReasonCode)
@@ -133,7 +134,7 @@ export function SPXHeader({
     streamStatus: priceStreamConnectionStatus,
     source: spxPriceSource,
   })
-  const statusDetail = streamErrorLabel || dataHealthMessage || fallbackReasonLabel
+  const statusDetail = streamErrorLabel || priceStreamFeedHealth?.message || dataHealthMessage || fallbackReasonLabel
 
   return (
     <header

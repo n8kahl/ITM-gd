@@ -45,6 +45,7 @@ import {
   subscribeMassiveTickUpdates,
   isMassiveTickStreamConnected,
   isMassiveTickSymbolSupported,
+  getMassiveTickStreamStatus,
 } from './massiveTickStream';
 import { getLatestTick, type NormalizedMarketTick } from './tickCache';
 import { updateRunningVWAPForSymbol } from './levels/calculators/vwap';
@@ -135,6 +136,9 @@ interface FeedHealthPayload {
   lastTickAgeMs: number;
   pollMode: FeedHealthPollMode;
   setupDataAgeMs: number;
+  message?: string | null;
+  providerStatus?: string | null;
+  tickStreamState?: string;
 }
 
 interface FeedHealthMessage {
@@ -638,12 +642,41 @@ function resolveFeedHealthPollMode(
   return 'closed';
 }
 
+function resolveTickFeedMessage(
+  tickStreamStatus: ReturnType<typeof getMassiveTickStreamStatus>,
+): string | null {
+  const providerStatus = tickStreamStatus.lastProviderStatus?.toLowerCase() || '';
+  const providerMessage = tickStreamStatus.lastProviderMessage?.trim() || '';
+
+  if (
+    providerStatus === 'max_connections'
+    || /maximum number of websocket connections/i.test(providerMessage)
+  ) {
+    return 'Realtime provider connection limit reached. Falling back to poll data.';
+  }
+  if (
+    providerStatus === 'auth_failed'
+    || providerStatus === 'auth_error'
+    || providerStatus === 'authentication_failed'
+  ) {
+    return 'Realtime provider authentication failed. Falling back to poll data.';
+  }
+  if (tickStreamStatus.lastCloseCode === 1008) {
+    return 'Realtime provider closed the stream (policy/entitlement). Falling back to poll data.';
+  }
+  if (providerMessage.length > 0) {
+    return providerMessage;
+  }
+  return null;
+}
+
 function getFeedHealthSnapshot(nowMs: number = Date.now()): FeedHealthPayload & {
   marketStatus: ReturnType<typeof getMarketStatus>;
 } {
   const marketStatus = getMarketStatus();
   const symbolsToCheck = getFeedHealthSymbols();
-  const tickFeedConnected = isMassiveTickStreamConnected();
+  const tickStreamStatus = getMassiveTickStreamStatus();
+  const tickFeedConnected = tickStreamStatus.connected && isMassiveTickStreamConnected();
   const tickFeedFresh = tickFeedConnected && areSymbolTicksFresh(symbolsToCheck, nowMs);
 
   return {
@@ -654,6 +687,9 @@ function getFeedHealthSnapshot(nowMs: number = Date.now()): FeedHealthPayload & 
     setupDataAgeMs: activeSetupsUpdatedAtMs > 0
       ? Math.max(0, nowMs - activeSetupsUpdatedAtMs)
       : -1,
+    message: tickFeedFresh ? null : resolveTickFeedMessage(tickStreamStatus),
+    providerStatus: tickStreamStatus.lastProviderStatus,
+    tickStreamState: tickStreamStatus.connectionState,
   };
 }
 
@@ -672,6 +708,9 @@ function broadcastFeedHealthIfDegraded(nowMs: number = Date.now()): void {
       lastTickAgeMs: feedHealth.lastTickAgeMs,
       pollMode: feedHealth.pollMode,
       setupDataAgeMs: feedHealth.setupDataAgeMs,
+      message: feedHealth.message || null,
+      providerStatus: feedHealth.providerStatus || null,
+      tickStreamState: feedHealth.tickStreamState,
     },
   };
   const serialized = JSON.stringify(message);
