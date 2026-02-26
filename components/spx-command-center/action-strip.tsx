@@ -81,6 +81,19 @@ export function ActionStrip(props: ActionStripProps) {
     : props.primaryActionMode === 'evaluate'
       ? (props.primaryActionEnabled ? 'Setup Ready' : 'Wait')
       : 'Scanning'
+  const normalizedGuidedStatusLabel = (props.guidedStatusLabel || '').trim().toLowerCase()
+  const normalizedPrimaryBlockedReason = (props.primaryActionBlockedReason || '').trim().toLowerCase()
+  const blockedReasonDuplicatedInGuidance = normalizedGuidedStatusLabel.length > 0
+    && normalizedPrimaryBlockedReason.length > 0
+    && (
+      normalizedGuidedStatusLabel.includes(normalizedPrimaryBlockedReason)
+      || normalizedGuidedStatusLabel.startsWith('wait:')
+    )
+  const showBlockedReasonChip = Boolean(
+    !props.primaryActionEnabled
+    && props.primaryActionBlockedReason
+    && !blockedReasonDuplicatedInGuidance,
+  )
 
   const overlayButtons = [
     {
@@ -305,7 +318,7 @@ export function ActionStrip(props: ActionStripProps) {
               {props.guidedStatusLabel}
             </span>
           )}
-          {!props.primaryActionEnabled && props.primaryActionBlockedReason && (
+          {showBlockedReasonChip && (
             <span
               data-testid="spx-action-primary-cta-blocked-reason"
               className="ml-1.5 rounded border border-amber-300/35 bg-amber-500/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-amber-100"

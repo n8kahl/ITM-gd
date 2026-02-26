@@ -41,7 +41,11 @@ import { getMinuteAggregates, getDailyAggregates } from '../config/massive';
 import { formatMassiveTicker, isValidSymbol, normalizeSymbol } from '../lib/symbols';
 import { getMarketStatus, toEasternTime } from './marketHours';
 import { AuthTokenError, extractBearerToken, verifyAuthToken } from '../lib/tokenAuth';
-import { subscribeMassiveTickUpdates, isMassiveTickStreamConnected } from './massiveTickStream';
+import {
+  subscribeMassiveTickUpdates,
+  isMassiveTickStreamConnected,
+  isMassiveTickSymbolSupported,
+} from './massiveTickStream';
 import { getLatestTick, type NormalizedMarketTick } from './tickCache';
 import { updateRunningVWAPForSymbol } from './levels/calculators/vwap';
 import { ingestTickMicrobars, resetMicrobarAggregator } from './spx/microbarAggregator';
@@ -593,10 +597,22 @@ function shouldThrottleTickBroadcast(
 
 function getFeedHealthSymbols(): Set<string> {
   const activeSymbols = getActiveSymbols();
-  if (activeSymbols.size > 0) {
-    return new Set(Array.from(activeSymbols).map((symbol) => normalizeSymbol(symbol)));
+  const supportedActiveSymbols = Array.from(activeSymbols)
+    .map((symbol) => normalizeSymbol(symbol))
+    .filter((symbol) => isMassiveTickSymbolSupported(symbol));
+  if (supportedActiveSymbols.length > 0) {
+    return new Set(supportedActiveSymbols);
   }
-  return new Set<string>(DEFAULT_FEED_HEALTH_SYMBOLS);
+
+  const supportedDefaults = Array.from(DEFAULT_FEED_HEALTH_SYMBOLS)
+    .map((symbol) => normalizeSymbol(symbol))
+    .filter((symbol) => isMassiveTickSymbolSupported(symbol));
+  if (supportedDefaults.length > 0) {
+    return new Set(supportedDefaults);
+  }
+
+  // Final guardrail: keep feed health pinned to SPX when compatibility filtering removes all symbols.
+  return new Set<string>(['SPX']);
 }
 
 function getLastTickAgeMs(symbols: Iterable<string>, nowMs: number = Date.now()): number {

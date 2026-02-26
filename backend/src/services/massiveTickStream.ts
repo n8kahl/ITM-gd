@@ -96,8 +96,12 @@ function parseSymbols(symbolsCsv: string): string[] {
   return Array.from(new Set(symbols));
 }
 
+function isIndexSocketUrl(wsUrl: string): boolean {
+  return /\/indices(?:$|[/?#])/i.test(wsUrl);
+}
+
 function filterStreamCompatibleSymbols(symbols: string[], wsUrl: string): string[] {
-  const isIndexSocket = /\/indices(?:$|[/?#])/i.test(wsUrl);
+  const isIndexSocket = isIndexSocketUrl(wsUrl);
   if (!isIndexSocket) return symbols;
 
   const compatible = symbols.filter((symbol) => formatMassiveTicker(symbol).startsWith('I:'));
@@ -567,6 +571,15 @@ export function subscribeMassiveTickUpdates(listener: TickListener): () => void 
 
 export function isMassiveTickStreamConnected(): boolean {
   return isConnected;
+}
+
+export function isMassiveTickSymbolSupported(symbol: string): boolean {
+  const normalizedSymbol = normalizeTickSymbol(symbol);
+  if (!normalizedSymbol) return false;
+
+  const wsUrl = getEnv().MASSIVE_TICK_WS_URL;
+  if (!isIndexSocketUrl(wsUrl)) return true;
+  return formatMassiveTicker(normalizedSymbol).startsWith('I:');
 }
 
 export function getMassiveTickStreamStatus(): {

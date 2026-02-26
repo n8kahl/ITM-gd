@@ -6,7 +6,6 @@ import { formatSPXFeedFallbackReasonCode } from '@/lib/spx/feed-health'
 import { cn } from '@/lib/utils'
 import { Settings2 } from 'lucide-react'
 import { BrokerHeaderChip } from './broker-header-chip'
-import { FeedHealthIndicator } from './feed-health-indicator'
 
 interface SPXHeaderProps {
   onOpenCommandPalette: () => void
@@ -16,18 +15,6 @@ interface SPXHeaderProps {
   showAllLevels: boolean
   displayedLevelsCount: number
   totalLevelsCount: number
-}
-
-function healthTone(health: string | null | undefined): string {
-  if (health === 'degraded') return 'border-rose-300/45 bg-rose-500/14 text-rose-100'
-  if (health === 'stale') return 'border-amber-300/45 bg-amber-500/14 text-amber-100'
-  return 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
-}
-
-function healthLabel(health: string | null | undefined): string {
-  if (health === 'degraded') return 'Degraded'
-  if (health === 'stale') return 'Stale'
-  return 'Healthy'
 }
 
 function feedLabel(
@@ -61,6 +48,50 @@ function streamConnectionLabel(status: 'connected' | 'reconnecting' | 'degraded'
   return 'Disconnected'
 }
 
+function statusTone(input: {
+  dataHealth: 'healthy' | 'degraded' | 'stale'
+  feedFallbackStage: 'live_stream' | 'poll_fallback' | 'snapshot_fallback' | 'last_known_good'
+  streamStatus: 'connected' | 'reconnecting' | 'degraded' | 'disconnected'
+}): string {
+  if (
+    input.dataHealth === 'degraded'
+    || input.feedFallbackStage === 'last_known_good'
+    || input.streamStatus === 'disconnected'
+    || input.streamStatus === 'reconnecting'
+  ) {
+    return 'border-rose-300/45 bg-rose-500/14 text-rose-100'
+  }
+
+  if (
+    input.dataHealth === 'stale'
+    || input.feedFallbackStage === 'poll_fallback'
+    || input.feedFallbackStage === 'snapshot_fallback'
+    || input.streamStatus === 'degraded'
+  ) {
+    return 'border-amber-300/45 bg-amber-500/14 text-amber-100'
+  }
+
+  return 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+}
+
+function statusPrimaryLabel(input: {
+  dataHealth: 'healthy' | 'degraded' | 'stale'
+  feedFallbackStage: 'live_stream' | 'poll_fallback' | 'snapshot_fallback' | 'last_known_good'
+  streamStatus: 'connected' | 'reconnecting' | 'degraded' | 'disconnected'
+  source: 'tick' | 'poll' | 'snapshot' | null
+}): string {
+  if (input.streamStatus === 'disconnected' || input.streamStatus === 'reconnecting') {
+    return 'Stream Offline'
+  }
+  if (input.feedFallbackStage === 'last_known_good') return 'Last Known Good'
+  if (input.feedFallbackStage === 'snapshot_fallback') return 'Snapshot Fallback'
+  if (input.feedFallbackStage === 'poll_fallback') return 'Poll Fallback'
+  if (input.dataHealth === 'degraded') return 'Degraded'
+  if (input.dataHealth === 'stale') return 'Delayed'
+  if (input.source === 'tick') return 'Live Tick'
+  return 'Pending'
+}
+
 export function SPXHeader({
   onOpenCommandPalette,
   onOpenSettings,
@@ -70,7 +101,14 @@ export function SPXHeader({
   displayedLevelsCount,
   totalLevelsCount,
 }: SPXHeaderProps) {
-  const { regime, basis, dataHealth, feedFallbackReasonCode, feedFallbackStage } = useSPXAnalyticsContext()
+  const {
+    regime,
+    basis,
+    dataHealth,
+    dataHealthMessage,
+    feedFallbackReasonCode,
+    feedFallbackStage,
+  } = useSPXAnalyticsContext()
   const {
     spxPrice,
     spxPriceSource,
@@ -84,6 +122,18 @@ export function SPXHeader({
   const streamErrorLabel = priceStreamError && priceStreamError.trim().length > 0
     ? priceStreamError
     : null
+  const resolvedStatusTone = statusTone({
+    dataHealth,
+    feedFallbackStage,
+    streamStatus: priceStreamConnectionStatus,
+  })
+  const resolvedStatusPrimaryLabel = statusPrimaryLabel({
+    dataHealth,
+    feedFallbackStage,
+    streamStatus: priceStreamConnectionStatus,
+    source: spxPriceSource,
+  })
+  const statusDetail = streamErrorLabel || dataHealthMessage || fallbackReasonLabel
 
   return (
     <header
@@ -108,7 +158,6 @@ export function SPXHeader({
         <span className="font-mono text-sm font-bold text-white md:text-lg">
           {spxPrice > 0 ? `${spxPrice.toFixed(2)}` : '--'}
         </span>
-        <FeedHealthIndicator />
         <span
           data-testid="spx-header-regime-chip"
           className={cn(
@@ -125,7 +174,7 @@ export function SPXHeader({
       </div>
 
       <div className="flex items-center gap-1.5 md:gap-2.5" aria-live="polite">
-        {/* Basis, Health, Feed chips — hidden on mobile */}
+        {/* Basis + consolidated status chip — hidden on mobile */}
         <div className="hidden rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right md:block">
           <div className="text-[8px] uppercase tracking-[0.1em] text-white/45">Basis</div>
           <div className="font-mono text-[11px] text-white/78">
@@ -133,38 +182,24 @@ export function SPXHeader({
           </div>
         </div>
         <div
-          data-testid="spx-header-health-chip"
+          data-testid="spx-header-status-chip"
           className={cn(
             'hidden rounded border px-2 py-1 text-right md:block',
-            healthTone(dataHealth),
+            resolvedStatusTone,
           )}
         >
-          <div className="text-[8px] uppercase tracking-[0.1em] text-white/55">Health</div>
-          <div className="font-mono text-[11px] uppercase">{healthLabel(dataHealth)}</div>
-          {fallbackReasonLabel && (
-            <div data-testid="spx-header-health-reason" className="font-mono text-[9px] uppercase tracking-[0.08em] text-white/75">
-              {fallbackReasonLabel}
-            </div>
-          )}
-        </div>
-        <div data-testid="spx-header-feed-chip" className="hidden rounded border border-white/12 bg-white/[0.03] px-2 py-1 text-right md:block">
-          <div className="text-[8px] uppercase tracking-[0.1em] text-white/45">Feed</div>
-          <div className={cn(
-            'font-mono text-[11px]',
-            feedTone(feedFallbackStage),
-          )}>
-            {feedLabel(feedFallbackStage, spxPriceSource)}
-          </div>
+          <div className="text-[8px] uppercase tracking-[0.1em] text-white/55">Status</div>
+          <div className={cn('font-mono text-[11px]', feedTone(feedFallbackStage))}>{resolvedStatusPrimaryLabel}</div>
           <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-white/65">
-            {streamStatusLabel}
+            {feedLabel(feedFallbackStage, spxPriceSource)}
             {!priceStreamConnected ? ' · Offline' : ''}
           </div>
           <div className="font-mono text-[8px] uppercase tracking-[0.08em] text-white/50">
-            Age {formatFeedAge(spxPriceAgeMs)}
+            {streamStatusLabel} · Age {formatFeedAge(spxPriceAgeMs)}
           </div>
-          {streamErrorLabel && (
-            <div className="max-w-[18rem] truncate font-mono text-[8px] text-rose-200/80" title={streamErrorLabel}>
-              {streamErrorLabel}
+          {statusDetail && (
+            <div className="max-w-[18rem] truncate font-mono text-[8px] text-white/72" title={statusDetail}>
+              {statusDetail}
             </div>
           )}
         </div>
