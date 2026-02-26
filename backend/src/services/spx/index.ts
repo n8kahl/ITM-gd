@@ -277,16 +277,34 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   const levelData = await withStageFallback({
     stage: 'levels',
     forceRefresh,
-    run: () => {
-      // Freshness guard: do not compute fresh levels when tick stream is stale/missing.
+    run: async () => {
       if (!tickHealth.healthy) {
-        throw new Error(`Tick stream unhealthy: ${tickHealth.reason}`);
+        // Keep levels available even when the tick stream is stale by reusing
+        // last known levels or a degraded cache-backed recompute.
+        if (lastGoodSnapshot?.levels?.length) {
+          return {
+            levels: lastGoodSnapshot.levels,
+            clusters: lastGoodSnapshot.clusters || [],
+            generatedAt: nowIso(),
+          };
+        }
+        return getMergedLevels({
+          forceRefresh: false,
+          basisState: basis,
+          gexLandscape: gex,
+          fibLevels,
+        });
       }
-      return getMergedLevels({ forceRefresh, basisState: basis, gexLandscape: gex, fibLevels });
+      return getMergedLevels({
+        forceRefresh,
+        basisState: basis,
+        gexLandscape: gex,
+        fibLevels,
+      });
     },
     fallback: () => ({
-      levels: fallbackSnapshot?.levels || [],
-      clusters: fallbackSnapshot?.clusters || [],
+      levels: fallbackSnapshot?.levels || lastGoodSnapshot?.levels || [],
+      clusters: fallbackSnapshot?.clusters || lastGoodSnapshot?.clusters || [],
       generatedAt: nowIso(),
     }),
   });

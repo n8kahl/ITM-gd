@@ -172,11 +172,20 @@ export function useSPXCommandController() {
   const primaryActionBlockedReason = useMemo(() => {
     if (primaryActionMode !== 'evaluate' || primaryEntryRiskGate.allowEntry) return null
     if (primaryEntryRiskGate.reasonCode === 'feed_trust_blocked') {
+      if (dataHealthMessage && dataHealthMessage.trim().length > 0) {
+        return dataHealthMessage
+      }
       const reasonLabel = formatSPXFeedFallbackReasonCode(feedFallbackReasonCode)
       return reasonLabel ? `${reasonLabel} in effect` : 'Feed trust recovering'
     }
     return formatSPXRiskEnvelopeReason(primaryEntryRiskGate.reasonCode)
-  }, [feedFallbackReasonCode, primaryActionMode, primaryEntryRiskGate.allowEntry, primaryEntryRiskGate.reasonCode])
+  }, [
+    dataHealthMessage,
+    feedFallbackReasonCode,
+    primaryActionMode,
+    primaryEntryRiskGate.allowEntry,
+    primaryEntryRiskGate.reasonCode,
+  ])
   const primaryActionGuidance = useMemo(() => {
     if (primaryActionMode === 'in_trade') {
       return 'Manage active trade.'

@@ -110,11 +110,13 @@ export function SPXDesktopSpatialCanvas({
     viewport.height,
     viewport.width,
   ])
-  const levelOverlaysEnabled = showLevelOverlay && !spatialThrottled
-  const showPriorityLevels = levelOverlaysEnabled && focusMode !== 'risk_only'
+  // Levels should remain available across all focus modes and under throttle.
+  // Other heavier overlays continue to respect throttle/focus constraints.
+  const levelOverlaysEnabled = showLevelOverlay
+  const showPriorityLevels = levelOverlaysEnabled
   const showRiskShadow = levelOverlaysEnabled && (focusMode === 'execution' || focusMode === 'risk_only')
   const showSetupLock = levelOverlaysEnabled && focusMode === 'execution'
-  const showTopographicLadder = levelOverlaysEnabled && overlayPolicy.allowTopographicLadder && focusMode === 'risk_only'
+  const showTopographicLadder = levelOverlaysEnabled && overlayPolicy.allowTopographicLadder && focusMode === 'risk_only' && !showPriorityLevels
   const showConeOverlay = overlayPolicy.allowCone && !spatialThrottled
   const showCoachOverlay = overlayPolicy.allowSpatialCoach && !spatialThrottled
   const handlePriorityLevelCountsChange = useCallback((displayed: number, total: number) => {

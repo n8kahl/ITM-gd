@@ -1209,7 +1209,6 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
 
   useEffect(() => {
     if (!spxTickTimestamp) return
-    const parsedTimestamp = Date.parse(spxTickTimestamp)
     marketDataOrchestratorRef.current.ingest({
       kind: 'heartbeat',
       channel: 'price:spx',
@@ -1218,7 +1217,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       source: spxPriceSource,
       feedAgeMs: spxPriceAgeMs,
       sequence: null,
-      receivedAtMs: Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now(),
+      // Use wall-clock receipt time for heartbeat freshness; message timestamps can be historical.
+      receivedAtMs: Date.now(),
     })
   }, [spxPriceAgeMs, spxPriceSource, spxTickTimestamp])
 

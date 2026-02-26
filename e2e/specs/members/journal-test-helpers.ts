@@ -425,6 +425,12 @@ export async function setupJournalCrudMocks(
         pnl: nextPnl,
         pnl_percentage: nextPnlPercentage,
         is_winner: nextPnl == null ? null : nextPnl > 0,
+        is_open: Object.prototype.hasOwnProperty.call(body, 'is_open') ? toBoolean(body.is_open) : existing.is_open,
+        is_favorite: Object.prototype.hasOwnProperty.call(body, 'is_favorite') ? toBoolean(body.is_favorite) : existing.is_favorite,
+        mood_before: (body.mood_before as MockJournalEntry['mood_before']) ?? existing.mood_before,
+        mood_after: (body.mood_after as MockJournalEntry['mood_after']) ?? existing.mood_after,
+        discipline_score: toNumber(body.discipline_score) ?? existing.discipline_score,
+        followed_plan: Object.prototype.hasOwnProperty.call(body, 'followed_plan') ? toBoolean(body.followed_plan) : existing.followed_plan,
         tags: Array.isArray(body.tags) ? body.tags.map((tag) => String(tag)).filter(Boolean) : existing.tags,
         updated_at: nowIso(),
       }
@@ -460,6 +466,317 @@ export async function setupJournalCrudMocks(
 
   return state
 }
+
+// ---------------------------------------------------------------------------
+// AI Grade Factories & Mocks
+// ---------------------------------------------------------------------------
+
+export type MockAIAnalysis = {
+  grade: 'A' | 'B' | 'C' | 'D' | 'F'
+  entry_quality: string
+  exit_quality: string
+  risk_management: string
+  lessons: string[]
+  scored_at: string
+}
+
+export function createMockAIAnalysis(grade: 'A' | 'B' | 'C' | 'D' | 'F' = 'B'): MockAIAnalysis {
+  const lessons: Record<string, string[]> = {
+    A: ['Excellent entry timing', 'Strong risk/reward discipline'],
+    B: ['Good entry with minor timing slip', 'Solid exit near target'],
+    C: ['Average timing', 'Consider tighter stops'],
+    D: ['Late entry reduced R:R', 'Exit was panic-driven'],
+    F: ['Entered against trend', 'No stop loss placed'],
+  }
+
+  return {
+    grade,
+    entry_quality: `${grade}-level entry quality. Entered ${grade === 'A' ? 'at optimal level' : 'with room for improvement'}.`,
+    exit_quality: `Exit was ${grade <= 'B' ? 'well-timed' : 'suboptimal'}. Managed risk ${grade <= 'C' ? 'adequately' : 'poorly'}.`,
+    risk_management: `Risk management rated ${grade}. Position sizing was ${grade <= 'B' ? 'appropriate' : 'oversized'}.`,
+    lessons: lessons[grade] ?? ['Review trade plan adherence'],
+    scored_at: new Date().toISOString(),
+  }
+}
+
+export function createMockDraftEntry(partial: Partial<MockJournalEntry> = {}): MockJournalEntry {
+  return createMockEntry({
+    ...partial,
+    is_open: true,
+    exit_price: null,
+    pnl: null,
+    pnl_percentage: null,
+    is_winner: null,
+  })
+}
+
+export function createMockFavoriteEntry(partial: Partial<MockJournalEntry> = {}): MockJournalEntry {
+  return createMockEntry({
+    is_favorite: true,
+    ...partial,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Analytics Mocks
+// ---------------------------------------------------------------------------
+
+export interface MockAnalyticsPayload {
+  total_trades: number
+  winning_trades: number
+  losing_trades: number
+  win_rate: number
+  total_pnl: number
+  avg_pnl: number
+  expectancy: number
+  profit_factor: number
+  sharpe_ratio: number
+  sortino_ratio: number
+  max_drawdown: number
+  equity_curve: Array<{ date: string; cumulative_pnl: number; drawdown: number }>
+  monthly_pnl: Array<{ month: string; pnl: number }>
+  symbol_stats: Array<{ symbol: string; trades: number; pnl: number; win_rate: number }>
+  direction_stats: Array<{ direction: string; trades: number; pnl: number; win_rate: number }>
+  hourly_pnl: Array<{ hour: number; pnl: number; count: number }>
+  day_of_week_pnl: Array<{ day: string; pnl: number; count: number }>
+  r_multiple_distribution: Array<{ bucket: string; count: number }>
+  mfe_mae_scatter: Array<{ mfe: number; mae: number; pnl: number }>
+}
+
+export function createMockAnalyticsPayload(tradeCount = 30): MockAnalyticsPayload {
+  const winRate = 0.62
+  const winCount = Math.round(tradeCount * winRate)
+  const loseCount = tradeCount - winCount
+
+  const curve: MockAnalyticsPayload['equity_curve'] = []
+  let cumPnl = 0
+  let peak = 0
+  for (let i = 0; i < tradeCount; i++) {
+    const isWin = i < winCount
+    const delta = isWin ? 50 + Math.random() * 100 : -(30 + Math.random() * 80)
+    cumPnl += delta
+    peak = Math.max(peak, cumPnl)
+    curve.push({
+      date: `2026-02-${String((i % 28) + 1).padStart(2, '0')}`,
+      cumulative_pnl: Math.round(cumPnl * 100) / 100,
+      drawdown: peak > 0 ? Math.round(((peak - cumPnl) / peak) * 10000) / 100 : 0,
+    })
+  }
+
+  return {
+    total_trades: tradeCount,
+    winning_trades: winCount,
+    losing_trades: loseCount,
+    win_rate: winRate,
+    total_pnl: Math.round(cumPnl * 100) / 100,
+    avg_pnl: Math.round((cumPnl / tradeCount) * 100) / 100,
+    expectancy: Math.round((cumPnl / tradeCount) * 100) / 100,
+    profit_factor: 1.8,
+    sharpe_ratio: 1.2,
+    sortino_ratio: 1.5,
+    max_drawdown: 8.5,
+    equity_curve: curve,
+    monthly_pnl: [
+      { month: '2026-01', pnl: 450 },
+      { month: '2026-02', pnl: Math.round(cumPnl - 450) },
+    ],
+    symbol_stats: [
+      { symbol: 'SPY', trades: 15, pnl: 320, win_rate: 0.67 },
+      { symbol: 'AAPL', trades: 8, pnl: 180, win_rate: 0.63 },
+      { symbol: 'TSLA', trades: 7, pnl: -50, win_rate: 0.43 },
+    ],
+    direction_stats: [
+      { direction: 'long', trades: 20, pnl: 600, win_rate: 0.65 },
+      { direction: 'short', trades: 10, pnl: -150, win_rate: 0.5 },
+    ],
+    hourly_pnl: [
+      { hour: 9, pnl: 200, count: 8 },
+      { hour: 10, pnl: 150, count: 6 },
+      { hour: 14, pnl: -80, count: 5 },
+    ],
+    day_of_week_pnl: [
+      { day: 'Mon', pnl: 100, count: 6 },
+      { day: 'Tue', pnl: 200, count: 7 },
+      { day: 'Wed', pnl: -50, count: 5 },
+      { day: 'Thu', pnl: 80, count: 6 },
+      { day: 'Fri', pnl: 120, count: 6 },
+    ],
+    r_multiple_distribution: [
+      { bucket: '<-2R', count: 2 },
+      { bucket: '-2R to -1R', count: 5 },
+      { bucket: '-1R to 0R', count: 4 },
+      { bucket: '0R to 1R', count: 6 },
+      { bucket: '1R to 2R', count: 8 },
+      { bucket: '>2R', count: 5 },
+    ],
+    mfe_mae_scatter: [
+      { mfe: 2.5, mae: -0.5, pnl: 120 },
+      { mfe: 1.0, mae: -1.5, pnl: -60 },
+      { mfe: 3.0, mae: -0.3, pnl: 200 },
+    ],
+  }
+}
+
+export interface MockBiasPayload {
+  signals: Array<{
+    label: string
+    description: string
+    confidence: number
+    evidence: string
+    recommendation: string
+  }>
+  analysis_period_days: number
+  trade_count: number
+}
+
+export function createMockBiasPayload(): MockBiasPayload {
+  return {
+    signals: [
+      {
+        label: 'Loss Aversion',
+        description: 'You tend to hold losing trades longer than winning trades.',
+        confidence: 0.75,
+        evidence: 'Average hold time for losers (45min) is 2x winners (22min).',
+        recommendation: 'Set time-based exit rules for losing positions.',
+      },
+      {
+        label: 'Recency Bias',
+        description: 'Recent trade outcomes are influencing position sizing.',
+        confidence: 0.55,
+        evidence: 'Position sizes increased 30% after a 3-trade win streak.',
+        recommendation: 'Use fixed position sizing rules regardless of recent outcomes.',
+      },
+    ],
+    analysis_period_days: 30,
+    trade_count: 30,
+  }
+}
+
+export interface MockSetupPerformancePayload {
+  setups: Array<{
+    setup_type: string
+    trades: number
+    win_rate: number
+    avg_pnl: number
+    total_pnl: number
+  }>
+  regimes: Array<{
+    regime: string
+    trades: number
+    win_rate: number
+    avg_pnl: number
+  }>
+}
+
+export function createMockSetupPerformancePayload(): MockSetupPerformancePayload {
+  return {
+    setups: [
+      { setup_type: 'Breakout', trades: 12, win_rate: 0.75, avg_pnl: 85, total_pnl: 1020 },
+      { setup_type: 'Pullback', trades: 8, win_rate: 0.63, avg_pnl: 45, total_pnl: 360 },
+      { setup_type: 'Reversal', trades: 5, win_rate: 0.4, avg_pnl: -20, total_pnl: -100 },
+    ],
+    regimes: [
+      { regime: 'Low VIX (calm)', trades: 15, win_rate: 0.73, avg_pnl: 65 },
+      { regime: 'Trending Up', trades: 10, win_rate: 0.7, avg_pnl: 55 },
+      { regime: 'High VIX (elevated)', trades: 5, win_rate: 0.4, avg_pnl: -30 },
+    ],
+  }
+}
+
+export async function setupJournalAnalyticsMocks(page: Page): Promise<void> {
+  const analyticsPayload = createMockAnalyticsPayload()
+  const biasPayload = createMockBiasPayload()
+
+  await page.route('**/api/members/journal/analytics**', async (route: Route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback()
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: analyticsPayload }),
+    })
+  })
+
+  await page.route('**/api/members/journal/biases**', async (route: Route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback()
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: biasPayload }),
+    })
+  })
+}
+
+export async function setupJournalGradeMock(
+  page: Page,
+  analysisOverride?: MockAIAnalysis,
+): Promise<void> {
+  await page.route('**/api/members/journal/grade', async (route: Route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback()
+      return
+    }
+
+    const body = route.request().postDataJSON() as { entryIds?: string[] }
+    const entryIds = Array.isArray(body.entryIds) ? body.entryIds : []
+    const analysis = analysisOverride ?? createMockAIAnalysis('B')
+
+    const data = entryIds.map((id) => ({
+      id,
+      ai_analysis: analysis,
+      grade: analysis.grade,
+    }))
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, data }),
+    })
+  })
+}
+
+export async function setupJournalGradeMockError(page: Page): Promise<void> {
+  await page.route('**/api/members/journal/grade', async (route: Route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback()
+      return
+    }
+
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: false, error: 'AI grading service unavailable' }),
+    })
+  })
+}
+
+export async function setupSetupPerformanceMock(page: Page): Promise<void> {
+  const payload = createMockSetupPerformancePayload()
+
+  await page.route('**/api/members/journal/context**', async (route: Route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback()
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: payload }),
+    })
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Import Mocks
+// ---------------------------------------------------------------------------
 
 export async function setupJournalImportMock(page: Page, state: JournalMockState): Promise<void> {
   await page.route('**/api/members/journal/import', async (route: Route) => {
