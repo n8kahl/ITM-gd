@@ -129,6 +129,15 @@ export function ingestTick(tick: NormalizedMarketTick): boolean {
 
   const lastSequence = lastSequenceBySymbol.get(symbol);
   if (sequence !== null && typeof lastSequence === 'number' && sequence <= lastSequence) {
+    const gap = lastSequence - sequence;
+    if (gap > 2) {
+      logger.warn('Significant tick sequence regression', {
+        symbol,
+        expected: lastSequence + 1,
+        received: sequence,
+        gap,
+      });
+    }
     return false;
   }
 

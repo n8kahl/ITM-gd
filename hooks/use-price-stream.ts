@@ -23,10 +23,24 @@ export interface MarketStatusUpdate {
   message: string
 }
 
+export type PriceStreamConnectionStatus = 'connected' | 'reconnecting' | 'degraded' | 'disconnected'
+export type PriceStreamFeedHealthStatus = 'connected' | 'degraded' | 'disconnected'
+
+export interface PriceStreamFeedHealth {
+  status: PriceStreamFeedHealthStatus
+  source: 'tick' | 'poll' | 'snapshot' | null
+  staleMs: number | null
+  message: string | null
+  lastTickTimestamp: string | null
+  updatedAt: string
+}
+
 interface PriceStreamState {
   prices: Map<string, PriceUpdate>
   marketStatus: MarketStatusUpdate | null
   isConnected: boolean
+  connectionStatus: PriceStreamConnectionStatus
+  feedHealth: PriceStreamFeedHealth | null
   error: string | null
 }
 
@@ -110,14 +124,16 @@ let subscribedSymbols = new Set<string>()
 let subscribedChannels = new Set<string>()
 const WS_CLOSE_UNAUTHORIZED = 4401
 const WS_CLOSE_FORBIDDEN = 4403
-const WS_FAILURE_THRESHOLD = 3
-const WS_RETRY_PAUSE_MS = 300_000
+const WS_FAILURE_THRESHOLD = 5
+const WS_RETRY_PAUSE_MS = 30_000
 const WS_MIN_CONNECT_INTERVAL_MS = 15_000
 
 const sharedState: PriceStreamState = {
   prices: new Map(),
   marketStatus: null,
   isConnected: false,
+  connectionStatus: 'disconnected',
+  feedHealth: null,
   error: null,
 }
 let notifyRafId: number | null = null
@@ -127,6 +143,8 @@ function cloneState(): PriceStreamState {
     prices: new Map(sharedState.prices),
     marketStatus: sharedState.marketStatus,
     isConnected: sharedState.isConnected,
+    connectionStatus: sharedState.connectionStatus,
+    feedHealth: sharedState.feedHealth,
     error: sharedState.error,
   }
 }
@@ -258,6 +276,108 @@ function hasEnabledConsumerWithoutToken(): boolean {
   return getActiveConsumers().some((consumer) => !consumer.token)
 }
 
+function normalizePriceSource(value: unknown): 'tick' | 'poll' | 'snapshot' | null {
+  if (value === 'tick' || value === 'poll' || value === 'snapshot') return value
+  return null
+}
+
+function toFiniteNonNegativeInteger(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.floor(value))
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, Math.floor(parsed))
+    }
+  }
+  return null
+}
+
+function parseFeedHealthMessage(message: RealtimeSocketMessage): PriceStreamFeedHealth | null {
+  if (message.type !== 'feed_health') return null
+
+  const payload = (() => {
+    if (message.data && typeof message.data === 'object' && !Array.isArray(message.data)) {
+      return message.data as Record<string, unknown>
+    }
+    if (message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)) {
+      return message.payload as Record<string, unknown>
+    }
+    return message as Record<string, unknown>
+  })()
+
+  const statusRaw = typeof payload.status === 'string'
+    ? payload.status.toLowerCase()
+    : typeof payload.health === 'string'
+      ? payload.health.toLowerCase()
+      : null
+  const pollModeRaw = typeof payload.pollMode === 'string'
+    ? payload.pollMode.toLowerCase()
+    : null
+  const tickFeedActive = payload.tickFeedActive === true
+
+  let status: PriceStreamFeedHealthStatus | null = null
+  if (statusRaw === 'connected' || statusRaw === 'live' || statusRaw === 'healthy') {
+    status = 'connected'
+  } else if (
+    statusRaw === 'degraded'
+    || statusRaw === 'delayed'
+    || statusRaw === 'stale'
+    || statusRaw === 'poll_fallback'
+    || statusRaw === 'snapshot_fallback'
+    || statusRaw === 'degraded_poll'
+  ) {
+    status = 'degraded'
+  } else if (
+    statusRaw === 'disconnected'
+    || statusRaw === 'offline'
+    || statusRaw === 'reconnecting'
+    || statusRaw === 'error'
+  ) {
+    status = 'disconnected'
+  }
+  if (!status) {
+    if (pollModeRaw === 'degraded_poll') {
+      status = 'degraded'
+    } else if (pollModeRaw === 'tick' || pollModeRaw === 'extended' || tickFeedActive) {
+      status = 'connected'
+    } else if (pollModeRaw === 'closed') {
+      status = 'disconnected'
+    }
+  }
+  if (!status) return null
+
+  const lastTickTimestamp = typeof payload.lastTickTimestamp === 'string'
+    ? payload.lastTickTimestamp
+    : typeof payload.lastTickAt === 'string'
+      ? payload.lastTickAt
+      : typeof payload.timestamp === 'string'
+        ? payload.timestamp
+        : null
+
+  const messageText = typeof payload.message === 'string'
+    ? payload.message
+    : typeof payload.reason === 'string'
+      ? payload.reason
+      : null
+  const source = normalizePriceSource(payload.source)
+    ?? (pollModeRaw === 'degraded_poll'
+      ? 'poll'
+      : pollModeRaw === 'tick' || pollModeRaw === 'extended'
+        ? 'tick'
+        : null)
+
+  return {
+    status,
+    source,
+    staleMs: toFiniteNonNegativeInteger(payload.staleMs ?? payload.feedAgeMs ?? payload.lastTickAgeMs),
+    message: messageText ?? (pollModeRaw === 'degraded_poll' ? 'Tick feed degraded' : null),
+    lastTickTimestamp,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 function shouldMaintainConnection(): boolean {
   return getActiveConsumers().some((consumer) => !!consumer.token)
 }
@@ -278,6 +398,9 @@ function ensureRetryTimer(delayMs: number): void {
   if (!shouldMaintainConnection()) return
   if (wsReconnectTimer) return
   const safeDelay = Math.max(0, delayMs)
+  if (!sharedState.isConnected) {
+    sharedState.connectionStatus = 'reconnecting'
+  }
   wsReconnectTimer = setTimeout(() => {
     wsReconnectTimer = null
     ensureSocketConnection()
@@ -288,6 +411,7 @@ function scheduleReconnect(): void {
   if (!shouldMaintainConnection()) return
   if (Date.now() < wsRetryPausedUntil) return
   clearReconnectTimer()
+  sharedState.connectionStatus = 'reconnecting'
   const now = Date.now()
   const backoffDelay = Math.min(1000 * (2 ** wsReconnectAttempt), 30000)
   const targetConnectAt = Math.max(wsNextConnectAt, now + backoffDelay)
@@ -314,6 +438,7 @@ function disconnectSocket(): void {
   subscribedSymbols = new Set()
   subscribedChannels = new Set()
   sharedState.isConnected = false
+  sharedState.connectionStatus = 'disconnected'
 }
 
 function notifyChannelConsumers(message: RealtimeSocketMessage): void {
@@ -334,8 +459,30 @@ function handleSocketMessage(event: MessageEvent<string>): void {
   try {
     const message = JSON.parse(event.data) as RealtimeSocketMessage
 
+    const feedHealth = parseFeedHealthMessage(message)
+    if (feedHealth) {
+      sharedState.feedHealth = feedHealth
+      if (sharedState.isConnected) {
+        sharedState.connectionStatus = feedHealth.status === 'connected'
+          ? 'connected'
+          : feedHealth.status === 'degraded'
+            ? 'degraded'
+            : 'reconnecting'
+      } else if (feedHealth.status === 'disconnected') {
+        sharedState.connectionStatus = 'reconnecting'
+      } else if (feedHealth.status === 'degraded') {
+        sharedState.connectionStatus = 'degraded'
+      }
+      notifyConsumers()
+      notifyChannelConsumers(message)
+      return
+    }
+
     if (message.type === 'price' && typeof message.symbol === 'string') {
       const timestamp = typeof message.timestamp === 'string' ? message.timestamp : new Date().toISOString()
+      const source = message.source === 'tick' || message.source === 'poll' || message.source === 'snapshot'
+        ? message.source
+        : undefined
       const feedAgeFromPayload = typeof message.feedAgeMs === 'number' && Number.isFinite(message.feedAgeMs)
         ? Math.max(0, Math.floor(message.feedAgeMs))
         : null
@@ -343,6 +490,7 @@ function handleSocketMessage(event: MessageEvent<string>): void {
       const computedFeedAgeMs = Number.isFinite(parsedTimestamp)
         ? Math.max(0, Date.now() - parsedTimestamp)
         : undefined
+      const resolvedFeedAgeMs = feedAgeFromPayload ?? computedFeedAgeMs
       sharedState.prices.set(message.symbol, {
         symbol: message.symbol,
         price: Number(message.price || 0),
@@ -350,11 +498,12 @@ function handleSocketMessage(event: MessageEvent<string>): void {
         changePct: Number(message.changePct || 0),
         volume: Number(message.volume || 0),
         timestamp,
-        source: message.source === 'tick' || message.source === 'poll' || message.source === 'snapshot'
-          ? message.source
-          : undefined,
-        feedAgeMs: feedAgeFromPayload ?? computedFeedAgeMs,
+        source,
+        feedAgeMs: resolvedFeedAgeMs,
       })
+      if (source === 'tick' && sharedState.isConnected && (resolvedFeedAgeMs ?? Number.POSITIVE_INFINITY) <= 5_000) {
+        sharedState.connectionStatus = 'connected'
+      }
       notifyConsumers()
       notifyChannelConsumers(message)
       return
@@ -426,6 +575,7 @@ function ensureSocketConnection(): void {
     sharedState.error = hasEnabledConsumerWithoutToken()
       ? 'Authentication required for live stream'
       : null
+    sharedState.connectionStatus = 'disconnected'
     notifyConsumers()
     return
   }
@@ -434,12 +584,14 @@ function ensureSocketConnection(): void {
   if (!token) {
     disconnectSocket()
     sharedState.error = 'Authentication required for live stream'
+    sharedState.connectionStatus = 'disconnected'
     notifyConsumers()
     return
   }
 
   if (Date.now() < wsRetryPausedUntil) {
     sharedState.error = 'Live stream temporarily unavailable'
+    sharedState.connectionStatus = 'degraded'
     debugPriceStream('Reconnect paused', {
       retryAfterMs: Math.max(wsRetryPausedUntil - Date.now(), 0),
     })
@@ -449,6 +601,9 @@ function ensureSocketConnection(): void {
 
   if (Date.now() < wsNextConnectAt) {
     const retryAfterMs = Math.max(wsNextConnectAt - Date.now(), 0)
+    if (!sharedState.isConnected) {
+      sharedState.connectionStatus = 'reconnecting'
+    }
     debugPriceStream('Connect throttled', { retryAfterMs })
     ensureRetryTimer(retryAfterMs)
     return
@@ -466,12 +621,14 @@ function ensureSocketConnection(): void {
 
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     sharedState.error = null
+    sharedState.connectionStatus = ws.readyState === WebSocket.OPEN ? 'connected' : 'reconnecting'
     notifyConsumers()
     return
   }
 
   const wsUrl = buildWebSocketUrl(token)
   wsNextConnectAt = Date.now() + WS_MIN_CONNECT_INTERVAL_MS
+  sharedState.connectionStatus = 'reconnecting'
   debugPriceStream('Opening websocket', { wsUrl: redactWsUrl(wsUrl) })
   const socket = new WebSocket(wsUrl)
   let socketOpened = false
@@ -483,6 +640,7 @@ function ensureSocketConnection(): void {
     wsConsecutiveConnectFailures = 0
     wsRetryPausedUntil = 0
     sharedState.isConnected = true
+    sharedState.connectionStatus = 'connected'
     sharedState.error = null
     debugPriceStream('Websocket connected')
     notifyConsumers()
@@ -523,6 +681,7 @@ function ensureSocketConnection(): void {
 
     if (event.code === WS_CLOSE_UNAUTHORIZED || event.code === WS_CLOSE_FORBIDDEN) {
       sharedState.error = event.reason || 'Authentication required for live stream'
+      sharedState.connectionStatus = 'degraded'
       wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
       wsNextConnectAt = wsRetryPausedUntil
       if (getPriceStreamDebugEnabled()) {
@@ -553,6 +712,7 @@ function ensureSocketConnection(): void {
     if (wsConsecutiveConnectFailures >= WS_FAILURE_THRESHOLD) {
       wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
       sharedState.error = 'Live stream unavailable. Retrying shortly.'
+      sharedState.connectionStatus = 'degraded'
       debugPriceStream('Failure threshold reached, pausing reconnects', {
         pauseMs: WS_RETRY_PAUSE_MS,
       })
@@ -565,6 +725,7 @@ function ensureSocketConnection(): void {
       return
     }
 
+    sharedState.connectionStatus = 'reconnecting'
     notifyConsumers()
     scheduleReconnect()
   }
@@ -670,6 +831,8 @@ export function usePriceStream(
     prices: state.prices,
     marketStatus: state.marketStatus,
     isConnected: state.isConnected,
+    connectionStatus: state.connectionStatus,
+    feedHealth: state.feedHealth,
     error: state.error,
     getPrice,
   }

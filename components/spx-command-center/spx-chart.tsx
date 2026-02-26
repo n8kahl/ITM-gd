@@ -571,12 +571,18 @@ export function SPXChart({
       }
 
       if (annotation.price != null) {
+        const isStop = annotation.type === 'stop'
+        const isTarget2 = annotation.type === 'target2' || /(^|\b)t2\b|target 2/i.test(annotation.label || '')
         acc.push({
           price: annotation.price,
           label: annotation.label,
-          color: annotation.type === 'stop' ? 'rgba(251,113,133,0.75)' : 'rgba(244,208,120,0.75)',
+          color: isStop
+            ? 'rgba(239,68,68,0.82)'
+            : isTarget2
+              ? 'rgba(16,185,129,0.52)'
+              : 'rgba(16,185,129,0.82)',
           lineStyle: 'solid',
-          lineWidth: 1.5,
+          lineWidth: isTarget2 ? 1.25 : 1.5,
           axisLabelVisible: true,
           type: annotation.type,
         })

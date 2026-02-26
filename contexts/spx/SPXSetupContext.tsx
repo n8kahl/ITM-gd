@@ -7,7 +7,7 @@ type TradeMode = 'scan' | 'in_trade'
 
 export interface SPXChartAnnotation {
   id: string
-  type: 'entry_zone' | 'stop' | 'target'
+  type: 'entry_zone' | 'stop' | 'target1' | 'target2' | 'target'
   priceLow?: number
   priceHigh?: number
   price?: number

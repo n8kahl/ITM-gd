@@ -339,6 +339,10 @@ export function buildClusterZones(levels: SPXLevel[]): ClusterZone[] {
   return mergeOverlappingZones(zones);
 }
 
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function getMergedLevels(options?: {
   forceRefresh?: boolean;
   basisState?: BasisState;
@@ -360,60 +364,87 @@ export async function getMergedLevels(options?: {
     clusters: ClusterZone[];
     generatedAt: string;
   }> => {
-  if (!forceRefresh && !hasPrecomputedDependencies) {
-    const cached = await cacheGet<{ levels: SPXLevel[]; clusters: ClusterZone[]; generatedAt: string }>(LEVEL_CACHE_KEY);
-    if (cached) {
-      return cached;
+    if (!forceRefresh && !hasPrecomputedDependencies) {
+      const cached = await cacheGet<{ levels: SPXLevel[]; clusters: ClusterZone[]; generatedAt: string }>(LEVEL_CACHE_KEY);
+      if (cached) {
+        return cached;
+      }
     }
-  }
 
-  const [spxLegacy, spyLegacy, basis, gex, fibLevels] = await Promise.all([
-    calculateLevels('SPX', 'intraday'),
-    calculateLevels('SPY', 'intraday'),
-    options?.basisState
-      ? Promise.resolve(options.basisState)
-      : getBasisState({ forceRefresh }),
-    options?.gexLandscape
-      ? Promise.resolve(options.gexLandscape)
-      : computeUnifiedGEXLandscape({ forceRefresh }),
-    options?.fibLevels
-      ? Promise.resolve(options.fibLevels)
-      : getFibLevels({ forceRefresh }),
-  ]);
+    const [spxLegacy, spyLegacy] = await Promise.all([
+      calculateLevels('SPX', 'intraday'),
+      calculateLevels('SPY', 'intraday'),
+    ]);
 
-  const spxLevels = collectLegacyLevels(spxLegacy).map((level) => {
-    const category = mapLevelCategory(level.type);
-    return mapLegacyLevel('SPX', level, category);
-  });
+    let basis: BasisState | null = options?.basisState ?? null;
+    let gex: UnifiedGEXLandscape | null = options?.gexLandscape ?? null;
+    let fibLevels: FibLevel[] | null = options?.fibLevels ?? null;
 
-  const spyDerivedLevels = collectLegacyLevels(spyLegacy).map((level) => {
-    const transformedPrice = level.price * 10 + basis.current;
-    return mapLegacyLevel('SPY', level, 'spy_derived', transformedPrice);
-  });
+    if (!basis) {
+      try {
+        basis = await getBasisState({ forceRefresh });
+      } catch (error) {
+        logger.warn('Basis state failed, continuing without SPY-derived levels', {
+          error: toErrorMessage(error),
+        });
+      }
+    }
 
-  const optionLevels = buildGexDerivedLevels({ gex });
-  const fibMappedLevels = buildFibLevelsAsSPXLevels(fibLevels);
+    if (!gex) {
+      try {
+        gex = await computeUnifiedGEXLandscape({ forceRefresh });
+      } catch (error) {
+        logger.warn('GEX landscape failed, continuing without GEX-derived levels', {
+          error: toErrorMessage(error),
+        });
+      }
+    }
 
-  const allLevels = [...spxLevels, ...spyDerivedLevels, ...optionLevels, ...fibMappedLevels]
-    .sort((a, b) => a.price - b.price);
+    if (!fibLevels) {
+      try {
+        fibLevels = await getFibLevels({ forceRefresh });
+      } catch (error) {
+        logger.warn('Fibonacci levels failed, continuing without fib levels', {
+          error: toErrorMessage(error),
+        });
+      }
+    }
 
-  const clusters = buildClusterZones(allLevels);
+    const spxLevels = collectLegacyLevels(spxLegacy).map((level) => {
+      const category = mapLevelCategory(level.type);
+      return mapLegacyLevel('SPX', level, category);
+    });
 
-  const payload = {
-    levels: allLevels,
-    clusters,
-    generatedAt: nowIso(),
-  };
+    const spyDerivedLevels = basis
+      ? collectLegacyLevels(spyLegacy).map((level) => {
+        const transformedPrice = level.price * 10 + basis.current;
+        return mapLegacyLevel('SPY', level, 'spy_derived', transformedPrice);
+      })
+      : [];
 
-  await cacheSet(LEVEL_CACHE_KEY, payload, LEVEL_CACHE_TTL_SECONDS);
+    const optionLevels = gex ? buildGexDerivedLevels({ gex }) : [];
+    const fibMappedLevels = fibLevels ? buildFibLevelsAsSPXLevels(fibLevels) : [];
 
-  logger.info('SPX command center levels updated', {
-    levels: allLevels.length,
-    clusters: clusters.length,
-    generatedAt: payload.generatedAt,
-  });
+    const allLevels = [...spxLevels, ...spyDerivedLevels, ...optionLevels, ...fibMappedLevels]
+      .sort((a, b) => a.price - b.price);
 
-  return payload;
+    const clusters = buildClusterZones(allLevels);
+
+    const payload = {
+      levels: allLevels,
+      clusters,
+      generatedAt: nowIso(),
+    };
+
+    await cacheSet(LEVEL_CACHE_KEY, payload, LEVEL_CACHE_TTL_SECONDS);
+
+    logger.info('SPX command center levels updated', {
+      levels: allLevels.length,
+      clusters: clusters.length,
+      generatedAt: payload.generatedAt,
+    });
+
+    return payload;
   };
 
   if (forceRefresh) {

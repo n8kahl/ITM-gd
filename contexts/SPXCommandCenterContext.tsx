@@ -3,7 +3,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { SPXAnalyticsProvider, type SPXAnalyticsContextState } from '@/contexts/spx/SPXAnalyticsContext'
+import {
+  SPXAnalyticsProvider,
+  type SPXAnalyticsContextState,
+  type SPXLevelsDataQuality,
+} from '@/contexts/spx/SPXAnalyticsContext'
 import { SPXCoachProvider, type SPXCoachContextState } from '@/contexts/spx/SPXCoachContext'
 import { SPXFlowProvider, type SPXFlowContextState } from '@/contexts/spx/SPXFlowContext'
 import { SPXPriceProvider, type SPXPriceContextState } from '@/contexts/spx/SPXPriceContext'
@@ -14,7 +18,12 @@ import {
   type SPXSetupContextState,
 } from '@/contexts/spx/SPXSetupContext'
 import { postSPX, postSPXStream } from '@/hooks/use-spx-api'
-import { usePriceStream, type RealtimeSocketMessage } from '@/hooks/use-price-stream'
+import {
+  usePriceStream,
+  type PriceStreamConnectionStatus,
+  type PriceStreamFeedHealth,
+  type RealtimeSocketMessage,
+} from '@/hooks/use-price-stream'
 import { useSPXSnapshot } from '@/hooks/use-spx-snapshot'
 import { enrichCoachDecisionExplainability } from '@/lib/spx/coach-explainability'
 import { distanceToStopPoints, isFlowDivergence, summarizeFlowAlignment } from '@/lib/spx/coach-context'
@@ -130,6 +139,7 @@ interface SPXCommandCenterState {
   feedFallbackStage: SPXFeedFallbackStage
   feedFallbackReasonCode: SPXFeedFallbackReasonCode
   blockTradeEntryByFeedTrust: boolean
+  levelsDataQuality: SPXLevelsDataQuality | null
   spxPrice: number
   spxTickTimestamp: string | null
   spxPriceAgeMs: number | null
@@ -137,6 +147,8 @@ interface SPXCommandCenterState {
   spyPrice: number
   snapshotGeneratedAt: string | null
   priceStreamConnected: boolean
+  priceStreamConnectionStatus: PriceStreamConnectionStatus
+  priceStreamFeedHealth: PriceStreamFeedHealth | null
   priceStreamError: string | null
   basis: BasisState | null
   spyImpact: SpyImpactState | null
@@ -1313,13 +1325,13 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
       },
       {
         id: `${selectedSetup.id}-target1`,
-        type: 'target',
+        type: 'target1',
         price: selectedSetup.target1.price,
         label: selectedSetup.target1.label,
       },
       {
         id: `${selectedSetup.id}-target2`,
-        type: 'target',
+        type: 'target2',
         price: selectedSetup.target2.price,
         label: selectedSetup.target2.label,
       },
@@ -2591,6 +2603,23 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
   const blockTradeEntryByFeedTrust = E2E_ALLOW_STALE_ENTRY && resolvedFeedHealth.dataHealth === 'stale'
     ? false
     : resolvedFeedHealth.fallbackPolicy.blockTradeEntry
+  const levelsDataQuality = useMemo<SPXLevelsDataQuality | null>(() => {
+    const candidate = snapshotData?.levelsDataQuality || snapshotData?.dataQuality
+    if (!candidate || typeof candidate !== 'object') return null
+    const integrity = candidate.integrity === 'degraded'
+      ? 'degraded'
+      : candidate.integrity === 'full'
+        ? 'full'
+        : null
+    if (!integrity) return null
+    const warnings = Array.isArray(candidate.warnings)
+      ? candidate.warnings.filter((warning): warning is string => typeof warning === 'string')
+      : []
+    return {
+      integrity,
+      warnings,
+    }
+  }, [snapshotData?.dataQuality, snapshotData?.levelsDataQuality])
 
   useEffect(() => {
     const nextTransitionKey = [
@@ -2636,6 +2665,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     feedFallbackStage,
     feedFallbackReasonCode,
     blockTradeEntryByFeedTrust,
+    levelsDataQuality,
     basis: snapshotData?.basis || null,
     spyImpact: snapshotData?.spyImpact || null,
     regime: snapshotData?.regime?.regime || null,
@@ -2655,6 +2685,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     error,
     filteredLevels,
     isLoading,
+    levelsDataQuality,
     snapshotData,
   ])
 
@@ -2741,6 +2772,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     spyPrice,
     snapshotGeneratedAt: snapshotData?.generatedAt || null,
     priceStreamConnected: stream.isConnected,
+    priceStreamConnectionStatus: stream.connectionStatus,
+    priceStreamFeedHealth: stream.feedHealth,
     priceStreamError: stream.error,
     selectedTimeframe,
     setChartTimeframe,
@@ -2755,7 +2788,9 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     spxPriceSource,
     spxTickTimestamp,
     spyPrice,
+    stream.connectionStatus,
     stream.error,
+    stream.feedHealth,
     stream.isConnected,
   ])
 
@@ -2811,6 +2846,7 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     feedFallbackStage: legacyAnalyticsState.feedFallbackStage,
     feedFallbackReasonCode: legacyAnalyticsState.feedFallbackReasonCode,
     blockTradeEntryByFeedTrust: legacyAnalyticsState.blockTradeEntryByFeedTrust,
+    levelsDataQuality: legacyAnalyticsState.levelsDataQuality || null,
     spxPrice: legacyPriceState.spxPrice,
     spxTickTimestamp: legacyPriceState.spxTickTimestamp,
     spxPriceAgeMs: legacyPriceState.spxPriceAgeMs,
@@ -2818,6 +2854,8 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     spyPrice: legacyPriceState.spyPrice,
     snapshotGeneratedAt: legacyPriceState.snapshotGeneratedAt,
     priceStreamConnected: legacyPriceState.priceStreamConnected,
+    priceStreamConnectionStatus: legacyPriceState.priceStreamConnectionStatus,
+    priceStreamFeedHealth: legacyPriceState.priceStreamFeedHealth,
     priceStreamError: legacyPriceState.priceStreamError,
     basis: legacyAnalyticsState.basis,
     spyImpact: legacyAnalyticsState.spyImpact,

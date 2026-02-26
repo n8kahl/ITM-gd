@@ -13,12 +13,18 @@ import type {
   SpyImpactState,
 } from '@/lib/types/spx-command-center'
 
+export interface SPXLevelsDataQuality {
+  integrity: 'full' | 'degraded'
+  warnings: string[]
+}
+
 export interface SPXAnalyticsContextState {
   dataHealth: 'healthy' | 'degraded' | 'stale'
   dataHealthMessage: string | null
   feedFallbackStage: SPXFeedFallbackStage
   feedFallbackReasonCode: SPXFeedFallbackReasonCode
   blockTradeEntryByFeedTrust: boolean
+  levelsDataQuality?: SPXLevelsDataQuality | null
   basis: BasisState | null
   spyImpact: SpyImpactState | null
   regime: Regime | null

@@ -77,6 +77,7 @@ export function SetupFeed({
     regime,
     prediction,
     dataHealth,
+    levelsDataQuality,
     dataHealthMessage,
     feedFallbackReasonCode,
     feedFallbackStage,
@@ -137,6 +138,8 @@ export function SetupFeed({
   const feedExecutionBlocked = executionGate.feedBlocked
   const brokerExecutionBlocked = executionGate.brokerBlocked
   const executionBlocked = executionGate.blocked
+  const levelsDataQualityDegraded = levelsDataQuality?.integrity === 'degraded'
+    || (levelsDataQuality == null && dataHealth === 'degraded')
   const selectedEnterable = Boolean(
     selectedSetup
     && (selectedSetup.status === 'ready' || selectedSetup.status === 'triggered')
@@ -473,6 +476,7 @@ export function SetupFeed({
                     currentPrice={spxPrice}
                     selected={selectedSetup?.id === setup.id}
                     readOnly={readOnly}
+                    levelsDataQualityDegraded={levelsDataQualityDegraded}
                     onSelect={() => selectSetup(setup)}
                     showEnterTradeCta={oneClickEntryEnabled && tradeMode !== 'in_trade'}
                     onEnterTrade={() => handleOneClickEntry(setup)}
@@ -505,6 +509,7 @@ export function SetupFeed({
                     currentPrice={spxPrice}
                     selected={selectedSetup?.id === setup.id}
                     readOnly={readOnly}
+                    levelsDataQualityDegraded={levelsDataQualityDegraded}
                     onSelect={() => selectSetup(setup)}
                     showEnterTradeCta={oneClickEntryEnabled && tradeMode !== 'in_trade'}
                     onEnterTrade={() => handleOneClickEntry(setup)}
@@ -551,6 +556,7 @@ export function SetupFeed({
                 currentPrice={spxPrice}
                 selected={selectedSetup?.id === setup.id}
                 readOnly={readOnly}
+                levelsDataQualityDegraded={levelsDataQualityDegraded}
                 onSelect={() => selectSetup(setup)}
                 showEnterTradeCta={false}
               />

@@ -7,6 +7,7 @@ function buildContext(overrides?: Partial<SPXMultiTFConfluenceContext>): SPXMult
     tf1m: {
       timeframe: '1m',
       ema21: 6012,
+      emaReliable: true,
       ema55: 6008,
       slope21: 1.2,
       latestClose: 6013,
@@ -18,6 +19,7 @@ function buildContext(overrides?: Partial<SPXMultiTFConfluenceContext>): SPXMult
     tf5m: {
       timeframe: '5m',
       ema21: 6015,
+      emaReliable: true,
       ema55: 6007,
       slope21: 1.5,
       latestClose: 6018,
@@ -29,6 +31,7 @@ function buildContext(overrides?: Partial<SPXMultiTFConfluenceContext>): SPXMult
     tf15m: {
       timeframe: '15m',
       ema21: 6017,
+      emaReliable: true,
       ema55: 6004,
       slope21: 1.1,
       latestClose: 6019,
@@ -40,6 +43,7 @@ function buildContext(overrides?: Partial<SPXMultiTFConfluenceContext>): SPXMult
     tf1h: {
       timeframe: '1h',
       ema21: 6020,
+      emaReliable: true,
       ema55: 6002,
       slope21: 0.9,
       latestClose: 6022,

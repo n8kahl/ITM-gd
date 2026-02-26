@@ -6,6 +6,7 @@ import { formatSPXFeedFallbackReasonCode } from '@/lib/spx/feed-health'
 import { cn } from '@/lib/utils'
 import { Settings2 } from 'lucide-react'
 import { BrokerHeaderChip } from './broker-header-chip'
+import { FeedHealthIndicator } from './feed-health-indicator'
 
 interface SPXHeaderProps {
   onOpenCommandPalette: () => void
@@ -53,6 +54,13 @@ function formatFeedAge(ageMs: number | null): string {
   return `${Math.floor(seconds / 60)}m`
 }
 
+function streamConnectionLabel(status: 'connected' | 'reconnecting' | 'degraded' | 'disconnected'): string {
+  if (status === 'connected') return 'Connected'
+  if (status === 'degraded') return 'Degraded'
+  if (status === 'reconnecting') return 'Reconnecting'
+  return 'Disconnected'
+}
+
 export function SPXHeader({
   onOpenCommandPalette,
   onOpenSettings,
@@ -63,9 +71,16 @@ export function SPXHeader({
   totalLevelsCount,
 }: SPXHeaderProps) {
   const { regime, basis, dataHealth, feedFallbackReasonCode, feedFallbackStage } = useSPXAnalyticsContext()
-  const { spxPrice, spxPriceSource, spxPriceAgeMs, priceStreamConnected, priceStreamError } = useSPXPriceContext()
+  const {
+    spxPrice,
+    spxPriceSource,
+    spxPriceAgeMs,
+    priceStreamConnected,
+    priceStreamConnectionStatus,
+    priceStreamError,
+  } = useSPXPriceContext()
   const fallbackReasonLabel = formatSPXFeedFallbackReasonCode(feedFallbackReasonCode)
-  const streamStatusLabel = priceStreamConnected ? 'Connected' : 'Disconnected'
+  const streamStatusLabel = streamConnectionLabel(priceStreamConnectionStatus)
   const streamErrorLabel = priceStreamError && priceStreamError.trim().length > 0
     ? priceStreamError
     : null
@@ -90,6 +105,7 @@ export function SPXHeader({
         <span className="font-mono text-lg font-bold text-white">
           {spxPrice > 0 ? `SPX ${spxPrice.toFixed(2)}` : 'SPX --'}
         </span>
+        <FeedHealthIndicator />
         <span
           data-testid="spx-header-regime-chip"
           className={cn(
@@ -137,6 +153,7 @@ export function SPXHeader({
           </div>
           <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-white/65">
             {streamStatusLabel}
+            {!priceStreamConnected ? ' · Offline' : ''}
           </div>
           <div className="font-mono text-[8px] uppercase tracking-[0.08em] text-white/50">
             Age {formatFeedAge(spxPriceAgeMs)}

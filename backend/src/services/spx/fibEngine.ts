@@ -8,6 +8,8 @@ import { getBasisState } from './crossReference';
 const FIB_CACHE_KEY = 'spx_command_center:fib_levels';
 const FIB_CACHE_TTL_SECONDS = 30;
 const fibInFlightByKey = new Map<string, Promise<FibLevel[]>>();
+const MIN_DAILY_30_BARS = 25;
+const MIN_DAILY_90_BARS = 60;
 
 interface AggregateBar {
   o: number;
@@ -150,9 +152,26 @@ async function computeFibSet(input: {
     getMinuteAggregates(ticker, asOfDate).then(toBars),
   ]);
 
-  const monthlySwing = detectSwingRange(daily90, 3);
-  const weeklySwing = detectSwingRange(daily90.slice(-65), 2);
-  const dailySwing = detectSwingRange(daily30, 2);
+  if (daily30.length < MIN_DAILY_30_BARS) {
+    logger.warn('Insufficient daily data for 30d fibonacci', {
+      symbol,
+      bars: daily30.length,
+      need: MIN_DAILY_30_BARS,
+      asOfDate,
+    });
+  }
+  if (daily90.length < MIN_DAILY_90_BARS) {
+    logger.warn('Insufficient daily data for 90d fibonacci', {
+      symbol,
+      bars: daily90.length,
+      need: MIN_DAILY_90_BARS,
+      asOfDate,
+    });
+  }
+
+  const monthlySwing = daily90.length >= MIN_DAILY_90_BARS ? detectSwingRange(daily90, 3) : null;
+  const weeklySwing = daily90.length >= MIN_DAILY_90_BARS ? detectSwingRange(daily90.slice(-65), 2) : null;
+  const dailySwing = daily30.length >= MIN_DAILY_30_BARS ? detectSwingRange(daily30, 2) : null;
   const intradaySwing = detectSwingRange(intraday, 5);
 
   const levels: FibLevel[] = [];

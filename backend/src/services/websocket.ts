@@ -124,6 +124,20 @@ interface MicrobarUpdate {
   source: 'tick';
 }
 
+type FeedHealthPollMode = 'tick' | 'degraded_poll' | 'extended' | 'closed';
+
+interface FeedHealthPayload {
+  tickFeedActive: boolean;
+  lastTickAgeMs: number;
+  pollMode: FeedHealthPollMode;
+  setupDataAgeMs: number;
+}
+
+interface FeedHealthMessage {
+  type: 'feed_health';
+  payload: FeedHealthPayload;
+}
+
 // ============================================
 // CONFIGURATION
 // ============================================
@@ -164,6 +178,10 @@ const BASIS_BROADCAST_INTERVAL_MS = 30_000;
 const FLOW_ALERT_PREMIUM_THRESHOLD = 100_000;
 const FLOW_ALERT_SIZE_THRESHOLD = 500;
 const PRICE_CACHE_STALE_MS = 15_000;
+const CRITICAL_TICK_PROXIMITY_POINTS = 0.5;
+const FEED_HEALTH_BROADCAST_INTERVAL_MS = 10_000;
+const DEFAULT_FEED_HEALTH_SYMBOLS = ['SPX', 'SPY'] as const;
+const ACTIONABLE_SETUP_STATUSES = new Set<Setup['status']>(['forming', 'ready', 'triggered']);
 const TICK_FANOUT_THROTTLE_MS = (() => {
   const parsed = Number.parseInt(process.env.MASSIVE_TICK_FANOUT_THROTTLE_MS || '150', 10);
   return Number.isFinite(parsed) ? Math.max(parsed, 25) : 150;
@@ -200,6 +218,9 @@ const lastGexBroadcastAtBySymbol: Record<'SPX' | 'SPY', number> = {
 };
 let lastRegimeBroadcastAt = 0;
 let lastBasisBroadcastAt = 0;
+const activeSetupsBySymbol = new Map<string, Map<string, Setup>>();
+let activeSetupsUpdatedAtMs = 0;
+let lastFeedHealthBroadcastAt = 0;
 
 function toAsOfMs(value: unknown): number {
   const numeric = typeof value === 'number' && Number.isFinite(value) ? value : NaN;
@@ -488,6 +509,164 @@ function getActiveSymbols(): Set<string> {
   return symbols;
 }
 
+function resolveSetupSymbol(setup: Setup): string {
+  const candidate = (setup as Setup & { symbol?: string }).symbol;
+  if (typeof candidate === 'string' && candidate.trim().length > 0) {
+    return normalizeSymbol(candidate);
+  }
+  return 'SPX';
+}
+
+function syncActiveSetupRegistry(setups: Setup[], observedAtMs: number = Date.now()): void {
+  activeSetupsBySymbol.clear();
+
+  for (const setup of setups) {
+    if (!ACTIONABLE_SETUP_STATUSES.has(setup.status)) continue;
+
+    const symbol = resolveSetupSymbol(setup);
+    let byId = activeSetupsBySymbol.get(symbol);
+    if (!byId) {
+      byId = new Map<string, Setup>();
+      activeSetupsBySymbol.set(symbol, byId);
+    }
+    byId.set(setup.id, setup);
+  }
+
+  activeSetupsUpdatedAtMs = observedAtMs;
+}
+
+function upsertActiveSetupRegistry(setup: Setup, observedAtMs: number = Date.now()): void {
+  const symbol = resolveSetupSymbol(setup);
+  const existing = activeSetupsBySymbol.get(symbol);
+
+  if (!ACTIONABLE_SETUP_STATUSES.has(setup.status)) {
+    if (existing) {
+      existing.delete(setup.id);
+      if (existing.size === 0) {
+        activeSetupsBySymbol.delete(symbol);
+      }
+    }
+    activeSetupsUpdatedAtMs = observedAtMs;
+    return;
+  }
+
+  let byId = existing;
+  if (!byId) {
+    byId = new Map<string, Setup>();
+    activeSetupsBySymbol.set(symbol, byId);
+  }
+  byId.set(setup.id, setup);
+  activeSetupsUpdatedAtMs = observedAtMs;
+}
+
+function getActiveSetupsForSymbol(symbol: string): Setup[] {
+  const byId = activeSetupsBySymbol.get(symbol);
+  if (!byId) return [];
+  return Array.from(byId.values());
+}
+
+function isCriticalTickNearActiveSetup(symbol: string, price: number): boolean {
+  const activeSetups = getActiveSetupsForSymbol(symbol);
+  if (activeSetups.length === 0) return false;
+
+  return activeSetups.some((setup) => {
+    if (Math.abs(price - setup.entryZone.low) < CRITICAL_TICK_PROXIMITY_POINTS) return true;
+    if (Math.abs(price - setup.entryZone.high) < CRITICAL_TICK_PROXIMITY_POINTS) return true;
+    if (Math.abs(price - setup.stop) < CRITICAL_TICK_PROXIMITY_POINTS) return true;
+    if (Math.abs(price - setup.target1.price) < CRITICAL_TICK_PROXIMITY_POINTS) return true;
+    if (Math.abs(price - setup.target2.price) < CRITICAL_TICK_PROXIMITY_POINTS) return true;
+    return false;
+  });
+}
+
+function shouldThrottleTickBroadcast(
+  symbol: string,
+  price: number,
+  nowMs: number,
+  lastBroadcastAtMs: number,
+): boolean {
+  if (isCriticalTickNearActiveSetup(symbol, price)) {
+    return false;
+  }
+  return nowMs - lastBroadcastAtMs < TICK_FANOUT_THROTTLE_MS;
+}
+
+function getFeedHealthSymbols(): Set<string> {
+  const activeSymbols = getActiveSymbols();
+  if (activeSymbols.size > 0) {
+    return new Set(Array.from(activeSymbols).map((symbol) => normalizeSymbol(symbol)));
+  }
+  return new Set<string>(DEFAULT_FEED_HEALTH_SYMBOLS);
+}
+
+function getLastTickAgeMs(symbols: Iterable<string>, nowMs: number = Date.now()): number {
+  let maxAgeMs = -1;
+  for (const symbol of symbols) {
+    const latestTick = getLatestTick(symbol);
+    if (!latestTick) continue;
+    maxAgeMs = Math.max(maxAgeMs, Math.max(0, nowMs - latestTick.timestamp));
+  }
+  return maxAgeMs;
+}
+
+function resolveFeedHealthPollMode(
+  marketStatus: ReturnType<typeof getMarketStatus>['status'],
+  tickFeedActive: boolean,
+): FeedHealthPollMode {
+  if (marketStatus === 'open') {
+    return tickFeedActive ? 'tick' : 'degraded_poll';
+  }
+  if (marketStatus === 'pre-market' || marketStatus === 'after-hours') {
+    return tickFeedActive ? 'extended' : 'degraded_poll';
+  }
+  return 'closed';
+}
+
+function getFeedHealthSnapshot(nowMs: number = Date.now()): FeedHealthPayload & {
+  marketStatus: ReturnType<typeof getMarketStatus>;
+} {
+  const marketStatus = getMarketStatus();
+  const symbolsToCheck = getFeedHealthSymbols();
+  const tickFeedConnected = isMassiveTickStreamConnected();
+  const tickFeedFresh = tickFeedConnected && areSymbolTicksFresh(symbolsToCheck, nowMs);
+
+  return {
+    marketStatus,
+    tickFeedActive: tickFeedFresh,
+    lastTickAgeMs: getLastTickAgeMs(symbolsToCheck, nowMs),
+    pollMode: resolveFeedHealthPollMode(marketStatus.status, tickFeedFresh),
+    setupDataAgeMs: activeSetupsUpdatedAtMs > 0
+      ? Math.max(0, nowMs - activeSetupsUpdatedAtMs)
+      : -1,
+  };
+}
+
+function broadcastFeedHealthIfDegraded(nowMs: number = Date.now()): void {
+  if (clients.size === 0) return;
+
+  const feedHealth = getFeedHealthSnapshot(nowMs);
+  if (feedHealth.pollMode !== 'degraded_poll') return;
+  if (nowMs - lastFeedHealthBroadcastAt < FEED_HEALTH_BROADCAST_INTERVAL_MS) return;
+  lastFeedHealthBroadcastAt = nowMs;
+
+  const message: FeedHealthMessage = {
+    type: 'feed_health',
+    payload: {
+      tickFeedActive: feedHealth.tickFeedActive,
+      lastTickAgeMs: feedHealth.lastTickAgeMs,
+      pollMode: feedHealth.pollMode,
+      setupDataAgeMs: feedHealth.setupDataAgeMs,
+    },
+  };
+  const serialized = JSON.stringify(message);
+
+  for (const [ws] of clients) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(serialized);
+    }
+  }
+}
+
 function isSymbolTickFresh(symbol: string, nowMs: number = Date.now()): boolean {
   const latest = getLatestTick(symbol);
   if (!latest) return false;
@@ -741,7 +920,7 @@ async function broadcastTickPrice(tick: NormalizedMarketTick): Promise<void> {
 
   const now = Date.now();
   const lastBroadcast = lastTickBroadcastAtBySymbol.get(symbol) || 0;
-  if (now - lastBroadcast < TICK_FANOUT_THROTTLE_MS) {
+  if (shouldThrottleTickBroadcast(symbol, tick.price, now, lastBroadcast)) {
     return;
   }
   lastTickBroadcastAtBySymbol.set(symbol, now);
@@ -851,6 +1030,7 @@ function broadcastTickMicrobars(tick: NormalizedMarketTick): void {
 }
 
 function broadcastSetupTransition(event: SetupTransitionEvent): void {
+  upsertActiveSetupRegistry(event.setup);
   if (!hasSubscribersForChannel('setups:update')) return;
 
   broadcastChannelMessage('setups:update', 'spx_setup', {
@@ -1033,6 +1213,7 @@ async function sendInitialSPXChannelSnapshot(
   const snapshot = await getSPXSnapshot({ forceRefresh: false });
   const snapshotSetups = applyTickStateToSetups(snapshot.setups);
   syncTickEvaluatorSetups(snapshotSetups);
+  syncActiveSetupRegistry(snapshotSetups);
 
   if (channels.has('gex:SPX')) {
     sendChannelPayloadToClient(ws, 'gex:SPX', 'spx_gex', {
@@ -1306,6 +1487,8 @@ async function pollPrices(): Promise<void> {
     }
   }
 
+  broadcastFeedHealthIfDegraded(now);
+
   if (hasSPXSubscribers) {
     await broadcastSPXChannels();
   }
@@ -1320,6 +1503,7 @@ async function broadcastSPXChannels(): Promise<void> {
     setups: applyTickStateToSetups(snapshot.setups),
   };
   syncTickEvaluatorSetups(snapshotWithTickSetups.setups);
+  syncActiveSetupRegistry(snapshotWithTickSetups.setups, now);
   const previousSnapshot = lastSPXSnapshot;
   lastSPXSnapshot = snapshotWithTickSetups;
 
@@ -1422,19 +1606,14 @@ async function broadcastSPXChannels(): Promise<void> {
 }
 
 function getCurrentPollInterval(): number {
-  const status = getMarketStatus();
-  const tickFeedConnected = isMassiveTickStreamConnected();
-  const activeSymbols = getActiveSymbols();
-  const symbolsToCheck = activeSymbols.size > 0
-    ? activeSymbols
-    : new Set<string>(['SPX', 'SPY']);
-  const tickFeedFresh = tickFeedConnected && areSymbolTicksFresh(symbolsToCheck);
+  const feedHealth = getFeedHealthSnapshot();
+  const status = feedHealth.marketStatus.status;
 
-  if (status.status === 'open') {
-    return tickFeedFresh ? POLL_INTERVALS.regular : POLL_INTERVALS.degradedRegular;
+  if (status === 'open') {
+    return feedHealth.pollMode === 'tick' ? POLL_INTERVALS.regular : POLL_INTERVALS.degradedRegular;
   }
-  if (status.status === 'pre-market' || status.status === 'after-hours') {
-    return tickFeedFresh ? POLL_INTERVALS.extended : POLL_INTERVALS.degradedExtended;
+  if (status === 'pre-market' || status === 'after-hours') {
+    return feedHealth.pollMode === 'extended' ? POLL_INTERVALS.extended : POLL_INTERVALS.degradedExtended;
   }
   return POLL_INTERVALS.closed;
 }
@@ -1668,6 +1847,9 @@ export function shutdownWebSocket(): void {
   clientSubscriptions.clear();
   lastTickBroadcastAtBySymbol.clear();
   lastMicrobarBroadcastAtBySymbolInterval.clear();
+  activeSetupsBySymbol.clear();
+  activeSetupsUpdatedAtMs = 0;
+  lastFeedHealthBroadcastAt = 0;
   resetMicrobarAggregator();
   resetTickEvaluatorState();
   logger.info('WebSocket server shut down');
@@ -1689,6 +1871,14 @@ export const __testables = {
   isSymbolTickFresh,
   areSymbolTicksFresh,
   isPollBarFresh,
+  shouldThrottleTickBroadcast,
+  isCriticalTickNearActiveSetup,
+  getFeedHealthSnapshot,
+  syncActiveSetupRegistry,
+  upsertActiveSetupRegistry,
+  getActiveSetupsForSymbol,
+  FEED_HEALTH_BROADCAST_INTERVAL_MS,
+  TICK_FANOUT_THROTTLE_MS,
   POLL_BAR_MAX_AGE_MS,
   addClientSubscription,
   removeClientSubscription,
@@ -1698,6 +1888,10 @@ export const __testables = {
   ensureClientSubscriptionRegistry,
   registerSigtermCleanup,
   unregisterSigtermCleanup,
+  __resetActiveSetupRegistry: () => {
+    activeSetupsBySymbol.clear();
+    activeSetupsUpdatedAtMs = 0;
+  },
   __getTrackedClientCount: () => clients.size,
   __getTrackedSubscriptionRegistryCount: () => clientSubscriptions.size,
 };

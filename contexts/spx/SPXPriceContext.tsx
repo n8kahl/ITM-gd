@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from 'react'
 import type { ChartTimeframe } from '@/lib/api/ai-coach'
+import type { PriceStreamConnectionStatus, PriceStreamFeedHealth } from '@/hooks/use-price-stream'
 
 type SPXPriceSource = 'tick' | 'poll' | 'snapshot' | null
 
@@ -28,6 +29,8 @@ export interface SPXPriceContextState {
   spyPrice: number
   snapshotGeneratedAt: string | null
   priceStreamConnected: boolean
+  priceStreamConnectionStatus: PriceStreamConnectionStatus
+  priceStreamFeedHealth: PriceStreamFeedHealth | null
   priceStreamError: string | null
   selectedTimeframe: ChartTimeframe
   setChartTimeframe: (timeframe: ChartTimeframe) => void

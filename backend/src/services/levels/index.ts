@@ -39,6 +39,10 @@ export interface LevelsResponse {
   symbol: string;
   timestamp: string;
   currentPrice: number;
+  dataQuality: {
+    integrity: 'full' | 'degraded';
+    warnings: string[];
+  };
   levels: {
     resistance: LevelItem[];
     support: LevelItem[];
@@ -199,11 +203,28 @@ export async function calculateLevels(
   logger.info(`Calculating fresh levels for ${symbol}:${timeframe}`);
 
   try {
+    let preMarketFetchFailed = false;
+    let intradayFetchFailed = false;
+
     // Fetch all required data in parallel
     const [dailyData, preMarketData, intradayData] = await Promise.all([
       fetchDailyData(symbol, 30, options?.asOfDate), // 30 days for ATR calculation
-      fetchPreMarketData(symbol, options?.asOfDate).catch(() => []), // Optional - may fail if market closed
-      fetchIntradayData(symbol, options?.asOfDate).catch(() => []), // Optional - may fail if market closed
+      fetchPreMarketData(symbol, options?.asOfDate).catch((error: unknown) => {
+        logger.warn('Pre-market data fetch failed', {
+          symbol,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        preMarketFetchFailed = true;
+        return [];
+      }), // Optional - may fail if market closed
+      fetchIntradayData(symbol, options?.asOfDate).catch((error: unknown) => {
+        logger.warn('Intraday data fetch failed', {
+          symbol,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        intradayFetchFailed = true;
+        return [];
+      }), // Optional - may fail if market closed
     ]);
 
     const currentPrice = resolveCurrentPrice(symbol, dailyData, preMarketData, intradayData);
@@ -337,10 +358,22 @@ export async function calculateLevels(
     // Sort support by distance (closest first, but in reverse since they're negative)
     supportWithTests.sort((a, b) => b.distance - a.distance);
 
+    const dataQualityWarnings = [
+      ...(intradayFetchFailed ? ['intraday_data_unavailable'] : []),
+      ...(preMarketFetchFailed ? ['premarket_data_unavailable'] : []),
+      ...(vwap == null ? ['vwap_unavailable'] : []),
+      ...(atr14 == null ? ['atr14_insufficient_data'] : []),
+      ...(dailyData.length < 20 ? [`daily_data_sparse:${dailyData.length}_bars`] : []),
+    ];
+
     const result: LevelsResponse = {
       symbol,
       timestamp: new Date().toISOString(),
       currentPrice: Number(currentPrice.toFixed(2)),
+      dataQuality: {
+        integrity: (intradayFetchFailed || preMarketFetchFailed) ? 'degraded' : 'full',
+        warnings: dataQualityWarnings,
+      },
       levels: {
         resistance: resistanceWithTests,
         support: supportWithTests,
