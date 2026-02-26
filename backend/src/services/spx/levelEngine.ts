@@ -184,13 +184,13 @@ async function calculateOpeningRange(asOfDate?: string): Promise<OpeningRange | 
 
   try {
     const bars = await getMinuteAggregates('I:SPX', dateStr);
-    if (!bars?.results?.length) return null;
+    if (!Array.isArray(bars) || bars.length === 0) return null;
 
     // Filter to first 30 minutes of trading (9:30-10:00 AM ET)
     const openMs = new Date(`${dateStr}T09:30:00-05:00`).getTime();
     const orEndMs = openMs + 30 * 60 * 1000; // +30 minutes
 
-    const orBars = bars.results.filter((bar: { t: number }) =>
+    const orBars = bars.filter((bar: { t: number }) =>
       bar.t >= openMs && bar.t < orEndMs
     );
 

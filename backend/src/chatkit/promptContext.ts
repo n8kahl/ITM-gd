@@ -7,6 +7,7 @@ import { massiveClient, getTickerNews } from '../config/massive';
 import { getEarningsCalendar } from '../services/earnings';
 import { getEconomicCalendar } from '../services/economic';
 import { getSPXSnapshot } from '../services/spx';
+import type { LevelStrength, SPXLevel } from '../services/spx/types';
 
 interface PromptProfile {
   tier?: string;
@@ -24,6 +25,14 @@ const TIER_CANONICAL_MAP: Record<string, string> = {
   pro: 'pro',
   premium: 'premium',
   elite: 'premium',
+};
+
+const LEVEL_STRENGTH_ORDER: Record<LevelStrength, number> = {
+  strong: 0,
+  critical: 1,
+  moderate: 2,
+  dynamic: 3,
+  weak: 4,
 };
 
 export type SessionPhase =
@@ -184,6 +193,39 @@ function normalizeSymbols(symbols: string[]): string[] {
   )];
 }
 
+function formatSourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    opening_range_high: 'OR-High',
+    opening_range_low: 'OR-Low',
+    spx_zero_gamma: 'SPX Zero Gamma',
+    spy_zero_gamma: 'SPY Zero Gamma',
+    zero_gamma: 'Zero Gamma',
+    call_wall: 'Call Wall',
+    put_wall: 'Put Wall',
+    flip_point: 'Flip Point',
+    vwap: 'VWAP',
+  };
+  const normalized = source.trim().toLowerCase();
+  if (labels[normalized]) return labels[normalized];
+  return normalized
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatLevelLabel(level: SPXLevel): string {
+  return level.chartStyle?.labelFormat?.trim() || formatSourceLabel(level.source);
+}
+
+function formatRegimeLabel(regime: string): string {
+  return regime
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export async function getEarningsProximityWarnings(symbols: string[]): Promise<string | null> {
   const normalized = normalizeSymbols(symbols).slice(0, 10);
   if (normalized.length === 0) return null;
@@ -291,7 +333,7 @@ async function loadSPXCommandCenterContext(): Promise<string | null> {
     // Regime
     if (snapshot.regime) {
       const r = snapshot.regime;
-      lines.push(`Regime: ${r.label || r.regime || 'unknown'} (confidence: ${typeof r.confidence === 'number' ? `${(r.confidence * 100).toFixed(0)}%` : 'N/A'})`);
+      lines.push(`Regime: ${formatRegimeLabel(r.regime || 'unknown')} (confidence: ${typeof r.confidence === 'number' ? `${r.confidence.toFixed(0)}%` : 'N/A'})`);
     }
 
     // Key levels (top 8 by strength)
@@ -299,12 +341,11 @@ async function loadSPXCommandCenterContext(): Promise<string | null> {
       const topLevels = snapshot.levels
         .filter((l) => l.price > 0)
         .sort((a, b) => {
-          const strengthOrder = { strong: 0, moderate: 1, weak: 2 };
-          return (strengthOrder[a.strength] ?? 2) - (strengthOrder[b.strength] ?? 2);
+          return LEVEL_STRENGTH_ORDER[a.strength] - LEVEL_STRENGTH_ORDER[b.strength];
         })
         .slice(0, 8);
       if (topLevels.length > 0) {
-        lines.push('Key levels: ' + topLevels.map((l) => `${l.label || l.type} ${l.price.toFixed(2)} (${l.strength})`).join(', '));
+        lines.push('Key levels: ' + topLevels.map((l) => `${formatLevelLabel(l)} ${l.price.toFixed(2)} (${l.strength})`).join(', '));
       }
     }
 
@@ -329,9 +370,11 @@ async function loadSPXCommandCenterContext(): Promise<string | null> {
     // Prediction pWin
     if (snapshot.prediction) {
       const p = snapshot.prediction;
-      if (typeof p.pWin === 'number') {
-        lines.push(`Prediction pWin: ${(p.pWin * 100).toFixed(1)}% (bias: ${p.bias || 'neutral'})`);
-      }
+      const bullish = Number.isFinite(p.direction?.bullish) ? p.direction.bullish : 0;
+      const bearish = Number.isFinite(p.direction?.bearish) ? p.direction.bearish : 0;
+      const bias = bullish === bearish ? 'neutral' : bullish > bearish ? 'bullish' : 'bearish';
+      const directionalWinProb = Math.max(bullish, bearish);
+      lines.push(`Prediction pWin: ${directionalWinProb.toFixed(1)}% (bias: ${bias})`);
     }
 
     return lines.join('\n');

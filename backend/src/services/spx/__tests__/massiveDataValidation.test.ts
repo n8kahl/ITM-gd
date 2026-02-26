@@ -10,31 +10,31 @@ import { computeUnifiedGEXLandscape } from '../gexEngine';
 import { getMergedLevels } from '../levelEngine';
 import type { ClusterZone, RegimeState, UnifiedGEXLandscape } from '../types';
 
-jest.mock('../../../lib/logger', () => ({
+vi.mock('../../../lib/logger', () => ({
   logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
-jest.mock('../../../config/massive', () => ({
-  getAggregates: jest.fn(),
-  getMinuteAggregates: jest.fn(),
+vi.mock('../../../config/massive', () => ({
+  getAggregates: vi.fn(),
+  getMinuteAggregates: vi.fn(),
 }));
 
-jest.mock('../../../config/redis', () => ({
-  cacheGet: jest.fn(),
-  cacheSet: jest.fn(),
+vi.mock('../../../config/redis', () => ({
+  cacheGet: vi.fn(),
+  cacheSet: vi.fn(),
 }));
 
-jest.mock('../gexEngine', () => ({
-  computeUnifiedGEXLandscape: jest.fn(),
+vi.mock('../gexEngine', () => ({
+  computeUnifiedGEXLandscape: vi.fn(),
 }));
 
-jest.mock('../levelEngine', () => ({
-  getMergedLevels: jest.fn(),
+vi.mock('../levelEngine', () => ({
+  getMergedLevels: vi.fn(),
 }));
 
 interface MassiveBarValidationOptions {
@@ -50,12 +50,12 @@ interface MassiveBarValidationResult {
   duplicateCount: number;
 }
 
-const mockGetAggregates = getAggregates as jest.MockedFunction<typeof getAggregates>;
-const mockGetMinuteAggregates = getMinuteAggregates as jest.MockedFunction<typeof getMinuteAggregates>;
-const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
-const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
-const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as jest.MockedFunction<typeof computeUnifiedGEXLandscape>;
-const mockGetMergedLevels = getMergedLevels as jest.MockedFunction<typeof getMergedLevels>;
+const mockGetAggregates = getAggregates as vi.MockedFunction<typeof getAggregates>;
+const mockGetMinuteAggregates = getMinuteAggregates as vi.MockedFunction<typeof getMinuteAggregates>;
+const mockCacheGet = cacheGet as vi.MockedFunction<typeof cacheGet>;
+const mockCacheSet = cacheSet as vi.MockedFunction<typeof cacheSet>;
+const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as vi.MockedFunction<typeof computeUnifiedGEXLandscape>;
+const mockGetMergedLevels = getMergedLevels as vi.MockedFunction<typeof getMergedLevels>;
 
 const REGULAR_SESSION_DATE = '2026-01-15';
 const EARLY_CLOSE_DATE = '2025-11-28';
@@ -377,7 +377,7 @@ function assertValidRegimeState(state: RegimeState): void {
 
 describe('spx/massive data validation - Group 1: bar structure validation', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockCacheGet.mockResolvedValue(null as never);
     mockCacheSet.mockResolvedValue(undefined as never);
     mockComputeUnifiedGEXLandscape.mockResolvedValue(buildGexLandscape() as never);
@@ -435,7 +435,7 @@ describe('spx/massive data validation - Group 1: bar structure validation', () =
 
 describe('spx/massive data validation - Group 2: minute bar completeness', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockCacheGet.mockResolvedValue(null as never);
     mockCacheSet.mockResolvedValue(undefined as never);
   });
@@ -530,7 +530,7 @@ describe('spx/massive data validation - Group 2: minute bar completeness', () =>
 
 describe('spx/massive data validation - Group 3: second-level bars', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('expects ~60 second bars per minute window (allow 50-70)', async () => {
@@ -593,7 +593,7 @@ describe('spx/massive data validation - Group 3: second-level bars', () => {
 
 describe('spx/massive data validation - Group 4: pipeline integration', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockCacheGet.mockResolvedValue(null as never);
     mockCacheSet.mockResolvedValue(undefined as never);
     mockComputeUnifiedGEXLandscape.mockResolvedValue(buildGexLandscape() as never);

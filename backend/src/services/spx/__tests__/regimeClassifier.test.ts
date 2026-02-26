@@ -9,37 +9,37 @@ import { __testables as setupDetectorTestables } from '../setupDetector';
 import type { RegimeState, UnifiedGEXLandscape } from '../types';
 import * as regimeUtils from '../utils';
 
-jest.mock('../../../config/redis', () => ({
-  cacheGet: jest.fn().mockResolvedValue(null),
-  cacheSet: jest.fn().mockResolvedValue(undefined),
+vi.mock('../../../config/redis', () => ({
+  cacheGet: vi.fn().mockResolvedValue(null),
+  cacheSet: vi.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('../../../config/massive', () => ({
-  getMinuteAggregates: jest.fn().mockResolvedValue([]),
+vi.mock('../../../config/massive', () => ({
+  getMinuteAggregates: vi.fn().mockResolvedValue([]),
 }));
 
-jest.mock('../gexEngine', () => ({
-  computeUnifiedGEXLandscape: jest.fn(),
+vi.mock('../gexEngine', () => ({
+  computeUnifiedGEXLandscape: vi.fn(),
 }));
 
-jest.mock('../levelEngine', () => ({
-  getMergedLevels: jest.fn(),
+vi.mock('../levelEngine', () => ({
+  getMergedLevels: vi.fn(),
 }));
 
-jest.mock('../../../lib/logger', () => ({
+vi.mock('../../../lib/logger', () => ({
   logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
-const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
-const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
-const mockGetMinuteAggregates = getMinuteAggregates as jest.MockedFunction<typeof getMinuteAggregates>;
-const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as jest.MockedFunction<typeof computeUnifiedGEXLandscape>;
-const mockGetMergedLevels = getMergedLevels as jest.MockedFunction<typeof getMergedLevels>;
+const mockCacheGet = cacheGet as vi.MockedFunction<typeof cacheGet>;
+const mockCacheSet = cacheSet as vi.MockedFunction<typeof cacheSet>;
+const mockGetMinuteAggregates = getMinuteAggregates as vi.MockedFunction<typeof getMinuteAggregates>;
+const mockComputeUnifiedGEXLandscape = computeUnifiedGEXLandscape as vi.MockedFunction<typeof computeUnifiedGEXLandscape>;
+const mockGetMergedLevels = getMergedLevels as vi.MockedFunction<typeof getMergedLevels>;
 
 const VALID_REGIMES = ['trending', 'ranging', 'compression', 'breakout'] as const;
 const VALID_DIRECTIONS = ['bullish', 'bearish', 'neutral'] as const;
@@ -48,7 +48,7 @@ const VALID_MAGNITUDES = ['small', 'medium', 'large'] as const;
 type MinuteBar = { c: number; v: number };
 
 function resetClassifierMocks(): void {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   mockCacheGet.mockResolvedValue(null as never);
   mockCacheSet.mockResolvedValue(undefined as never);
   mockGetMinuteAggregates.mockResolvedValue([] as never);
@@ -190,7 +190,7 @@ async function captureDerivedSignals(input: {
   signals: Parameters<typeof regimeUtils.classifyRegimeFromSignals>[0];
   state: RegimeState;
 }> {
-  const spy = jest.spyOn(regimeUtils, 'classifyRegimeFromSignals');
+  const spy = vi.spyOn(regimeUtils, 'classifyRegimeFromSignals');
   try {
     const state = await classifyFromBars(input);
     expect(spy).toHaveBeenCalledTimes(1);

@@ -36,32 +36,32 @@ function buildBars(input: {
   return out;
 }
 
-function loadLevelsHarness() {
-  jest.resetModules();
+async function loadLevelsHarness() {
+  vi.resetModules();
 
-  const fetchDailyData = jest.fn();
-  const fetchPreMarketData = jest.fn();
-  const fetchIntradayData = jest.fn();
-  const getCachedLevels = jest.fn().mockResolvedValue(null);
-  const cacheLevels = jest.fn().mockResolvedValue(undefined);
-  const analyzeLevelTests = jest.fn().mockResolvedValue(new Map());
+  const fetchDailyData = vi.fn();
+  const fetchPreMarketData = vi.fn();
+  const fetchIntradayData = vi.fn();
+  const getCachedLevels = vi.fn().mockResolvedValue(null);
+  const cacheLevels = vi.fn().mockResolvedValue(undefined);
+  const analyzeLevelTests = vi.fn().mockResolvedValue(new Map());
 
-  jest.doMock('../../../lib/logger', () => ({
+  vi.doMock('../../../lib/logger', () => ({
     logger: {
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      debug: jest.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
     },
   }));
 
-  jest.doMock('../../levels/fetcher', () => ({
+  vi.doMock('../../levels/fetcher', () => ({
     fetchDailyData,
     fetchPreMarketData,
     fetchIntradayData,
   }));
 
-  jest.doMock('../../levels/cache', () => ({
+  vi.doMock('../../levels/cache', () => ({
     CACHE_TTL: {
       LEVELS: 300,
     },
@@ -74,19 +74,19 @@ function loadLevelsHarness() {
     }),
   }));
 
-  jest.doMock('../../levels/levelTestTracker', () => ({
+  vi.doMock('../../levels/levelTestTracker', () => ({
     analyzeLevelTests,
   }));
 
-  jest.doMock('../../marketHours', () => ({
-    getMarketStatus: jest.fn(() => ({
+  vi.doMock('../../marketHours', () => ({
+    getMarketStatus: vi.fn(() => ({
       status: 'open',
       session: 'regular',
       timeSinceOpen: '2h 00m',
     })),
   }));
 
-  const levelsModule = require('../../levels') as typeof import('../../levels');
+  const levelsModule = await import('../../levels');
 
   return {
     calculateLevels: levelsModule.calculateLevels,
@@ -101,47 +101,47 @@ function loadLevelsHarness() {
   };
 }
 
-function loadLevelEngineHarness() {
-  jest.resetModules();
+async function loadLevelEngineHarness() {
+  vi.resetModules();
 
-  const calculateLevels = jest.fn();
-  const getBasisState = jest.fn();
-  const computeUnifiedGEXLandscape = jest.fn();
-  const getFibLevels = jest.fn();
-  const cacheGet = jest.fn().mockResolvedValue(null);
-  const cacheSet = jest.fn().mockResolvedValue(undefined);
+  const calculateLevels = vi.fn();
+  const getBasisState = vi.fn();
+  const computeUnifiedGEXLandscape = vi.fn();
+  const getFibLevels = vi.fn();
+  const cacheGet = vi.fn().mockResolvedValue(null);
+  const cacheSet = vi.fn().mockResolvedValue(undefined);
 
-  jest.doMock('../../../lib/logger', () => ({
+  vi.doMock('../../../lib/logger', () => ({
     logger: {
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      debug: jest.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
     },
   }));
 
-  jest.doMock('../../../config/redis', () => ({
+  vi.doMock('../../../config/redis', () => ({
     cacheGet,
     cacheSet,
   }));
 
-  jest.doMock('../../levels', () => ({
+  vi.doMock('../../levels', () => ({
     calculateLevels,
   }));
 
-  jest.doMock('../crossReference', () => ({
+  vi.doMock('../crossReference', () => ({
     getBasisState,
   }));
 
-  jest.doMock('../gexEngine', () => ({
+  vi.doMock('../gexEngine', () => ({
     computeUnifiedGEXLandscape,
   }));
 
-  jest.doMock('../fibEngine', () => ({
+  vi.doMock('../fibEngine', () => ({
     getFibLevels,
   }));
 
-  const levelEngineModule = require('../levelEngine') as typeof import('../levelEngine');
+  const levelEngineModule = await import('../levelEngine');
 
   return {
     getMergedLevels: levelEngineModule.getMergedLevels,
@@ -156,40 +156,40 @@ function loadLevelEngineHarness() {
   };
 }
 
-function loadFibHarness() {
-  jest.resetModules();
-  jest.unmock('../fibEngine');
+async function loadFibHarness() {
+  vi.resetModules();
+  vi.doUnmock('../fibEngine');
 
-  const getDailyAggregates = jest.fn();
-  const getMinuteAggregates = jest.fn();
-  const getBasisState = jest.fn();
-  const cacheGet = jest.fn().mockResolvedValue(null);
-  const cacheSet = jest.fn().mockResolvedValue(undefined);
+  const getDailyAggregates = vi.fn();
+  const getMinuteAggregates = vi.fn();
+  const getBasisState = vi.fn();
+  const cacheGet = vi.fn().mockResolvedValue(null);
+  const cacheSet = vi.fn().mockResolvedValue(undefined);
 
-  jest.doMock('../../../lib/logger', () => ({
+  vi.doMock('../../../lib/logger', () => ({
     logger: {
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      debug: jest.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
     },
   }));
 
-  jest.doMock('../../../config/redis', () => ({
+  vi.doMock('../../../config/redis', () => ({
     cacheGet,
     cacheSet,
   }));
 
-  jest.doMock('../../../config/massive', () => ({
+  vi.doMock('../../../config/massive', () => ({
     getDailyAggregates,
     getMinuteAggregates,
   }));
 
-  jest.doMock('../crossReference', () => ({
+  vi.doMock('../crossReference', () => ({
     getBasisState,
   }));
 
-  const fibModule = require('../fibEngine') as typeof import('../fibEngine');
+  const fibModule = await import('../fibEngine');
 
   return {
     getFibLevels: fibModule.getFibLevels,
@@ -203,33 +203,33 @@ function loadFibHarness() {
   };
 }
 
-function loadMultiTFHarness() {
-  jest.resetModules();
-  jest.unmock('../../marketHours');
+async function loadMultiTFHarness() {
+  vi.resetModules();
+  vi.doUnmock('../../marketHours');
 
-  const getAggregates = jest.fn();
-  const cacheGet = jest.fn().mockResolvedValue(null);
-  const cacheSet = jest.fn().mockResolvedValue(undefined);
+  const getAggregates = vi.fn();
+  const cacheGet = vi.fn().mockResolvedValue(null);
+  const cacheSet = vi.fn().mockResolvedValue(undefined);
 
-  jest.doMock('../../../lib/logger', () => ({
+  vi.doMock('../../../lib/logger', () => ({
     logger: {
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      debug: jest.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
     },
   }));
 
-  jest.doMock('../../../config/redis', () => ({
+  vi.doMock('../../../config/redis', () => ({
     cacheGet,
     cacheSet,
   }));
 
-  jest.doMock('../../../config/massive', () => ({
+  vi.doMock('../../../config/massive', () => ({
     getAggregates,
   }));
 
-  const multiTFModule = require('../multiTFConfluence') as typeof import('../multiTFConfluence');
+  const multiTFModule = await import('../multiTFConfluence');
 
   return {
     getMultiTFConfluenceContext: multiTFModule.getMultiTFConfluenceContext,
@@ -341,7 +341,7 @@ function buildMockGexLandscape() {
 describe('levels pipeline hardening', () => {
   describe('Group 1: silent failure detection', () => {
     it('sets integrity=degraded when pre-market fetch fails', async () => {
-      const { calculateLevels, mocks } = loadLevelsHarness();
+      const { calculateLevels, mocks } = await loadLevelsHarness();
       mocks.fetchDailyData.mockResolvedValue(buildBars({ count: 30, startPrice: 6000 }));
       mocks.fetchPreMarketData.mockRejectedValue(new Error('pre-market timeout'));
       mocks.fetchIntradayData.mockResolvedValue(buildBars({ count: 20, startPrice: 6010 }));
@@ -353,7 +353,7 @@ describe('levels pipeline hardening', () => {
     });
 
     it('adds intraday_data_unavailable warning when intraday fetch fails', async () => {
-      const { calculateLevels, mocks } = loadLevelsHarness();
+      const { calculateLevels, mocks } = await loadLevelsHarness();
       mocks.fetchDailyData.mockResolvedValue(buildBars({ count: 30, startPrice: 6000 }));
       mocks.fetchPreMarketData.mockResolvedValue(buildBars({ count: 12, startPrice: 6005 }));
       mocks.fetchIntradayData.mockRejectedValue(new Error('intraday timeout'));
@@ -365,7 +365,7 @@ describe('levels pipeline hardening', () => {
     });
 
     it('adds vwap_unavailable warning when VWAP cannot be computed', async () => {
-      const { calculateLevels, mocks } = loadLevelsHarness();
+      const { calculateLevels, mocks } = await loadLevelsHarness();
       mocks.fetchDailyData.mockResolvedValue(buildBars({ count: 30, startPrice: 6000 }));
       mocks.fetchPreMarketData.mockResolvedValue(buildBars({ count: 12, startPrice: 6005 }));
       mocks.fetchIntradayData.mockResolvedValue(buildBars({
@@ -381,7 +381,7 @@ describe('levels pipeline hardening', () => {
     });
 
     it('adds daily_data_sparse warning when daily bars are under threshold', async () => {
-      const { calculateLevels, mocks } = loadLevelsHarness();
+      const { calculateLevels, mocks } = await loadLevelsHarness();
       mocks.fetchDailyData.mockResolvedValue(buildBars({ count: 12, startPrice: 6000 }));
       mocks.fetchPreMarketData.mockResolvedValue(buildBars({ count: 8, startPrice: 6002 }));
       mocks.fetchIntradayData.mockResolvedValue(buildBars({ count: 12, startPrice: 6005 }));
@@ -394,7 +394,7 @@ describe('levels pipeline hardening', () => {
 
   describe('Group 2: partial merge resilience', () => {
     it('continues with SPX + SPY legacy levels when GEX fails', async () => {
-      const { getMergedLevels, mocks } = loadLevelEngineHarness();
+      const { getMergedLevels, mocks } = await loadLevelEngineHarness();
       mocks.calculateLevels.mockImplementation(async (symbol: string) => buildMockLevelsResponse(symbol as 'SPX' | 'SPY'));
       mocks.getBasisState.mockResolvedValue({ current: 1.8 });
       mocks.getFibLevels.mockResolvedValue([
@@ -418,7 +418,7 @@ describe('levels pipeline hardening', () => {
     });
 
     it('continues with SPX + SPY + GEX when fib computation fails', async () => {
-      const { getMergedLevels, mocks } = loadLevelEngineHarness();
+      const { getMergedLevels, mocks } = await loadLevelEngineHarness();
       mocks.calculateLevels.mockImplementation(async (symbol: string) => buildMockLevelsResponse(symbol as 'SPX' | 'SPY'));
       mocks.getBasisState.mockResolvedValue({ current: 1.8 });
       mocks.computeUnifiedGEXLandscape.mockResolvedValue(buildMockGexLandscape());
@@ -432,7 +432,7 @@ describe('levels pipeline hardening', () => {
     });
 
     it('skips SPY-derived levels when basis fails but keeps others', async () => {
-      const { getMergedLevels, mocks } = loadLevelEngineHarness();
+      const { getMergedLevels, mocks } = await loadLevelEngineHarness();
       mocks.calculateLevels.mockImplementation(async (symbol: string) => buildMockLevelsResponse(symbol as 'SPX' | 'SPY'));
       mocks.getBasisState.mockRejectedValue(new Error('basis unavailable'));
       mocks.computeUnifiedGEXLandscape.mockResolvedValue(buildMockGexLandscape());
@@ -456,7 +456,7 @@ describe('levels pipeline hardening', () => {
     });
 
     it('returns only hard-dependency legacy levels when all optional deps fail', async () => {
-      const { getMergedLevels, mocks } = loadLevelEngineHarness();
+      const { getMergedLevels, mocks } = await loadLevelEngineHarness();
       mocks.calculateLevels.mockImplementation(async (symbol: string) => buildMockLevelsResponse(symbol as 'SPX' | 'SPY'));
       mocks.getBasisState.mockRejectedValue(new Error('basis unavailable'));
       mocks.computeUnifiedGEXLandscape.mockRejectedValue(new Error('gex unavailable'));
@@ -474,7 +474,7 @@ describe('levels pipeline hardening', () => {
 
   describe('Group 3: fibonacci validation', () => {
     it('returns empty fib set when daily bars are below validation threshold', async () => {
-      const { getFibLevels, mocks } = loadFibHarness();
+      const { getFibLevels, mocks } = await loadFibHarness();
       mocks.getDailyAggregates.mockResolvedValue(buildBars({ count: 15, startPrice: 6000 }));
       mocks.getMinuteAggregates.mockResolvedValue(buildBars({ count: 3, startPrice: 6010 }));
       mocks.getBasisState.mockResolvedValue({ current: 0 });
@@ -485,7 +485,7 @@ describe('levels pipeline hardening', () => {
     });
 
     it('computes fib levels normally with sufficient daily bars', async () => {
-      const { getFibLevels, mocks } = loadFibHarness();
+      const { getFibLevels, mocks } = await loadFibHarness();
       mocks.getDailyAggregates.mockResolvedValue(buildBars({ count: 40, startPrice: 6000 }));
       mocks.getMinuteAggregates.mockResolvedValue(buildBars({ count: 30, startPrice: 6010 }));
       mocks.getBasisState.mockResolvedValue({ current: 0 });
@@ -499,7 +499,7 @@ describe('levels pipeline hardening', () => {
 
   describe('Group 4: multi-timeframe EMA reliability', () => {
     it('marks EMA as unreliable when frame has fewer bars than period', async () => {
-      const { getMultiTFConfluenceContext, mocks } = loadMultiTFHarness();
+      const { getMultiTFConfluenceContext, mocks } = await loadMultiTFHarness();
       mocks.getAggregates.mockResolvedValue({ results: buildBars({ count: 8, startPrice: 6000 }) });
 
       const context = await getMultiTFConfluenceContext({
@@ -512,7 +512,7 @@ describe('levels pipeline hardening', () => {
     });
 
     it('marks EMA as reliable when frame has at least period bars', async () => {
-      const { getMultiTFConfluenceContext, mocks } = loadMultiTFHarness();
+      const { getMultiTFConfluenceContext, mocks } = await loadMultiTFHarness();
       mocks.getAggregates.mockResolvedValue({ results: buildBars({ count: 25, startPrice: 6000 }) });
 
       const context = await getMultiTFConfluenceContext({
@@ -526,8 +526,8 @@ describe('levels pipeline hardening', () => {
       expect(context.tf1h.emaReliable).toBe(true);
     });
 
-    it('reduces composite by 40% when any frame EMA is unreliable', () => {
-      const { scoreMultiTFConfluence } = loadMultiTFHarness();
+    it('reduces composite by 40% when any frame EMA is unreliable', async () => {
+      const { scoreMultiTFConfluence } = await loadMultiTFHarness();
       const baseContext = {
         asOf: '2026-02-25T15:30:00.000Z',
         source: 'computed' as const,
@@ -606,7 +606,7 @@ describe('levels pipeline hardening', () => {
 
   describe('Group 5: timeframe-aware swing lookback', () => {
     it('uses 4-bar swing lookback for 1h timeframe', async () => {
-      const { getMultiTFConfluenceContext, mocks } = loadMultiTFHarness();
+      const { getMultiTFConfluenceContext, mocks } = await loadMultiTFHarness();
 
       const oneHourBars = Array.from({ length: 12 }, (_, idx) => ({
         o: 400 + idx,
@@ -644,7 +644,7 @@ describe('levels pipeline hardening', () => {
     });
 
     it('uses 12-bar swing lookback for 5m timeframe', async () => {
-      const { getMultiTFConfluenceContext, mocks } = loadMultiTFHarness();
+      const { getMultiTFConfluenceContext, mocks } = await loadMultiTFHarness();
 
       const oneHourBars = Array.from({ length: 12 }, (_, idx) => ({
         o: 400 + idx,

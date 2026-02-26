@@ -3,18 +3,18 @@ import { persistSetupInstancesForWinRate, summarizeSPXWinRateRows } from '../out
 import type { SetupInstanceRow } from '../outcomeTracker';
 import type { Setup } from '../types';
 
-jest.mock('../../../config/database', () => ({
+vi.mock('../../../config/database', () => ({
   supabase: {
-    from: jest.fn(),
+    from: vi.fn(),
   },
 }));
 
-jest.mock('../../../lib/logger', () => ({
+vi.mock('../../../lib/logger', () => ({
   logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
@@ -169,7 +169,7 @@ describe('spx/outcomeTracker analytics summary', () => {
 });
 
 describe('spx/outcomeTracker touch persistence', () => {
-  const mockFrom = supabase.from as jest.MockedFunction<typeof supabase.from>;
+  const mockFrom = supabase.from as vi.MockedFunction<typeof supabase.from>;
 
   beforeEach(() => {
     mockFrom.mockReset();
@@ -177,9 +177,9 @@ describe('spx/outcomeTracker touch persistence', () => {
 
   it('upserts level touch rows keyed by setup instance id', async () => {
     const setupInstancesTable = {
-      upsert: jest.fn().mockResolvedValue({ error: null }),
-      select: jest.fn(),
-      in: jest.fn().mockResolvedValue({
+      upsert: vi.fn().mockResolvedValue({ error: null }),
+      select: vi.fn(),
+      in: vi.fn().mockResolvedValue({
         data: [{
           id: 'instance-1',
           engine_setup_id: 'setup-1',
@@ -196,8 +196,8 @@ describe('spx/outcomeTracker touch persistence', () => {
         }],
         error: null,
       }),
-      update: jest.fn(),
-      eq: jest.fn(),
+      update: vi.fn(),
+      eq: vi.fn(),
     };
     setupInstancesTable.select.mockReturnValue(setupInstancesTable as any);
     setupInstancesTable.update.mockReturnValue(setupInstancesTable as any);
@@ -206,7 +206,7 @@ describe('spx/outcomeTracker touch persistence', () => {
       .mockResolvedValueOnce({ error: null } as any);
 
     const levelTouchesTable = {
-      upsert: jest.fn().mockResolvedValue({ error: null }),
+      upsert: vi.fn().mockResolvedValue({ error: null }),
     };
 
     mockFrom.mockImplementation(((table: string) => {
@@ -306,7 +306,7 @@ describe('spx/outcomeTracker touch persistence', () => {
 });
 
 describe('spx/outcomeTracker outcome classification edges', () => {
-  const mockFrom = supabase.from as jest.MockedFunction<typeof supabase.from>;
+  const mockFrom = supabase.from as vi.MockedFunction<typeof supabase.from>;
 
   function makeSetup(overrides?: Partial<Setup>): Setup {
     return {
@@ -361,18 +361,18 @@ describe('spx/outcomeTracker outcome classification edges', () => {
 
   function installPersistenceMocks(trackedRows: SetupInstanceRow[]) {
     const setupInstancesTable = {
-      upsert: jest.fn().mockResolvedValue({ error: null }),
-      select: jest.fn(),
-      in: jest.fn().mockResolvedValue({ data: trackedRows, error: null }),
-      update: jest.fn(),
-      eq: jest.fn(),
+      upsert: vi.fn().mockResolvedValue({ error: null }),
+      select: vi.fn(),
+      in: vi.fn().mockResolvedValue({ data: trackedRows, error: null }),
+      update: vi.fn(),
+      eq: vi.fn(),
     };
     setupInstancesTable.select.mockReturnValue(setupInstancesTable as any);
     setupInstancesTable.update.mockReturnValue(setupInstancesTable as any);
     setupInstancesTable.eq.mockReturnValue(setupInstancesTable as any);
 
     const levelTouchesTable = {
-      upsert: jest.fn().mockResolvedValue({ error: null }),
+      upsert: vi.fn().mockResolvedValue({ error: null }),
     };
 
     mockFrom.mockImplementation(((table: string) => {

@@ -5,27 +5,27 @@ import { __testables } from '../websocket';
 import { ingestTick, resetTickCache } from '../tickCache';
 import type { Setup } from '../spx/types';
 
-jest.mock('../../lib/logger', () => ({
+vi.mock('../../lib/logger', () => ({
   logger: {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
-jest.mock('../massiveTickStream', () => ({
-  subscribeMassiveTickUpdates: jest.fn(() => () => {}),
-  isMassiveTickStreamConnected: jest.fn(),
+vi.mock('../massiveTickStream', () => ({
+  subscribeMassiveTickUpdates: vi.fn(() => () => {}),
+  isMassiveTickStreamConnected: vi.fn(),
 }));
 
-jest.mock('../marketHours', () => ({
-  getMarketStatus: jest.fn(() => ({
+vi.mock('../marketHours', () => ({
+  getMarketStatus: vi.fn(() => ({
     status: 'open',
     session: 'regular',
     message: 'Market open',
   })),
-  toEasternTime: jest.fn((date: Date) => ({
+  toEasternTime: vi.fn((date: Date) => ({
     hour: date.getUTCHours(),
     minute: date.getUTCMinutes(),
     dayOfWeek: date.getUTCDay(),
@@ -33,9 +33,9 @@ jest.mock('../marketHours', () => ({
   })),
 }));
 
-const mockTickFeedConnected = isMassiveTickStreamConnected as jest.MockedFunction<typeof isMassiveTickStreamConnected>;
-const mockGetMarketStatus = getMarketStatus as jest.MockedFunction<typeof getMarketStatus>;
-const mockWarn = logger.warn as jest.MockedFunction<typeof logger.warn>;
+const mockTickFeedConnected = isMassiveTickStreamConnected as vi.MockedFunction<typeof isMassiveTickStreamConnected>;
+const mockGetMarketStatus = getMarketStatus as vi.MockedFunction<typeof getMarketStatus>;
+const mockWarn = logger.warn as vi.MockedFunction<typeof logger.warn>;
 
 function makeSetup(overrides: Partial<Setup> = {}): Setup {
   return {
@@ -72,7 +72,7 @@ function makeSetup(overrides: Partial<Setup> = {}): Setup {
 
 describe('websocket reliability hardening', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     resetTickCache();
     __testables.__resetActiveSetupRegistry();
     mockTickFeedConnected.mockReturnValue(false);

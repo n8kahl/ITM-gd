@@ -1,4 +1,4 @@
-import { cacheGet, cacheSet, cacheDel } from '../config/redis';
+import { cacheGet, cacheSet } from '../config/redis';
 import { logger } from '../lib/logger';
 import { toEasternTime } from '../services/marketHours';
 import type { Setup } from '../services/spx/types';

@@ -1,19 +1,23 @@
-jest.mock('../../../config/massive', () => ({
-  getOptionsContracts: jest.fn(),
-  getOptionsSnapshot: jest.fn(),
-  getOptionsExpirations: jest.fn(),
-  getNearestOptionsExpiration: jest.fn(),
-  getDailyAggregates: jest.fn(),
-  getMinuteAggregates: jest.fn(),
+vi.mock('../../../config/massive', () => ({
+  getOptionsContracts: vi.fn(),
+  getOptionsSnapshot: vi.fn(),
+  getOptionsExpirations: vi.fn(),
+  getNearestOptionsExpiration: vi.fn(),
+  getDailyAggregates: vi.fn(),
+  getMinuteAggregates: vi.fn(),
+  getLastTrade: vi.fn(),
+  getLastQuote: vi.fn(),
 }));
 
-jest.mock('../../../config/redis', () => ({
-  cacheGet: jest.fn(),
-  cacheSet: jest.fn(),
+vi.mock('../../../config/redis', () => ({
+  cacheGet: vi.fn(),
+  cacheSet: vi.fn(),
 }));
 
 import {
   getDailyAggregates,
+  getLastQuote,
+  getLastTrade,
   getMinuteAggregates,
   getNearestOptionsExpiration,
   getOptionsContracts,
@@ -23,18 +27,20 @@ import {
 import { cacheGet, cacheSet } from '../../../config/redis';
 import { fetchExpirationDates, fetchOptionContract, fetchOptionsChain } from '../optionsChainFetcher';
 
-const mockGetDailyAggregates = getDailyAggregates as jest.MockedFunction<typeof getDailyAggregates>;
-const mockGetMinuteAggregates = getMinuteAggregates as jest.MockedFunction<typeof getMinuteAggregates>;
-const mockGetNearestOptionsExpiration = getNearestOptionsExpiration as jest.MockedFunction<typeof getNearestOptionsExpiration>;
-const mockGetOptionsContracts = getOptionsContracts as jest.MockedFunction<typeof getOptionsContracts>;
-const mockGetOptionsExpirations = getOptionsExpirations as jest.MockedFunction<typeof getOptionsExpirations>;
-const mockGetOptionsSnapshot = getOptionsSnapshot as jest.MockedFunction<typeof getOptionsSnapshot>;
-const mockCacheGet = cacheGet as jest.MockedFunction<typeof cacheGet>;
-const mockCacheSet = cacheSet as jest.MockedFunction<typeof cacheSet>;
+const mockGetDailyAggregates = getDailyAggregates as vi.MockedFunction<typeof getDailyAggregates>;
+const mockGetLastQuote = getLastQuote as vi.MockedFunction<typeof getLastQuote>;
+const mockGetLastTrade = getLastTrade as vi.MockedFunction<typeof getLastTrade>;
+const mockGetMinuteAggregates = getMinuteAggregates as vi.MockedFunction<typeof getMinuteAggregates>;
+const mockGetNearestOptionsExpiration = getNearestOptionsExpiration as vi.MockedFunction<typeof getNearestOptionsExpiration>;
+const mockGetOptionsContracts = getOptionsContracts as vi.MockedFunction<typeof getOptionsContracts>;
+const mockGetOptionsExpirations = getOptionsExpirations as vi.MockedFunction<typeof getOptionsExpirations>;
+const mockGetOptionsSnapshot = getOptionsSnapshot as vi.MockedFunction<typeof getOptionsSnapshot>;
+const mockCacheGet = cacheGet as vi.MockedFunction<typeof cacheGet>;
+const mockCacheSet = cacheSet as vi.MockedFunction<typeof cacheSet>;
 
 describe('optionsChainFetcher', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockResolvedValue();
     mockGetDailyAggregates.mockResolvedValue([
@@ -47,6 +53,16 @@ describe('optionsChainFetcher', () => {
         t: Date.parse('2026-02-09T20:00:00.000Z'),
       },
     ] as any);
+    mockGetLastTrade.mockImplementation(async (ticker: string) => {
+      const symbol = String(ticker || '').toUpperCase();
+      const price = symbol.includes('SPX') ? 5900 : 500.1;
+      return { p: price, t: Date.now() } as any;
+    });
+    mockGetLastQuote.mockImplementation(async (ticker: string) => {
+      const symbol = String(ticker || '').toUpperCase();
+      const mid = symbol.includes('SPX') ? 5900 : 500.1;
+      return { p: mid + 0.1, P: mid - 0.1, t: Date.now() } as any;
+    });
     mockGetMinuteAggregates.mockResolvedValue([
       {
         o: 499.5,
@@ -62,7 +78,7 @@ describe('optionsChainFetcher', () => {
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('builds chain when single-contract snapshot payload is object-shaped', async () => {
@@ -147,8 +163,8 @@ describe('optionsChainFetcher', () => {
   });
 
   it('falls back to Black-Scholes greeks when provider greeks are missing but IV exists', async () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-02-10T15:00:00.000Z'));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-10T15:00:00.000Z'));
 
     mockGetOptionsContracts.mockResolvedValue([
       {
@@ -223,8 +239,8 @@ describe('optionsChainFetcher', () => {
   });
 
   it('produces reasonable Black-Scholes ATM delta for SPX calls', async () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-02-25T15:00:00.000Z'));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-25T15:00:00.000Z'));
     mockGetMinuteAggregates.mockResolvedValueOnce([
       {
         o: 5898,
@@ -262,8 +278,8 @@ describe('optionsChainFetcher', () => {
   });
 
   it('keeps ET same-day expiration when UTC has crossed midnight', async () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-02-10T00:30:00.000Z')); // 2026-02-09 19:30 ET
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-10T00:30:00.000Z')); // 2026-02-09 19:30 ET
 
     mockGetOptionsExpirations.mockResolvedValue(['2026-02-09', '2026-02-10']);
 
@@ -278,8 +294,8 @@ describe('optionsChainFetcher', () => {
   });
 
   it('filters stale cached expirations against current ET date', async () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-02-10T14:00:00.000Z'));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-10T14:00:00.000Z'));
 
     mockCacheGet.mockResolvedValueOnce(['2026-02-09', '2026-02-10', '2026-02-14']);
 
