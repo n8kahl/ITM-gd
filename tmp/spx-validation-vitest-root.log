@@ -1,0 +1,489 @@
+ WARN  Unsupported engine: wanted: {"node":">=22.0.0"} (current: {"node":"v20.19.5","pnpm":"10.29.1"})
+
+ RUN  v4.0.18 /Users/natekahl/ITM-gd
+
+ ✓ lib/validation/__tests__/journal-entry.test.ts > journalEntryCreateSchema > normalizes symbol casing for valid payloads 3ms
+ ✓ lib/validation/__tests__/journal-entry.test.ts > journalEntryCreateSchema > rejects invalid symbols 1ms
+ ✓ lib/validation/__tests__/journal-entry.test.ts > journalEntryCreateSchema > rejects more than 20 tags 0ms
+ ✓ lib/validation/__tests__/journal-entry.test.ts > journalEntryCreateSchema > rejects entry prices above configured bounds 0ms
+ ✓ lib/validation/__tests__/journal-entry.test.ts > journalEntryCreateSchema > rejects pnl values below configured bounds 0ms
+ ✓ lib/validation/__tests__/journal-entry.test.ts > journalEntryCreateSchema > rejects oversized setup note payloads 0ms
+ ✓ lib/validation/__tests__/journal-entry.test.ts > importTradeRowSchema > accepts symbol aliases used by broker exports 0ms
+ ✓ lib/validation/__tests__/journal-entry.test.ts > importTradeRowSchema > rejects rows that contain no recognizable symbol field 0ms
+ ✓ lib/ml/__tests__/mtf-confluence-model.test.ts > mtf-confluence-model > falls back to rule-based weights when feature is disabled 1ms
+ ✓ lib/ml/__tests__/mtf-confluence-model.test.ts > mtf-confluence-model > produces normalized ML weights that sum to 1 1ms
+ ✓ lib/ml/__tests__/mtf-confluence-model.test.ts > mtf-confluence-model > runs inference in sub-millisecond average time for shallow model 7ms
+ ✓ lib/ml/__tests__/model-loader.test.ts > loadConfidenceModelWeights > loads confidence model weights from Supabase storage URL 3ms
+ ✓ lib/ml/__tests__/model-loader.test.ts > loadConfidenceModelWeights > returns null when payload is invalid 1ms
+ ✓ lib/ml/__tests__/model-loader.test.ts > loadConfidenceModelWeights > backs off after a failed fetch and avoids immediate refetch loops 1ms
+ ✓ lib/ml/__tests__/model-loader.test.ts > loadConfidenceModelWeights > skips browser-side model fetch unless explicitly enabled 2ms
+ ✓ lib/spx/__tests__/risk-envelope.test.ts > risk envelope > allows entry for healthy actionable setup 2ms
+ ✓ lib/spx/__tests__/risk-envelope.test.ts > risk envelope > blocks entry when feed trust is blocked 0ms
+ ✓ lib/spx/__tests__/risk-envelope.test.ts > risk envelope > blocks entry on low alignment and low confidence 0ms
+ ✓ lib/ml/__tests__/feature-extractor.test.ts > extractFeatures > extracts all 25+ features from setup and context 23ms
+ ✓ lib/ml/__tests__/feature-extractor.test.ts > extractFeatures > handles missing data with stable numeric defaults 1ms
+ ✓ lib/__tests__/error-handler.test.ts > createAppErrorFromResponse > categorizes 429 responses and preserves retry-after 21ms
+ ✓ lib/__tests__/error-handler.test.ts > createAppErrorFromResponse > categorizes 500 responses as server errors 1ms
+ ✓ lib/__tests__/error-handler.test.ts > createAppErrorFromResponse > categorizes 400 responses as validation errors 0ms
+ ✓ lib/__tests__/error-handler.test.ts > createAppErrorFromResponse > categorizes 401 responses as permission errors 0ms
+ ✓ lib/__tests__/error-handler.test.ts > createAppError > categorizes network fetch failures 0ms
+ ✓ lib/__tests__/error-handler.test.ts > createAppError > defaults unknown values to unknown category 0ms
+ ✓ lib/__tests__/error-handler.test.ts > createAppError > maps string errors to unknown category 0ms
+ ✓ lib/__tests__/error-handler.test.ts > notifyAppError > emits a toast with retry context for rate limit errors 1ms
+ ✓ lib/__tests__/error-handler.test.ts > withExponentialBackoff > retries and eventually succeeds 2ms
+ ✓ lib/__tests__/error-handler.test.ts > withExponentialBackoff > throws after max retries are exhausted 3ms
+ ✓ lib/__tests__/rate-limit.test.ts > checkRateLimit > uses in-memory limiter when Upstash is not configured 47ms
+ ✓ lib/__tests__/rate-limit.test.ts > checkRateLimit > uses Upstash limiter when configured 2ms
+ ✓ lib/__tests__/rate-limit.test.ts > checkRateLimit > falls back to in-memory limiter when Upstash call fails 3ms
+ ✓ lib/__tests__/rate-limit.test.ts > getClientIp > uses x-forwarded-for when present 18ms
+ ✓ lib/__tests__/rate-limit.test.ts > getClientIp > uses x-real-ip when forwarded header is missing 1ms
+ ✓ lib/__tests__/rate-limit.test.ts > getClientIp > falls back to unknown when no headers are present 1ms
+ ✓ lib/academy-v3/__tests__/no-legacy-runtime-references.test.ts > academy v3 retirement guardrails > does not reference legacy academy tables in runtime source 77ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > uses EWMA flow weights where recent events carry more influence 2ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > keeps the same sign as flat averaging when flow is strongly directional 0ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > converges mixed flow toward zero faster than flat averaging 0ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > scores regime compatibility across aligned, adjacent, mild, and strong conflicts 0ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > produces stronger alignment/confidence for aligned bullish signals 24ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > degrades confidence when signals conflict 1ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > scales regime conflict penalties across aligned, mild, and strong conflict levels 1ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > keeps bearish fade confidence below 45% in a trending counter-regime 2ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > enriches setup with deterministic decision fields 3ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > falls back to rule-based confidence when ML model is unavailable 0ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > uses ML confidence when model is available and user is enabled 2ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > respects ML override when disabled for a user 1ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > uses ML tier prediction when enabled 1ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > uses ML confluence weighting when enabled 5ms
+ ✓ lib/spx/__tests__/decision-engine.test.ts > decision engine > uses rule-based tier fallback when ML tiering is disabled 1ms
+ ✓ lib/social/__tests__/trade-card-generator.test.ts > trade-card-generator > renders landscape card 48ms
+ ✓ lib/social/__tests__/trade-card-generator.test.ts > trade-card-generator > renders square card 77ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > academyV3ErrorResponse > returns JSON response with correct status and error envelope 16ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > academyV3ErrorResponse > includes details when provided 0ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > academyV3ErrorResponse > returns 401 for unauthorized 0ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > academyV3ErrorResponse > returns 500 for internal errors 0ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > logAcademyError > outputs structured JSON with required fields 6ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > logAcademyError > handles non-Error objects gracefully 0ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > logAcademyError > includes metadata when provided 1ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > parseBodySafe > exports MAX_BODY_SIZE as 100KB 0ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > parseBodySafe > returns null for oversized payloads 1ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > parseBodySafe > parses valid JSON body 0ms
+ ✓ lib/academy-v3/__tests__/shared-utils.test.ts > parseBodySafe > returns null for invalid JSON 1ms
+ ✓ lib/social/__tests__/trade-card-generator.test.ts > trade-card-generator > renders story card 145ms
+ ✓ lib/validation/__tests__/social.test.ts > memberProfileUpdateSchema > accepts valid nested updates 2ms
+ ✓ lib/validation/__tests__/social.test.ts > memberProfileUpdateSchema > rejects invalid profile visibility 0ms
+ ✓ lib/validation/__tests__/social.test.ts > memberProfileUpdateSchema > rejects empty payload 0ms
+ ✓ lib/validation/__tests__/social.test.ts > memberProfileUpdateSchema > rejects too many preferred symbols 0ms
+ ✓ lib/validation/__tests__/social.test.ts > createFeedItemSchema > accepts a valid feed item payload 0ms
+ ✓ lib/validation/__tests__/social.test.ts > createFeedItemSchema > rejects unsupported feed item type 0ms
+ ✓ lib/validation/__tests__/social.test.ts > feedQuerySchema > applies expected defaults 0ms
+ ✓ lib/validation/__tests__/social.test.ts > feedQuerySchema > accepts top_pnl sort 0ms
+ ✓ lib/validation/__tests__/social.test.ts > feedQuerySchema > rejects invalid cursor 0ms
+ ✓ lib/validation/__tests__/social.test.ts > leaderboardQuerySchema > accepts valid leaderboard query 0ms
+ ✓ lib/validation/__tests__/social.test.ts > shareTradeCardSchema > validates share payload and defaults discord flag 0ms
+ ✓ lib/validation/__tests__/social.test.ts > shareTradeCardSchema > rejects unsupported template 0ms
+ ✓ lib/validation/__tests__/social.test.ts > shareTradeCardSchema > accepts square and story formats 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildProbabilityConeGeometry > builds deterministic cone geometry from prediction windows 2ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildProbabilityConeGeometry > builds fallback cone when prediction windows are missing 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildProbabilityConeGeometry > uses time anchoring when chart exposes forward time coordinates 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildProbabilityConeGeometry > returns null when dimensions are invalid 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > extractSpatialCoachAnchors > extracts newest anchorable messages near live price, skipping dismissed entries 1ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > extractSpatialCoachAnchors > uses semantic fallback anchor when message does not include explicit price 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildTopographicLadderEntries > prioritizes closer and stronger levels while respecting cap 1ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > resolveVisibleChartLevels > deduplicates semantically equivalent labels and enforces budget/collision filters 1ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildGammaTopographyEntries > selects strongest nearby strikes and tags polarity 1ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildGammaVacuumZones > detects low-gamma gaps as vacuum zones near current price 3ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildSetupLockGeometry > returns entry/risk/target bands and clamped confluence rings 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildSetupLockGeometry > handles bearish setups and returns null on empty input 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > resolveSetupLockState > maps trade mode and setup status to lock states 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildRiskRewardShadowGeometry > computes rr geometry from setup structure 1ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildRiskRewardShadowGeometry > uses contract risk/reward when provided 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > buildRiskRewardShadowGeometry > returns null for invalid setup 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > time-anchor helpers > parses iso timestamps to unix seconds 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > time-anchor helpers > resolves time anchor x and falls back when out of range 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > time-anchor helpers > snaps to nearby time coordinates when exact timestamp is unavailable 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > ghost lifecycle evolution > advances entering -> active -> fading -> removed 0ms
+ ✓ lib/spx/__tests__/spatial-hud.test.ts > spatial-hud helpers > ghost lifecycle evolution > re-activates fading node when it reappears 0ms
+ ✓ lib/spx/__tests__/feed-health.test.ts > feed health > prioritizes degraded state over stale conditions 1ms
+ ✓ lib/spx/__tests__/feed-health.test.ts > feed health > marks stale when sequence gaps are detected 0ms
+ ✓ lib/spx/__tests__/feed-health.test.ts > feed health > stays healthy on fresh tick source with no trust warnings 0ms
+ ✓ lib/spx/__tests__/feed-health.test.ts > feed health > marks stale poll fallback with explicit reason code 0ms
+ ✓ lib/spx/__tests__/feed-health.test.ts > feed health > marks stale when snapshot fallback exceeds max age 0ms
+ ✓ lib/spx/__tests__/feed-health.test.ts > feed health > only blocks trade-entry for high-risk trust reasons 0ms
+ ✓ lib/journal/__tests__/context-builder.test.ts > buildRegimeTags > classifies VIX buckets correctly 2ms
+ ✓ lib/journal/__tests__/context-builder.test.ts > buildRegimeTags > classifies trend state from regime and direction 0ms
+ ✓ lib/journal/__tests__/context-builder.test.ts > buildRegimeTags > classifies GEX regime 0ms
+ ✓ lib/journal/__tests__/context-builder.test.ts > buildRegimeTags > assigns regime confidence 0ms
+ ✓ lib/journal/__tests__/context-builder.test.ts > buildMarketContext > returns a complete context object 2ms
+ ✓ lib/journal/__tests__/context-builder.test.ts > buildMarketContext > includes correct entry context values 0ms
+ ✓ lib/journal/__tests__/context-builder.test.ts > buildMarketContext > uses exit snapshot when provided 0ms
+ ✓ lib/journal/__tests__/context-builder.test.ts > buildMarketContext > handles missing optional fields gracefully 0ms
+ ✓ lib/academy-v3/__tests__/access-control.test.ts > academy-v3 access control > allows access when cached Discord profile contains a members-allowed role 2ms
+ ✓ lib/academy-v3/__tests__/access-control.test.ts > academy-v3 access control > rejects access when user has no members-allowed Discord roles 1ms
+ ✓ lib/academy-v3/__tests__/access-control.test.ts > academy-v3 access control > creates enrollment when missing 5ms
+ ✓ lib/academy-v3/__tests__/access-control.test.ts > academy-v3 access control > reactivates enrollment when status is not active/completed 1ms
+ ✓ lib/academy-v3/__tests__/access-control.test.ts > academy-v3 access control > enforces module-required Discord role from metadata 0ms
+ ✓ lib/spx/__tests__/coach-context.test.ts > coach context helpers > summarizes directional flow alignment 2ms
+ ✓ lib/spx/__tests__/coach-context.test.ts > coach context helpers > detects divergence threshold correctly 0ms
+ ✓ lib/spx/__tests__/coach-context.test.ts > coach context helpers > computes directional distance to stop 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > design system compliance > academy components do not use hardcoded bg-[#111318] 4ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > design system compliance > no forbidden gold color #D4AF37 in academy files 2ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > design system compliance > academy shell uses glass-card-heavy 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > design system compliance > academy sub-nav composes the shared FeatureSubNav 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary exists: app/members/academy/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary is a client component: app/members/academy/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary has reset function: app/members/academy/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary uses glass-card-heavy: app/members/academy/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary exists: app/members/academy/modules/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary is a client component: app/members/academy/modules/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary has reset function: app/members/academy/modules/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary uses glass-card-heavy: app/members/academy/modules/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary exists: app/members/academy/modules/[slug]/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary is a client component: app/members/academy/modules/[slug]/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary has reset function: app/members/academy/modules/[slug]/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary uses glass-card-heavy: app/members/academy/modules/[slug]/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary exists: app/members/academy/lessons/[id]/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary is a client component: app/members/academy/lessons/[id]/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary has reset function: app/members/academy/lessons/[id]/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary uses glass-card-heavy: app/members/academy/lessons/[id]/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary exists: app/members/academy/review/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary is a client component: app/members/academy/review/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary has reset function: app/members/academy/review/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary uses glass-card-heavy: app/members/academy/review/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary exists: app/members/academy/progress/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary is a client component: app/members/academy/progress/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary has reset function: app/members/academy/progress/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > error boundary coverage > error boundary uses glass-card-heavy: app/members/academy/progress/error.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state exists: app/members/academy/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state uses Skeleton component: app/members/academy/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state is a client component: app/members/academy/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state exists: app/members/academy/modules/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state uses Skeleton component: app/members/academy/modules/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state is a client component: app/members/academy/modules/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state exists: app/members/academy/modules/[slug]/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state uses Skeleton component: app/members/academy/modules/[slug]/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state is a client component: app/members/academy/modules/[slug]/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state exists: app/members/academy/lessons/[id]/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state uses Skeleton component: app/members/academy/lessons/[id]/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state is a client component: app/members/academy/lessons/[id]/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state exists: app/members/academy/review/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state uses Skeleton component: app/members/academy/review/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state is a client component: app/members/academy/review/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state exists: app/members/academy/progress/loading.tsx 2ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state uses Skeleton component: app/members/academy/progress/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > loading state coverage > loading state is a client component: app/members/academy/progress/loading.tsx 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > component quality checks > interactive academy components are client components 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > component quality checks > lesson block renderer uses AcademyMarkdown rendering 0ms
+ ✓ lib/academy-v3/__tests__/frontend-contracts.test.ts > component quality checks > dashboard and progress components use Analytics tracking 0ms
+ ✓ lib/academy-v3/__tests__/api-routes.test.ts > academy-v3 api route contracts > returns unauthorized envelope for plan route without auth 7ms
+ ✓ lib/academy-v3/__tests__/api-routes.test.ts > academy-v3 api route contracts > returns typed plan payload when authenticated 6ms
+ ✓ lib/academy-v3/__tests__/api-routes.test.ts > academy-v3 api route contracts > returns module not found envelope 3ms
+ ✓ lib/academy-v3/__tests__/api-routes.test.ts > academy-v3 api route contracts > validates lesson id params 3ms
+ ✓ lib/academy-v3/__tests__/api-routes.test.ts > academy-v3 api route contracts > starts lesson with valid payload 3ms
+ ✓ lib/academy-v3/__tests__/api-routes.test.ts > academy-v3 api route contracts > returns block not found when completing invalid block 3ms
+ ✓ lib/academy-v3/__tests__/api-routes.test.ts > academy-v3 api route contracts > submits assessment and returns remediation ids 4ms
+ ✓ lib/academy-v3/__tests__/api-routes.test.ts > academy-v3 api route contracts > gets and submits review queue items 2ms
+ ✓ lib/academy-v3/__tests__/api-routes.test.ts > academy-v3 api route contracts > returns mastery and recommendation payloads 2ms
+ ✓ lib/admin/__tests__/tabs-route.test.ts > PUT /api/admin/tabs > deletes removed tabs, upserts incoming tabs, and revalidates config paths 12ms
+ ✓ lib/admin/__tests__/tabs-route.test.ts > PUT /api/admin/tabs > rejects duplicate tab IDs before database writes 1ms
+ ✓ lib/spx/__tests__/confluenceScore.test.ts > calculateConfluence > scores all signal layers 3ms
+ ✓ lib/spx/__tests__/confluenceScore.test.ts > calculateConfluence > does not score weak zone quality 1ms
+ ✓ lib/spx/__tests__/confluenceScore.test.ts > memory edge confluence bonus > scales to 0.2 at winRate=0.60 with sufficient tests and regime alignment 0ms
+ ✓ lib/spx/__tests__/confluenceScore.test.ts > memory edge confluence bonus > scales to 0.5 at winRate=0.75 with sufficient tests and regime alignment 0ms
+ ✓ lib/spx/__tests__/confluenceScore.test.ts > memory edge confluence bonus > returns 0 when winRate is below 0.55 0ms
+ ✓ lib/spx/__tests__/confluenceScore.test.ts > memory edge confluence bonus > returns 0 when sample size is below 5 0ms
+ ✓ lib/spx/__tests__/confluenceScore.test.ts > memory edge confluence bonus > returns 0 when regime compatibility is below 0.65 0ms
+ ✓ lib/spx/__tests__/time-decay-geometry.test.ts > Time-Decay Geometry (S6) > assigns opening bucket for 0-90 minutes 1ms
+ ✓ lib/spx/__tests__/time-decay-geometry.test.ts > Time-Decay Geometry (S6) > assigns midday bucket for 91-240 minutes 0ms
+ ✓ lib/spx/__tests__/time-decay-geometry.test.ts > Time-Decay Geometry (S6) > assigns late bucket for 241-330 minutes 0ms
+ ✓ lib/spx/__tests__/time-decay-geometry.test.ts > Time-Decay Geometry (S6) > assigns final bucket for 331+ minutes 0ms
+ ✓ lib/spx/__tests__/time-decay-geometry.test.ts > Time-Decay Geometry (S6) > opening bucket widens T2 targets by 15% 0ms
+ ✓ lib/spx/__tests__/time-decay-geometry.test.ts > Time-Decay Geometry (S6) > late bucket compresses T2 targets by 20% 0ms
+ ✓ lib/spx/__tests__/time-decay-geometry.test.ts > Time-Decay Geometry (S6) > final bucket uses T1-only (target2Scale = 0) 0ms
+ ✓ lib/spx/__tests__/time-decay-geometry.test.ts > Time-Decay Geometry (S6) > adaptive partial scaling differs by regime 0ms
+ ✓ lib/spx/__tests__/time-decay-geometry.test.ts > Time-Decay Geometry (S6) > runner stop moves to entry + 0.15R (not flat breakeven) 0ms
+ ✓ lib/spx/__tests__/flags.test.ts > SPX UX flags > uses the rollout baseline defaults 1ms
+ ✓ lib/spx/__tests__/flags.test.ts > SPX UX flags > allows explicit runtime overrides 0ms
+ ✓ lib/spx/__tests__/flags.test.ts > SPX UX flags > returns enabled flag keys only 1ms
+ ✓ lib/spx/__tests__/flags.test.ts > SPX UX flags > has lifecycle metadata for every flag 0ms
+ ✓ lib/academy-v3/__tests__/consolidation-integrity.test.ts > academy consolidation integrity > does not reference legacy academy progress tables in consolidated runtime paths 1ms
+ ✓ lib/academy-v3/__tests__/consolidation-integrity.test.ts > academy consolidation integrity > counts completed lesson attempts using passed status in v3 analytics 0ms
+ ✓ lib/ml/__tests__/iv-forecast-model.test.ts > iv forecast model > predicts upward IV when momentum and flow are supportive 3ms
+ ✓ lib/ml/__tests__/iv-forecast-model.test.ts > iv forecast model > predicts downward IV when mean reversion pressure dominates 0ms
+ ✓ lib/ml/__tests__/iv-forecast-model.test.ts > iv forecast model > returns unknown prediction when current IV is unavailable 0ms
+ ✓ lib/ml/__tests__/iv-forecast-model.test.ts > iv forecast model > falls back when model dimensions are invalid 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Positive GEX environment > tightens stops by ~12.5% 1ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Positive GEX environment > produces 10-15% tighter stops 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Positive GEX environment > applies same tightening to all strategy types 1ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Negative GEX environment > widens stops for mean_reversion 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Negative GEX environment > widens stops for fade_at_wall 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Negative GEX environment > widens stops less for trend strategies 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Negative GEX environment > produces 10-15% wider stops 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Neutral GEX > returns 1.0 (no adjustment) 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Edge cases > handles NaN GEX 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Edge cases > handles Infinity GEX 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Stop price verification > positive GEX produces tighter stop in geometry output 0ms
+ ✓ lib/spx/__tests__/gex-adaptive-stops.test.ts > GEX-Adaptive Stops (S10) > Stop price verification > negative GEX produces wider stop in geometry output 0ms
+ ✓ lib/spx/__tests__/flow-telemetry.test.ts > flow telemetry snapshot > computes one-minute and five-minute stats from raw events 2ms
+ ✓ lib/spx/__tests__/flow-telemetry.test.ts > flow telemetry snapshot > prefers 5m aggregation window when provided 0ms
+ ✓ lib/spx/__tests__/flow-telemetry.test.ts > flow telemetry snapshot > marks flow stale when latest event is older than threshold 0ms
+ ✓ lib/spx/__tests__/flow-telemetry.test.ts > flow telemetry snapshot > handles empty payloads safely 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getCalendarContext > returns context with correct structure 2ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getCalendarContext > detects FOMC announcement dates 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getCalendarContext > detects FOMC meeting dates 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getCalendarContext > detects OPEX Friday correctly 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getCalendarContext > returns no events for normal days 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getCalendarContext > restricts strategies on FOMC announcement 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getCalendarContext > restricts strategies on OPEX Friday 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > shouldBlockStrategies > blocks strategies on FOMC announcement before 2:30 PM 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > shouldBlockStrategies > allows strategies on FOMC announcement after 2:30 PM 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > shouldBlockStrategies > does not block on normal days 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > isSetupTypeAllowed > blocks all strategies on FOMC pre-announcement 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > isSetupTypeAllowed > allows strategies on FOMC post-announcement 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > isSetupTypeAllowed > only allows fade_at_wall and mean_reversion on OPEX Friday 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getGEXAdaptiveStopMultiplier > tightens stops for positive GEX 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getGEXAdaptiveStopMultiplier > widens stops for negative GEX + mean reversion 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getGEXAdaptiveStopMultiplier > widens stops for negative GEX + other strategies 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getGEXAdaptiveStopMultiplier > returns 1.0 for zero GEX 0ms
+ ✓ lib/spx/__tests__/day-of-week-filter.test.ts > calendarService > getGEXAdaptiveStopMultiplier > returns 1.0 for non-finite GEX 0ms
+ ✓ lib/social/__tests__/membership.test.ts > social membership metadata > parses role_tier_mapping from JSON string settings 1ms
+ ✓ lib/social/__tests__/membership.test.ts > social membership metadata > resolves role titles from guild catalog first, then permission mappings as fallback 1ms
+ ✓ lib/social/__tests__/membership.test.ts > social membership metadata > defaults membership tier to core when mapped roles are absent 0ms
+ ✓ lib/__tests__/discord-permission-sync.test.ts > recomputeUsersForRoleIds > sets is_member=false for non-membership roles even when admin permission is granted 4ms
+ ✓ lib/__tests__/discord-permission-sync.test.ts > recomputeUsersForRoleIds > sets is_member=true when user has privileged members role even with zero permissions 2ms
+ ✓ lib/spx/__tests__/market-data-orchestrator.test.ts > market data orchestrator > detects channel sequence gaps 1ms
+ ✓ lib/spx/__tests__/market-data-orchestrator.test.ts > market data orchestrator > marks heartbeat stale when event cadence halts 0ms
+ ✓ lib/spx/__tests__/market-data-orchestrator.test.ts > market data orchestrator > clears sequence gap state on demand 0ms
+ ✓ lib/spx/__tests__/market-data-orchestrator.test.ts > market data orchestrator > sequence gap helper handles tolerance and null edge cases 0ms
+ ✓ lib/spx/__tests__/contractSelector.test.ts > recommendContract > selects best matching contract and computes R:R 1ms
+ ✓ components/academy/__tests__/academy-media.test.ts > getBlockMarkdown > returns markdown when present 1ms
+ ✓ components/academy/__tests__/academy-media.test.ts > getBlockMarkdown > returns plain content text when content is markdown text 1ms
+ ✓ components/academy/__tests__/academy-media.test.ts > getBlockMarkdown > converts stringified JSON with component_id to readable markdown 1ms
+ ✓ components/academy/__tests__/academy-media.test.ts > getBlockMarkdown > converts stringified JSON chart payload to readable markdown 0ms
+ ✓ components/academy/__tests__/academy-media.test.ts > getBlockMarkdown > converts object content payload to readable markdown 1ms
+ ✓ components/academy/__tests__/academy-media.test.ts > getBlockMarkdown > normalizes scenario drill copy into readable markdown sections 2ms
+ ✓ components/academy/__tests__/academy-media.test.ts > academy media URL resolution > falls back to inferred local image for unsafe external module media 0ms
+ ✓ components/academy/__tests__/academy-media.test.ts > academy media URL resolution > accepts supabase-hosted lesson media URLs 0ms
+ ✓ components/ai-coach/__tests__/chart-realtime.test.ts > chart-realtime > updates the active bar for same timeframe bucket 4ms
+ ✓ components/ai-coach/__tests__/chart-realtime.test.ts > chart-realtime > appends a new bar when tick is in a new bucket 1ms
+ ✓ components/ai-coach/__tests__/chart-realtime.test.ts > chart-realtime > applies slightly out-of-order ticks when the bucket still exists 0ms
+ ✓ components/ai-coach/__tests__/chart-realtime.test.ts > chart-realtime > updates the latest daily bar in place 0ms
+ ✓ components/ai-coach/__tests__/chart-realtime.test.ts > chart-realtime > falls back to current time when timestamp is invalid 1ms
+ ✓ components/ai-coach/__tests__/chart-realtime.test.ts > chart-realtime > merges realtime microbars into the active 1m candle 0ms
+ ✓ components/ai-coach/__tests__/chart-realtime.test.ts > chart-realtime > appends a new 1m candle when microbar enters next bucket 0ms
+ ✓ lib/journal/__tests__/number-parsing.test.ts > parseNumericInput > parses parenthesized negatives used in broker exports 3ms
+ ✓ lib/journal/__tests__/number-parsing.test.ts > parseNumericInput > parses decimal-comma formats 0ms
+ ✓ lib/journal/__tests__/number-parsing.test.ts > parseNumericInput > parses percentage-style values by stripping percent symbols 1ms
+ ✓ lib/journal/__tests__/number-parsing.test.ts > parseNumericInput > rejects invalid numeric text 0ms
+ ✓ lib/journal/__tests__/import-normalization.test.ts > normalizeImportedRow > uses Instrument fallback for symbol discovery 4ms
+ ✓ lib/journal/__tests__/import-normalization.test.ts > normalizeImportedRow > infers short direction from negative quantity when side is missing 0ms
+ ✓ lib/journal/__tests__/import-normalization.test.ts > normalizeImportedRow > does not treat option contract type alone as short direction 0ms
+ ✓ lib/__tests__/discord-user-sync.test.ts > discord-user-sync helpers > resolves discord user id from direct user metadata first 1ms
+ ✓ lib/__tests__/discord-user-sync.test.ts > discord-user-sync helpers > falls back to identities when user metadata does not include discord id 0ms
+ ✓ lib/__tests__/discord-user-sync.test.ts > discord-user-sync helpers > merges app metadata with synced discord claims 2ms
+ ✓ lib/__tests__/discord-user-sync.test.ts > discord-user-sync helpers > merges user metadata with discord identity fields 0ms
+ ✓ lib/__tests__/discord-user-sync.test.ts > discord-user-sync helpers > returns null avatar url when user id or avatar hash is missing 0ms
+ ✓ lib/spx/__tests__/setup-stream-state.test.ts > setup-stream-state > uses statusUpdatedAt as primary lifecycle recency anchor 4ms
+ ✓ lib/spx/__tests__/setup-stream-state.test.ts > setup-stream-state > keeps triggered setup during short out-of-order downgrade packets 1ms
+ ✓ lib/spx/__tests__/setup-stream-state.test.ts > setup-stream-state > accepts downgrade when incoming status update is beyond grace window 2ms
+ ✓ lib/spx/__tests__/setup-stream-state.test.ts > setup-stream-state > prunes missing setups after short retention budget 1ms
+ ✓ lib/spx/__tests__/setup-stream-state.test.ts > setup-stream-state > retains recently missing setup within retention budget 0ms
+ ✓ lib/spx/__tests__/coach-alert-state-v2.test.ts > coach-alert-state-v2 > loads empty state when no storage exists 2ms
+ ✓ lib/spx/__tests__/coach-alert-state-v2.test.ts > coach-alert-state-v2 > marks alerts as seen 2ms
+ ✓ lib/spx/__tests__/coach-alert-state-v2.test.ts > coach-alert-state-v2 > snoozes and mutes alerts with future expiry 1ms
+ ✓ lib/spx/__tests__/coach-alert-state-v2.test.ts > coach-alert-state-v2 > finds highest severity visible alert and skips seen routine alerts 1ms
+ ✓ lib/spx/__tests__/scenario-lanes.test.ts > scenario lanes > returns base, adverse, and acceleration lanes for bullish setup 2ms
+ ✓ lib/spx/__tests__/scenario-lanes.test.ts > scenario lanes > returns directional lanes for bearish setup 0ms
+ ✓ lib/__tests__/sanitize.test.ts > sanitizeContent > removes script tags and event handlers 1ms
+ ✓ lib/__tests__/sanitize.test.ts > sanitizeContent > removes javascript protocol payloads 0ms
+ ✓ lib/__tests__/sanitize.test.ts > sanitizeUUID > accepts valid uuid values 1ms
+ ✓ lib/__tests__/sanitize.test.ts > sanitizeUUID > rejects invalid uuid values 1ms
+ ✓ lib/__tests__/sanitize.test.ts > sanitizeSymbol > normalizes valid symbols 3ms
+ ✓ lib/__tests__/sanitize.test.ts > sanitizeSymbol > rejects symbols with invalid characters 0ms
+ ✓ lib/spx/__tests__/overlay-priority.test.ts > overlay priority policy > keeps full overlays in normal decision tier 2ms
+ ✓ lib/spx/__tests__/overlay-priority.test.ts > overlay priority policy > suppresses ghost cards and tightens label budget in tight tier 0ms
+ ✓ lib/spx/__tests__/overlay-priority.test.ts > overlay priority policy > prioritizes risk clarity in critical tier 0ms
+ ✓ lib/spx/__tests__/overlay-priority.test.ts > overlay priority policy > keeps coach while dropping cone in critical decision tier 0ms
+ ✓ lib/spx/__tests__/overlay-priority.test.ts > overlay priority policy > keeps cone available in non-critical risk mode when enabled 0ms
+ ✓ lib/spx/__tests__/replay-engine.test.ts > replay engine > produces deterministic checksum for the same journal 3ms
+ ✓ lib/spx/__tests__/replay-engine.test.ts > replay engine > builds bounded replay windows and stable frames 1ms
+ ✓ lib/spx/__tests__/replay-engine.test.ts > replay engine > caps completion at the final cursor 1ms
+ ✓ lib/spx/__tests__/replay-engine.test.ts > replay engine > computes playback intervals from speed multipliers 0ms
+ ✓ lib/journal/__tests__/bias-detector.test.ts > analyzeBiases > returns empty signals for insufficient data 1ms
+ ✓ lib/journal/__tests__/bias-detector.test.ts > analyzeBiases > returns empty signals for few trades 4ms
+ ✓ lib/journal/__tests__/bias-detector.test.ts > analyzeBiases > detects loss aversion when losers held significantly longer 1ms
+ ✓ lib/journal/__tests__/bias-detector.test.ts > analyzeBiases > does not detect loss aversion when hold times are similar 0ms
+ ✓ lib/journal/__tests__/bias-detector.test.ts > analyzeBiases > detects revenge trading with rapid post-loss entries 0ms
+ ✓ lib/journal/__tests__/bias-detector.test.ts > analyzeBiases > detects anchoring when entries cluster near round numbers 0ms
+ ✓ lib/journal/__tests__/bias-detector.test.ts > analyzeBiases > returns signals sorted by confidence 0ms
+ ✓ lib/spx/__tests__/orb-gate-relaxation.test.ts > ORB gate restoration (A6) > restores confluence and alignment thresholds and EMA requirement 1ms
+ ✓ lib/spx/__tests__/orb-gate-relaxation.test.ts > ORB gate restoration (A6) > rejects ORB with confluence below 3.5 0ms
+ ✓ lib/spx/__tests__/orb-gate-relaxation.test.ts > ORB gate restoration (A6) > rejects ORB with alignment below 52% 0ms
+ ✓ lib/spx/__tests__/orb-gate-relaxation.test.ts > ORB gate restoration (A6) > rejects ORB first seen after minute 120 0ms
+ ✓ lib/spx/__tests__/orb-gate-relaxation.test.ts > ORB gate restoration (A6) > accepts ORB without EMA alignment during the 30-minute grace window 0ms
+ ✓ lib/academy-v3/services/__tests__/assessment-scoring.test.ts > academy-v3 assessment scoring > scores mixed item types and competency aggregates 2ms
+ ✓ lib/academy-v3/services/__tests__/assessment-scoring.test.ts > academy-v3 assessment scoring > requires exact set matching for multi select 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > promotes setup from forming to ready at confluence >= 3 1ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > marks setup triggered when price enters entry zone 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > marks setup triggered when bar is confirmed and latest bar close enters entry zone 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > keeps setup ready when bar is not confirmed even if price is in entry zone 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > preserves legacy behavior when barConfirmed is undefined 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > keeps setup ready when latest bar close is outside entry zone even if current price is inside 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > triggers at entry zone boundary when bar close is 5902 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > triggers at entry zone boundary when bar close is 5905 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'trending' 'forming' 3ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'trending' 'ready' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'trending' 'triggered' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'breakout' 'forming' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'breakout' 'ready' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'breakout' 'triggered' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'compression' 'forming' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'compression' 'ready' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'compression' 'triggered' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'ranging' 'forming' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'ranging' 'ready' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > uses regime-aware TTL for 'ranging' 'triggered' 0ms
+ ✓ lib/spx/__tests__/setupLifecycle.test.ts > transitionSetupStatus > keeps legacy 30-minute default TTL when regime is missing 0ms
+ ✓ components/ai-coach/__tests__/chart-level-utils.test.ts > chart-level-utils > maps unsupported chart timeframes to closest fibonacci timeframe 2ms
+ ✓ components/ai-coach/__tests__/chart-level-utils.test.ts > chart-level-utils > maps fibonacci response into chart annotations with emphasized major levels 5ms
+ ✓ components/ai-coach/__tests__/chart-level-utils.test.ts > chart-level-utils > deduplicates levels while preserving order 3ms
+ ✓ lib/academy-v3/__tests__/admin-api-targets.test.ts > academy admin APIs target academy_v3 tables > does not reference legacy academy tables in migrated admin routes 2ms
+ ✓ lib/academy-v3/__tests__/admin-api-targets.test.ts > academy admin APIs target academy_v3 tables > references academy_v3 tables in migrated admin routes 0ms
+ ✓ components/ai-coach/__tests__/chart-level-groups.test.ts > chart-level-groups > classifies key level types into expected groups 2ms
+ ✓ components/ai-coach/__tests__/chart-level-groups.test.ts > chart-level-groups > filters levels by visibility map 0ms
+ ✓ components/ai-coach/__tests__/chart-level-groups.test.ts > chart-level-groups > counts levels by group 1ms
+ ✓ lib/spx/__tests__/coach-explainability.test.ts > coach explainability enrichment > appends drivers/risks/freshness to why lines 13ms
+ ✓ lib/spx/__tests__/coach-explainability.test.ts > coach explainability enrichment > fills missing risk plan defaults from setup context 1ms
+ ✓ lib/spx/__tests__/coach-explainability.test.ts > coach explainability enrichment > returns decision unchanged when setup is unavailable 0ms
+ ✓ lib/academy-v3/__tests__/database-integrity.test.ts > database integrity query validation > content completeness checks > defines correct block type sequence 1ms
+ ✓ lib/academy-v3/__tests__/database-integrity.test.ts > database integrity query validation > content completeness checks > validates content_json structure for rich_text blocks 1ms
+ ✓ lib/academy-v3/__tests__/database-integrity.test.ts > database integrity query validation > content completeness checks > validates content_json structure for scenario blocks 2ms
+ ✓ lib/academy-v3/__tests__/database-integrity.test.ts > database integrity query validation > content completeness checks > validates assessment item formats 0ms
+ ✓ lib/academy-v3/__tests__/database-integrity.test.ts > database integrity query validation > track structure validation > defines correct 4-track progression 0ms
+ ✓ lib/academy-v3/__tests__/database-integrity.test.ts > database integrity query validation > track structure validation > validates competency domain values 0ms
+ ✓ lib/academy-v3/__tests__/database-integrity.test.ts > database integrity query validation > assessment strategy validation > defines correct assessment thresholds 0ms
+ ✓ lib/academy-v3/__tests__/database-integrity.test.ts > database integrity query validation > assessment strategy validation > validates assessment item count ranges 0ms
+ ✓ lib/spx/__tests__/clusterScore.test.ts > buildClusterZones > groups nearby levels and classifies fortress zones 2ms
+ ✓ lib/spx/__tests__/clusterScore.test.ts > buildClusterZones > separates distant levels into different zones 0ms
+ ✓ lib/spx/__tests__/setup-viability.test.ts > setup viability guard > flags bullish pre-trigger setup when price has reached target1 2ms
+ ✓ lib/spx/__tests__/setup-viability.test.ts > setup viability guard > flags bearish pre-trigger setup when price has reached target1 0ms
+ ✓ lib/spx/__tests__/setup-viability.test.ts > setup viability guard > does not flag triggered setups 0ms
+ ✓ lib/spx/__tests__/setup-viability.test.ts > setup viability guard > does not flag when price has not reached target1 0ms
+ ✓ lib/spx/__tests__/setup-viability.test.ts > setup viability guard > does not flag invalid price values 0ms
+ ✓ lib/spx/__tests__/setup-display-policy.test.ts > setup display policy > uses calibrated pWin for compression filter when available 7ms
+ ✓ lib/spx/__tests__/setup-display-policy.test.ts > setup display policy > falls back to raw setup probability when pWinCalibrated is missing 1ms
+ ✓ lib/spx/__tests__/setup-display-policy.test.ts > setup display policy > does not enable compression filter when both calibrated and raw confidence are below threshold 1ms
+ ✓ lib/spx/__tests__/triggered-alert-history.test.ts > triggered alert history > captures ready -> triggered transitions 2ms
+ ✓ lib/spx/__tests__/triggered-alert-history.test.ts > triggered alert history > captures triggered setups on first ingest for replay continuity 0ms
+ ✓ lib/spx/__tests__/triggered-alert-history.test.ts > triggered alert history > dedupes repeated ingests by deterministic id 0ms
+ ✓ lib/spx/__tests__/triggered-alert-history.test.ts > triggered alert history > sanitizes localStorage payloads 0ms
+ ✓ lib/spx/__tests__/triggered-alert-history.test.ts > triggered alert history > backfills legacy localStorage payloads missing confluence/probability 0ms
+ ✓ lib/spx/__tests__/triggered-alert-history.test.ts > triggered alert history > caps retained history at max length 0ms
+ ✓ lib/ml/__tests__/tier-classifier.test.ts > tier-classifier > falls back to rule-based tiering when ML is unavailable 1ms
+ ✓ lib/ml/__tests__/tier-classifier.test.ts > tier-classifier > predicts ML tier when user is enabled 0ms
+ ✓ lib/ml/__tests__/tier-classifier.test.ts > tier-classifier > applies setup-type-specific thresholds (fade_at_wall stricter than trend_continuation) 0ms
+ ✓ lib/ml/__tests__/tier-classifier.test.ts > tier-classifier > maps skip to hidden setup tier 0ms
+ ✓ lib/journal/__tests__/auto-draft.test.ts > buildDraftPayload > builds a valid draft payload with required fields 5ms
+ ✓ lib/journal/__tests__/auto-draft.test.ts > buildDraftPayload > marks as closed when exit price is provided 1ms
+ ✓ lib/journal/__tests__/auto-draft.test.ts > buildDraftPayload > adds auto-source tag 1ms
+ ✓ lib/journal/__tests__/auto-draft.test.ts > buildDraftPayload > adds default auto-detected tag when no source 0ms
+ ✓ lib/journal/__tests__/auto-draft.test.ts > buildDraftPayload > includes setup_type and market_context when provided 0ms
+ ✓ lib/journal/__tests__/auto-draft.test.ts > buildDraftPayload > sets draft expiry to 7 days from now 1ms
+ ✓ components/ai-coach/__tests__/chart-level-labels.test.ts > chart-level-labels helpers > sorts levels by absolute distance from current price 1ms
+ ✓ components/ai-coach/__tests__/chart-level-labels.test.ts > chart-level-labels helpers > builds precise fallback context with points and percent 0ms
+ ✓ components/ai-coach/__tests__/use-panel-attention-pulse.test.ts > resolvePanelAttentionLabel > maps widget and chart events to user-facing labels 1ms
+ ✓ components/ai-coach/__tests__/use-panel-attention-pulse.test.ts > resolvePanelAttentionLabel > returns null for unsupported events 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > computeVWAP > returns null for empty bars 1ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > computeVWAP > computes VWAP from minute bars 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > computeVWAP > returns null for zero volume bars 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > computeVWAP > computes deviation bands correctly 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > evaluateVWAPAlignment > returns no filter when VWAP is null 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > evaluateVWAPAlignment > returns no filter during grace period 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > evaluateVWAPAlignment > aligns bullish with price above VWAP 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > evaluateVWAPAlignment > filters bullish with price below VWAP 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > evaluateVWAPAlignment > filters bearish with price above VWAP 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > evaluateVWAPAlignment > aligns bearish with price below VWAP 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > evaluateVWAPAlignment > adds confluence bonus when near VWAP and aligned 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > evaluateVWAPAlignment > no confluence bonus when far from VWAP 0ms
+ ✓ lib/spx/__tests__/vwap-filter.test.ts > VWAP Service > evaluateVWAPAlignment > returns stale reason for old VWAP data 0ms
+ ✓ lib/spx/__tests__/level-stability.test.ts > level stability > returns top candidates when no prior state exists 3ms
+ ✓ lib/spx/__tests__/level-stability.test.ts > level stability > keeps stable keys when still candidate and avoids churn 1ms
+ ✓ lib/spx/__tests__/level-stability.test.ts > level stability > promotes replacements when prior keys drop out 0ms
+ ✓ lib/spx/__tests__/level-stability.test.ts > level stability > handles equality checks for stable key arrays 0ms
+ ✓ lib/spx/__tests__/fibEngine.test.ts > makeFibLevelsFromRange > computes retracement and extension levels 1ms
+ ✓ lib/spx/__tests__/event-schema.test.ts > event schema > normalizes realtime price events with sequence metadata 1ms
+ ✓ lib/spx/__tests__/event-schema.test.ts > event schema > falls back unknown fields safely 0ms
+ ✓ lib/spx/__tests__/execution-gating.test.ts > execution entry gating > blocks when feed trust is blocked 2ms
+ ✓ lib/spx/__tests__/execution-gating.test.ts > execution entry gating > blocks when broker is disconnected 0ms
+ ✓ lib/spx/__tests__/execution-gating.test.ts > execution entry gating > passes when feed and broker are healthy 0ms
+ ✓ lib/academy-v3/services/__tests__/progression-logic.test.ts > academy-v3 progression logic > extracts completed block ids from metadata 2ms
+ ✓ lib/academy-v3/services/__tests__/progression-logic.test.ts > academy-v3 progression logic > computes bounded progress percent 0ms
+ ✓ lib/academy-v3/services/__tests__/progression-logic.test.ts > academy-v3 progression logic > returns next incomplete block id 0ms
+ ✓ lib/spx/__tests__/alert-suppression.test.ts > alert suppression > suppresses duplicate alerts inside cooldown windows 4ms
+ ✓ lib/spx/__tests__/layout-mode.test.ts > resolveSPXLayoutMode > returns legacy mode when state-machine flag is disabled 1ms
+ ✓ lib/spx/__tests__/layout-mode.test.ts > resolveSPXLayoutMode > returns in_trade when user is in trade focus 0ms
+ ✓ lib/spx/__tests__/layout-mode.test.ts > resolveSPXLayoutMode > returns evaluate when selected setup is actionable 0ms
+ ✓ lib/spx/__tests__/layout-mode.test.ts > resolveSPXLayoutMode > returns scan when selected setup is not actionable or missing 0ms
+ ✓ components/ai-coach/__tests__/widget-action-bar-v2.test.ts > WidgetActionBar quick-tier policy > keeps primary action first 1ms
+ ✓ components/ai-coach/__tests__/widget-action-bar-v2.test.ts > WidgetActionBar quick-tier policy > keeps View Options visible when present 1ms
+ ✓ components/ai-coach/__tests__/widget-action-bar-v2.test.ts > WidgetActionBar quick-tier policy > keeps Set Alert visible when no Analyze action exists 0ms
+ ✓ components/ai-coach/__tests__/widget-action-bar-v2.test.ts > WidgetActionBar quick-tier policy > keeps Analyze visible when present 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > VIX regime classification > classifies VIX < 14 as low 1ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > VIX regime classification > classifies VIX 14-20 as normal 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > VIX regime classification > classifies VIX 20-28 as elevated 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > VIX regime classification > classifies VIX > 28 as high 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Strategy blocking in high VIX > blocks trend_continuation in high VIX 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Strategy blocking in high VIX > blocks orb_breakout in high VIX 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Strategy blocking in high VIX > allows mean_reversion in high VIX 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Strategy blocking in high VIX > allows fade_at_wall in high VIX 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Geometry multipliers by VIX regime > low VIX widens stops 10% 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Geometry multipliers by VIX regime > low VIX widens targets 15% 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Geometry multipliers by VIX regime > elevated VIX widens stops 15% 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Geometry multipliers by VIX regime > elevated VIX tightens T1 10% 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Geometry multipliers by VIX regime > high VIX widens stops 20% 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Geometry multipliers by VIX regime > high VIX tightens targets to 0.85x 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Fail-closed behavior > missing VIX defaults to normal regime 0ms
+ ✓ lib/spx/__tests__/vix-regime-overlay.test.ts > VIX Regime Overlay (S8) > Fail-closed behavior > normal regime has no geometry adjustment 0ms
+ ✓ components/ai-coach/__tests__/use-mobile-tool-sheet.test.ts > resolveMobileSheetFromWidgetEvent > maps chart events to chart sheet payload 1ms
+ ✓ components/ai-coach/__tests__/use-mobile-tool-sheet.test.ts > resolveMobileSheetFromWidgetEvent > preserves full chart request payload for chart events 0ms
+ ✓ components/ai-coach/__tests__/use-mobile-tool-sheet.test.ts > resolveMobileSheetFromWidgetEvent > maps options events to options sheet payload 0ms
+ ✓ components/ai-coach/__tests__/use-mobile-tool-sheet.test.ts > resolveMobileSheetFromWidgetEvent > ignores alert events (chat-only flow) 0ms
+ ✓ components/ai-coach/__tests__/use-mobile-tool-sheet.test.ts > resolveMobileSheetFromWidgetEvent > maps analyze events to chart sheet payload 0ms
+ ✓ components/ai-coach/__tests__/use-mobile-tool-sheet.test.ts > resolveMobileSheetFromWidgetEvent > maps legacy view requests to supported mobile sheets 0ms
+ ✓ lib/__tests__/member-navigation.test.ts > member navigation academy mapping > renames Library tab label to Academy 1ms
+ ✓ lib/__tests__/member-navigation.test.ts > member navigation academy mapping > maps library tab href to academy plan route 0ms
+ ✓ lib/__tests__/member-navigation.test.ts > member navigation academy mapping > marks academy routes active for library tab 0ms
+ ✓ lib/__tests__/member-navigation.test.ts > member navigation academy mapping > normalizes section path and fallback title for academy routes 0ms
+ ↓ lib/journal/__tests__/trade-grading.test.ts > trade-grading rule-based fallback > grades a winning trade
+ ↓ lib/journal/__tests__/trade-grading.test.ts > trade-grading rule-based fallback > grades a losing trade with missing stop loss
+ ↓ lib/journal/__tests__/trade-grading.test.ts > trade-grading rule-based fallback > handles zero MFE edge cases
+ ✓ lib/spx/__tests__/regimeClassifier.test.ts > classifyRegime > classifies breakout when strength and volume surge 1ms
+ ✓ lib/spx/__tests__/regimeClassifier.test.ts > classifyRegime > classifies compression when range tightens and volume fades 0ms
+ ✓ lib/spx/__tests__/basisCalc.test.ts > computeBasisState > calculates SPX/SPY basis and trend 2ms
+ ✓ lib/spx/__tests__/basisCalc.test.ts > computeBasisState > flags SPY leading when basis collapses 0ms
+ ✓ lib/ml/__tests__/confidence-model.test.ts > confidence-model > uses deterministic per-user rollout buckets for A/B gating 1ms
+ ✓ lib/ml/__tests__/confidence-model.test.ts > confidence-model > returns null when model is missing and prediction when model is cached 0ms
+ ✓ lib/spx/__tests__/coach-message-dedupe.test.ts > dedupeCoachMessagesForTimeline > suppresses semantic duplicates inside the dedupe window 1ms
+ ✓ lib/spx/__tests__/coach-message-dedupe.test.ts > dedupeCoachMessagesForTimeline > keeps duplicates when they are outside the dedupe window 0ms
+ ✓ lib/ml/__tests__/flow-anomaly-detector.test.ts > flow anomaly detector > flags known anomalous flow patterns above threshold 1ms
+ ✓ lib/ml/__tests__/flow-anomaly-detector.test.ts > flow anomaly detector > keeps baseline flow below threshold 0ms
+ ✓ lib/ml/__tests__/flow-anomaly-detector.test.ts > flow anomaly detector > falls back when model is malformed 0ms
+ ✓ lib/spx/__tests__/trade-journal-capture.test.ts > trade journal capture > computes bounded adherence scores 1ms
+ ✓ lib/spx/__tests__/trade-journal-capture.test.ts > trade journal capture > creates trade journal artifact with expectancy and risk context 1ms
+ ✓ lib/spx/__tests__/trade-journal-capture.test.ts > trade journal capture > summarizes artifacts into readiness analytics 0ms
+ ✓ lib/social/__tests__/feed-query.test.ts > buildFeedVisibilityFilter > returns visibility filter with owner-private clause 1ms
+ ✓ lib/social/__tests__/feed-query.test.ts > buildFeedVisibilityFilter > strips unexpected characters from user id 0ms
+ ✓ lib/spx/__tests__/coach-decision-policy.test.ts > coach decision policy > normalizes in-trade decision by removing entry action and forcing management verdict 1ms
+ ✓ lib/spx/__tests__/coach-decision-policy.test.ts > coach decision policy > normalizes pre-trade decision by removing exit action 0ms
+ ✓ lib/spx/__tests__/coach-decision-policy.test.ts > coach decision policy > returns original reference when no changes are needed 0ms
+{"level":"info","message":"REDIS_URL not set - running without Redis cache","timestamp":"2026-02-26T04:27:18.675Z"}
+ ✓ lib/spx/__tests__/t1PriceInference.test.ts > T1 Price Inference (S5) > uses geometry-based pricing when setup data is available 1ms
+ ✓ lib/spx/__tests__/t1PriceInference.test.ts > T1 Price Inference (S5) > falls back to 1.35x when no setup geometry available 0ms
+ ✓ lib/spx/__tests__/t1PriceInference.test.ts > T1 Price Inference (S5) > uses expectedPnlAtTarget1 when available 0ms
+ ✓ lib/spx/__tests__/t1PriceInference.test.ts > T1 Price Inference (S5) > produces different prices for different strategy geometries 0ms
+ ✓ lib/spx/__tests__/t1PriceInference.test.ts > T1 Price Inference (S5) > handles zero delta gracefully 0ms
+ ✓ lib/spx/__tests__/t1PriceInference.test.ts > T1 Price Inference (S5) > never returns below minimum price 0ms
+
+ Test Files  81 passed | 1 skipped (82)
+      Tests  475 passed | 3 skipped (478)
+   Start at  22:27:16
+   Duration  2.79s (transform 3.24s, setup 6.89s, import 5.60s, tests 1.05s, environment 8ms)
+
