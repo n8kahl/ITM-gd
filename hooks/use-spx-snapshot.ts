@@ -30,6 +30,14 @@ interface SPXSnapshotRegimeState {
 interface SPXSnapshotResponse {
   degraded?: boolean
   message?: string
+  levelsDataQuality?: {
+    integrity: 'full' | 'degraded'
+    warnings?: string[]
+  } | null
+  dataQuality?: {
+    integrity: 'full' | 'degraded'
+    warnings?: string[]
+  } | null
   levels: SPXLevel[]
   clusters: ClusterZone[]
   fibLevels: FibLevel[]

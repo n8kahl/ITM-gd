@@ -6,6 +6,10 @@ function buildLevelsResponse(): LevelsResponse {
     symbol: 'SPX',
     timestamp: '2026-02-10T18:00:00.000Z',
     currentPrice: 5950,
+    dataQuality: {
+      integrity: 'full',
+      warnings: [],
+    },
     levels: {
       resistance: [
         {
@@ -120,4 +124,3 @@ describe('confluenceDetector', () => {
     expect(formatConfluenceForAI([])).toBe('No significant confluence zones detected.');
   });
 });
-

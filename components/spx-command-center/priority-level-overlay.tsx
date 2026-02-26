@@ -211,13 +211,19 @@ export function PriorityLevelOverlay({
         continue
       }
       if (annotation.price == null) continue
+      const isStop = annotation.type === 'stop'
+      const isTarget2 = annotation.type === 'target2' || /(^|\b)t2\b|target 2/i.test(annotation.label || '')
       overlays.push({
         id: annotation.id,
         price: annotation.price,
         label: annotation.label,
-        color: annotation.type === 'stop' ? 'rgba(251,113,133,0.92)' : 'rgba(245,208,120,0.92)',
+        color: isStop
+          ? 'rgba(239,68,68,0.92)'
+          : isTarget2
+            ? 'rgba(16,185,129,0.62)'
+            : 'rgba(16,185,129,0.92)',
         lineStyle: 'solid',
-        lineWidth: 1.6,
+        lineWidth: isTarget2 ? 1.35 : 1.6,
         axisLabelVisible: true,
         type: annotation.type,
       })

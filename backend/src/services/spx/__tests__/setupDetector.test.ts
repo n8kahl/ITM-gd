@@ -636,6 +636,7 @@ describe('spx/setupDetector', () => {
         tf1m: {
           timeframe: '1m',
           ema21: 101.2,
+          emaReliable: true,
           ema55: 100.9,
           slope21: 0.06,
           latestClose: 101.4,
@@ -647,6 +648,7 @@ describe('spx/setupDetector', () => {
         tf5m: {
           timeframe: '5m',
           ema21: 101.6,
+          emaReliable: true,
           ema55: 100.8,
           slope21: 0.08,
           latestClose: 101.9,
@@ -658,6 +660,7 @@ describe('spx/setupDetector', () => {
         tf15m: {
           timeframe: '15m',
           ema21: 101.4,
+          emaReliable: true,
           ema55: 100.7,
           slope21: 0.05,
           latestClose: 101.6,
@@ -669,6 +672,7 @@ describe('spx/setupDetector', () => {
         tf1h: {
           timeframe: '1h',
           ema21: 102.0,
+          emaReliable: true,
           ema55: 100.6,
           slope21: 0.11,
           latestClose: 102.2,
@@ -701,6 +705,7 @@ describe('spx/setupDetector', () => {
         tf1m: {
           timeframe: '1m',
           ema21: 101.2,
+          emaReliable: true,
           ema55: 100.9,
           slope21: 0.06,
           latestClose: 101.4,
@@ -712,6 +717,7 @@ describe('spx/setupDetector', () => {
         tf5m: {
           timeframe: '5m',
           ema21: 101.6,
+          emaReliable: true,
           ema55: 100.8,
           slope21: 0.08,
           latestClose: 101.9,
@@ -723,6 +729,7 @@ describe('spx/setupDetector', () => {
         tf15m: {
           timeframe: '15m',
           ema21: 101.4,
+          emaReliable: true,
           ema55: 100.7,
           slope21: 0.05,
           latestClose: 101.6,
@@ -734,6 +741,7 @@ describe('spx/setupDetector', () => {
         tf1h: {
           timeframe: '1h',
           ema21: 102.0,
+          emaReliable: true,
           ema55: 100.6,
           slope21: 0.11,
           latestClose: 102.2,

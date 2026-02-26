@@ -20,12 +20,23 @@ function borderClass(status: Setup['status']): string {
   return 'border-white/15 bg-white/[0.02] opacity-60'
 }
 
-function tierLabel(tier: Setup['tier'] | undefined): string | null {
-  if (!tier) return null
-  if (tier === 'sniper_primary') return 'SNIPER A'
-  if (tier === 'sniper_secondary') return 'SNIPER B'
-  if (tier === 'watchlist') return 'WATCHLIST'
-  return null
+function tierIndicator(tier: Setup['tier'] | undefined): { label: 'T1' | 'T2' | 'Hidden'; cls: string } {
+  if (tier === 'sniper_primary') {
+    return {
+      label: 'T1',
+      cls: 'border-emerald-300/35 bg-emerald-500/14 text-emerald-100',
+    }
+  }
+  if (tier === 'sniper_secondary' || tier === 'watchlist') {
+    return {
+      label: 'T2',
+      cls: 'border-amber-300/35 bg-amber-500/14 text-amber-100',
+    }
+  }
+  return {
+    label: 'Hidden',
+    cls: 'border-white/20 bg-white/[0.05] text-white/60',
+  }
 }
 
 function formatCompactNumber(value: number): string {
@@ -87,6 +98,7 @@ export function SetupCard({
   currentPrice,
   selected,
   readOnly = false,
+  levelsDataQualityDegraded = false,
   onSelect,
   onEnterTrade,
   showEnterTradeCta = false,
@@ -95,6 +107,7 @@ export function SetupCard({
   currentPrice: number
   selected: boolean
   readOnly?: boolean
+  levelsDataQualityDegraded?: boolean
   onSelect?: () => void
   onEnterTrade?: () => void
   showEnterTradeCta?: boolean
@@ -126,7 +139,7 @@ export function SetupCard({
   const distToEntry = Number.isFinite(currentPrice) && currentPrice > 0
     ? Math.abs(currentPrice - entryMid)
     : null
-  const tier = tierLabel(setup.tier)
+  const tier = tierIndicator(setup.tier)
   const canEnterTrade = showEnterTradeCta
     && (setup.status === 'ready' || setup.status === 'triggered')
     && !readOnly
@@ -166,11 +179,12 @@ export function SetupCard({
             {setup.type.replace(/_/g, ' ')}
           </span>
           <div className="flex items-center gap-1.5">
-            {tier && (
-              <span className="rounded border border-emerald-300/25 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em] text-emerald-200">
-                {tier}
-              </span>
-            )}
+            <span className={cn(
+              'rounded border px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-[0.08em]',
+              tier.cls,
+            )}>
+              {tier.label}
+            </span>
             {Array.from({ length: 5 }).map((_, idx) => (
               <span
                 key={`${setup.id}-c-${idx}`}
@@ -183,8 +197,18 @@ export function SetupCard({
               />
             ))}
             <span className="ml-1 text-[11px] font-mono text-white/60">{confluenceScoreLabel}</span>
+            {levelsDataQualityDegraded && (
+              <span className="hidden rounded border border-amber-300/35 bg-amber-500/12 px-1.5 py-0.5 text-[8px] font-mono uppercase tracking-[0.08em] text-amber-100 lg:inline-flex">
+                Levels Degraded
+              </span>
+            )}
           </div>
         </div>
+        {levelsDataQualityDegraded && (
+          <p className="mt-1 text-[9px] font-mono uppercase tracking-[0.08em] text-amber-100/80">
+            Confluence confidence reduced while levels data quality is degraded.
+          </p>
+        )}
 
         {/* ── Row 3: Confluence source pills ── */}
         {setup.confluenceSources.length > 0 && (
@@ -327,10 +351,10 @@ export function SetupCard({
             </div>
             {/* Thermometer labels */}
             <div className="mt-1 flex justify-between text-[9px] font-mono">
-              <span className="text-rose-300">{setup.stop.toFixed(0)}</span>
-              <span className="text-emerald-200">{entryMid.toFixed(0)}</span>
-              <span className="text-emerald-300">T1 {setup.target1.price.toFixed(0)}</span>
-              <span className="text-champagne">T2 {setup.target2.price.toFixed(0)}</span>
+              <span className="text-rose-300">{setup.stop.toFixed(2)}</span>
+              <span className="text-emerald-200">{entryMid.toFixed(2)}</span>
+              <span className="text-emerald-300">T1 {setup.target1.price.toFixed(2)}</span>
+              <span className="text-champagne">T2 {setup.target2.price.toFixed(2)}</span>
             </div>
           </div>
         )}

@@ -9,6 +9,7 @@ export type MultiTFTrend = 'up' | 'down' | 'flat';
 export interface MultiTFFrameSnapshot {
   timeframe: '1m' | '5m' | '15m' | '1h';
   ema21: number;
+  emaReliable: boolean;
   ema55: number;
   slope21: number;
   latestClose: number;
@@ -71,13 +72,16 @@ function buildFrameSnapshot(input: {
   bars: MultiTFFrameSnapshot['bars'];
 }): MultiTFFrameSnapshot {
   const closes = input.bars.map((bar) => bar.c);
-  const ema21 = closes.length > 0 ? ema(closes, Math.min(21, closes.length)) : 0;
+  const emaPeriod = 21;
+  const emaReliable = closes.length >= emaPeriod;
+  const ema21 = closes.length > 0 ? ema(closes, Math.min(emaPeriod, closes.length)) : 0;
   const ema55 = closes.length > 0 ? ema(closes, Math.min(55, closes.length)) : 0;
   const priorCloses = closes.slice(0, -1);
-  const ema21Prior = priorCloses.length > 0 ? ema(priorCloses, Math.min(21, priorCloses.length)) : ema21;
+  const ema21Prior = priorCloses.length > 0 ? ema(priorCloses, Math.min(emaPeriod, priorCloses.length)) : ema21;
   const slope21 = ema21 - ema21Prior;
   const latestClose = closes.length > 0 ? closes[closes.length - 1] : 0;
-  const swingBars = input.bars.slice(-12);
+  const swingLookback = input.timeframe === '1h' ? 4 : input.timeframe === '15m' ? 8 : 12;
+  const swingBars = input.bars.slice(-swingLookback);
   const swingHigh = swingBars.length > 0
     ? swingBars.reduce((max, bar) => Math.max(max, bar.h), Number.NEGATIVE_INFINITY)
     : latestClose;
@@ -88,6 +92,7 @@ function buildFrameSnapshot(input: {
   return {
     timeframe: input.timeframe,
     ema21: round(ema21, 4),
+    emaReliable,
     ema55: round(ema55, 4),
     slope21: round(slope21, 4),
     latestClose: round(latestClose, 4),
@@ -106,6 +111,7 @@ function neutralFrame(timeframe: MultiTFFrameSnapshot['timeframe']): MultiTFFram
   return {
     timeframe,
     ema21: 0,
+    emaReliable: false,
     ema55: 0,
     slope21: 0,
     latestClose: 0,
@@ -129,13 +135,22 @@ function neutralContext(asOf: string): SPXMultiTFConfluenceContext {
 
 function isValidContext(value: unknown): value is SPXMultiTFConfluenceContext {
   if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<SPXMultiTFConfluenceContext>;
+  const candidate = value as Partial<SPXMultiTFConfluenceContext> & {
+    tf1m?: Partial<MultiTFFrameSnapshot>;
+    tf5m?: Partial<MultiTFFrameSnapshot>;
+    tf15m?: Partial<MultiTFFrameSnapshot>;
+    tf1h?: Partial<MultiTFFrameSnapshot>;
+  };
   return (
     typeof candidate.asOf === 'string'
     && candidate.tf1m != null
+    && typeof candidate.tf1m.emaReliable === 'boolean'
     && candidate.tf5m != null
+    && typeof candidate.tf5m.emaReliable === 'boolean'
     && candidate.tf15m != null
+    && typeof candidate.tf15m.emaReliable === 'boolean'
     && candidate.tf1h != null
+    && typeof candidate.tf1h.emaReliable === 'boolean'
   );
 }
 
@@ -234,7 +249,10 @@ export function scoreMultiTFConfluence(input: {
   const tf1mMicrostructure = microAligned ? 16 : 6;
 
   const raw = tf1hStructureAligned + tf15mSwingProximity + tf5mMomentumAlignment + tf1mMicrostructure;
-  const composite = round(clamp((raw / 76) * 100), 2);
+  let composite = round(clamp((raw / 76) * 100), 2);
+  if ([context.tf1m, context.tf5m, context.tf15m, context.tf1h].some((frame) => !frame.emaReliable)) {
+    composite = round(composite * 0.6, 2);
+  }
 
   return {
     tf1hStructureAligned,
