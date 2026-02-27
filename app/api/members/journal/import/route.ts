@@ -87,6 +87,31 @@ function calculatePnlPercentage(
   return Math.round(((perUnit / entryPrice) * 100) * 10_000) / 10_000
 }
 
+function getErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null
+  const maybeCode = (error as { code?: unknown }).code
+  return typeof maybeCode === 'string' ? maybeCode : null
+}
+
+function isRecoverableImportHistoryError(error: unknown): boolean {
+  const recoverableCodes = new Set(['42P01', '42501', '42703', 'PGRST204', 'PGRST205'])
+  const code = getErrorCode(error)
+  return code != null && recoverableCodes.has(code)
+}
+
+function isMissingImportIdColumnError(error: unknown): boolean {
+  const code = getErrorCode(error)
+  if (code === '42703' || code === 'PGRST204') return true
+  const message = (
+    error
+    && typeof error === 'object'
+    && typeof (error as { message?: unknown }).message === 'string'
+  )
+    ? (error as { message: string }).message.toLowerCase()
+    : ''
+  return message.includes('import_id')
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -99,12 +124,16 @@ export async function POST(request: NextRequest) {
       return errorResponse('Import limit exceeded (max 500 rows)', 400)
     }
 
-    const { data: importRecord, error: importError } = await supabase
+    const sanitizedFileName = sanitizeString(validated.fileName, 255)
+    let importId: string | null = null
+    let importHistoryMode: 'canonical' | 'legacy' | 'none' = 'none'
+
+    const { data: canonicalHistory, error: canonicalHistoryError } = await supabase
       .from('import_history')
       .insert({
         user_id: user.id,
         broker: validated.broker,
-        file_name: sanitizeString(validated.fileName, 255),
+        file_name: sanitizedFileName,
         row_count: validated.rows.length,
         inserted: 0,
         duplicates: 0,
@@ -113,26 +142,50 @@ export async function POST(request: NextRequest) {
       .select('id')
       .single()
 
-    let importId: string | null = importRecord?.id ?? null
+    if (!canonicalHistoryError && canonicalHistory?.id) {
+      importId = canonicalHistory.id
+      importHistoryMode = 'canonical'
+    } else {
+      const { data: legacyHistory, error: legacyHistoryError } = await supabase
+        .from('import_history')
+        .insert({
+          user_id: user.id,
+          broker_name: validated.broker,
+          file_name: sanitizedFileName,
+          record_count: validated.rows.length,
+          success_count: 0,
+          duplicate_count: 0,
+          error_count: 0,
+          status: 'processing',
+        })
+        .select('id')
+        .single()
 
-    if (importError || !importRecord) {
-      const recoverableImportHistoryCodes = new Set(['42P01', '42501', '42703'])
-      const code = typeof importError?.code === 'string' ? importError.code : null
-      const isRecoverableHistoryFailure = code != null && recoverableImportHistoryCodes.has(code)
+      if (!legacyHistoryError && legacyHistory?.id) {
+        importId = legacyHistory.id
+        importHistoryMode = 'legacy'
+      } else {
+        const isRecoverable = (
+          isRecoverableImportHistoryError(canonicalHistoryError)
+          || isRecoverableImportHistoryError(legacyHistoryError)
+        )
 
-      if (!isRecoverableHistoryFailure) {
-        console.error('Failed to create import history:', importError)
-        return errorResponse('Failed to initialize import history', 500)
+        if (!isRecoverable) {
+          console.error('Failed to create import history:', {
+            canonicalError: canonicalHistoryError,
+            legacyError: legacyHistoryError,
+          })
+          return errorResponse('Failed to initialize import history', 500)
+        }
+
+        console.warn('Import history unavailable, continuing without history tracking', {
+          canonicalError: canonicalHistoryError,
+          legacyError: legacyHistoryError,
+        })
       }
-
-      console.warn('Import history unavailable, continuing without history tracking', {
-        code: importError?.code,
-        message: importError?.message,
-        details: importError?.details,
-        hint: importError?.hint,
-      })
-      importId = null
     }
+
+    const attachImportId = importHistoryMode === 'canonical' && importId != null
 
     let parseErrors = 0
     const rowsToUpsert: Array<Record<string, unknown>> = []
@@ -199,14 +252,14 @@ export async function POST(request: NextRequest) {
         expiration_date: normalized.expirationDate,
         is_open: normalized.exitPrice == null,
         tags: [],
-        import_id: importId,
+        ...(attachImportId ? { import_id: importId } : {}),
       })
 
       rowsToUpsert.push({
         ...base,
         id,
         user_id: user.id,
-        import_id: importId,
+        ...(attachImportId ? { import_id: importId } : {}),
       })
     }
 
@@ -214,13 +267,26 @@ export async function POST(request: NextRequest) {
     let duplicates = 0
 
     if (rowsToUpsert.length > 0) {
-      const { data: upserted, error: upsertError } = await supabase
+      let { data: upserted, error: upsertError } = await supabase
         .from('journal_entries')
         .upsert(rowsToUpsert, {
           onConflict: 'id',
           ignoreDuplicates: true,
         })
         .select('id')
+
+      if (upsertError && attachImportId && isMissingImportIdColumnError(upsertError)) {
+        const rowsWithoutImportId = rowsToUpsert.map(({ import_id: _importId, ...rest }) => rest)
+        const retryResult = await supabase
+          .from('journal_entries')
+          .upsert(rowsWithoutImportId, {
+            onConflict: 'id',
+            ignoreDuplicates: true,
+          })
+          .select('id')
+        upserted = retryResult.data
+        upsertError = retryResult.error
+      }
 
       if (upsertError) {
         console.error('Failed to import journal rows:', upsertError)
@@ -231,15 +297,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (importId) {
-      await supabase
-        .from('import_history')
-        .update({
-          inserted,
-          duplicates,
-          errors: parseErrors,
-        })
-        .eq('id', importId)
+    if (importId && importHistoryMode !== 'none') {
+      if (importHistoryMode === 'legacy') {
+        await supabase
+          .from('import_history')
+          .update({
+            success_count: inserted,
+            duplicate_count: duplicates,
+            error_count: parseErrors,
+            status: 'completed',
+          })
+          .eq('id', importId)
+      } else {
+        await supabase
+          .from('import_history')
+          .update({
+            inserted,
+            duplicates,
+            errors: parseErrors,
+          })
+          .eq('id', importId)
+      }
     }
 
     return successResponse({
@@ -247,7 +325,7 @@ export async function POST(request: NextRequest) {
       inserted,
       duplicates,
       errors: parseErrors,
-      historyTracked: Boolean(importId),
+      historyTracked: importHistoryMode !== 'none',
     })
   } catch (error) {
     if (error instanceof ZodError) {

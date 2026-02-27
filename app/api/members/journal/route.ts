@@ -37,11 +37,12 @@ function getStorageAdminClient() {
 }
 
 async function attachSignedScreenshotUrls(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
   rows: Array<Record<string, unknown>>,
   userId: string,
 ): Promise<Array<Record<string, unknown>>> {
+  if (rows.length === 0) return rows
   const admin = getStorageAdminClient()
-  if (!admin || rows.length === 0) return rows
 
   const storagePaths = Array.from(
     new Set(
@@ -54,7 +55,8 @@ async function attachSignedScreenshotUrls(
 
   if (storagePaths.length === 0) return rows
 
-  const bucket = admin.storage.from('journal-screenshots')
+  const storageClient = admin ?? supabase
+  const bucket = storageClient.storage.from('journal-screenshots')
   const signedUrlByPath = new Map<string, string | null>()
 
   const createSignedUrlsMaybe = (
@@ -305,7 +307,11 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to load journal entries', 500)
     }
 
-    const withSignedUrls = await attachSignedScreenshotUrls((data ?? []) as Array<Record<string, unknown>>, user.id)
+    const withSignedUrls = await attachSignedScreenshotUrls(
+      supabase,
+      (data ?? []) as Array<Record<string, unknown>>,
+      user.id,
+    )
 
     const { data: streak } = await supabase
       .from('journal_streaks')
@@ -372,7 +378,11 @@ export async function POST(request: NextRequest) {
 
     await recalculateStreaks(supabase, user.id)
 
-    const [withSignedUrl] = await attachSignedScreenshotUrls([data as unknown as Record<string, unknown>], user.id)
+    const [withSignedUrl] = await attachSignedScreenshotUrls(
+      supabase,
+      [data as unknown as Record<string, unknown>],
+      user.id,
+    )
     return successResponse(sanitizeJournalEntry(withSignedUrl))
   } catch (error) {
     if (error instanceof ZodError) return invalidRequest(error)
@@ -442,7 +452,24 @@ export async function PATCH(request: NextRequest) {
     })
 
     if (!mergedValidation.success) {
-      return errorResponse('Invalid journal entry payload', 400, mergedValidation.error.flatten())
+      const updatedKeys = new Set(Object.keys(updatePayload))
+      const blockingIssues = mergedValidation.error.issues.filter((issue) => {
+        if (issue.path.length === 0) return true
+        const topLevelPath = String(issue.path[0] ?? '')
+        return updatedKeys.has(topLevelPath)
+      })
+
+      if (blockingIssues.length > 0) {
+        return errorResponse('Invalid journal entry payload', 400, mergedValidation.error.flatten())
+      }
+
+      console.warn('Skipping legacy validation issues on untouched fields during journal PATCH', {
+        entryId: id,
+        issues: mergedValidation.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      })
     }
 
     const { data, error } = await supabase
@@ -487,7 +514,11 @@ export async function PATCH(request: NextRequest) {
       await recalculateStreaks(supabase, user.id)
     }
 
-    const [withSignedUrl] = await attachSignedScreenshotUrls([data as unknown as Record<string, unknown>], user.id)
+    const [withSignedUrl] = await attachSignedScreenshotUrls(
+      supabase,
+      [data as unknown as Record<string, unknown>],
+      user.id,
+    )
     return successResponse(sanitizeJournalEntry(withSignedUrl))
   } catch (error) {
     if (error instanceof ZodError) return invalidRequest(error)

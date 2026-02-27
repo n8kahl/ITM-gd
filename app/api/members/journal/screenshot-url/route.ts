@@ -33,13 +33,9 @@ export async function POST(request: NextRequest) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      console.error('Missing Supabase service role environment variables')
-      return errorResponse('Server configuration error', 500)
-    }
-
-    const admin = createClient(supabaseUrl, serviceRoleKey)
+    const storageClient = (supabaseUrl && serviceRoleKey)
+      ? createClient(supabaseUrl, serviceRoleKey)
+      : supabase
 
     // Read path: return a signed URL for an existing screenshot object.
     if (readRequest.success) {
@@ -53,7 +49,7 @@ export async function POST(request: NextRequest) {
         return errorResponse('Forbidden storage path', 403)
       }
 
-      const { data, error } = await admin
+      const { data, error } = await storageClient
         .storage
         .from('journal-screenshots')
         .createSignedUrl(storagePath, SIGNED_READ_TTL_SECONDS)
@@ -91,7 +87,7 @@ export async function POST(request: NextRequest) {
       return errorResponse('Invalid storage path', 400)
     }
 
-    const { data, error } = await admin
+    const { data, error } = await storageClient
       .storage
       .from('journal-screenshots')
       .createSignedUploadUrl(storagePath)
