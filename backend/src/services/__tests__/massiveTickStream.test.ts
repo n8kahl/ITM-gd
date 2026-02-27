@@ -1,9 +1,123 @@
-import { __testables } from '../massiveTickStream';
+import WebSocket from 'ws';
+import { getEnv } from '../../config/env';
+import { redisClient } from '../../config/redis';
+import { logger } from '../../lib/logger';
+import { __testables, startMassiveTickStream, stopMassiveTickStream } from '../massiveTickStream';
+
+jest.mock('ws', () => {
+  type Handler = (...args: any[]) => void;
+
+  class MockWebSocket {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
+
+    readyState = MockWebSocket.CONNECTING;
+    private readonly handlers: Record<string, Handler[]> = {};
+
+    constructor(public readonly url: string) {}
+
+    on(event: string, handler: Handler): this {
+      (this.handlers[event] ||= []).push(handler);
+      return this;
+    }
+
+    send = jest.fn();
+    ping = jest.fn();
+
+    close = jest.fn(() => {
+      this.readyState = MockWebSocket.CLOSED;
+      this.emit('close', 1000, Buffer.from('client_close'));
+    });
+
+    terminate = jest.fn(() => {
+      this.readyState = MockWebSocket.CLOSED;
+      this.emit('close', 1006, Buffer.from('terminated'));
+    });
+
+    emit(event: string, ...args: unknown[]): void {
+      for (const handler of this.handlers[event] || []) {
+        handler(...args);
+      }
+    }
+  }
+
+  const ctor = jest.fn((url: string) => new MockWebSocket(url));
+  Object.assign(ctor, {
+    CONNECTING: MockWebSocket.CONNECTING,
+    OPEN: MockWebSocket.OPEN,
+    CLOSING: MockWebSocket.CLOSING,
+    CLOSED: MockWebSocket.CLOSED,
+    RawData: undefined,
+  });
+
+  return ctor;
+});
+
+jest.mock('../../config/env', () => ({
+  getEnv: jest.fn(),
+}));
+
+jest.mock('../../config/redis', () => ({
+  redisClient: {
+    isOpen: true,
+    set: jest.fn(),
+    get: jest.fn(),
+    eval: jest.fn(),
+  },
+}));
+
+jest.mock('../../lib/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+const websocketConstructor = WebSocket as unknown as jest.Mock;
+const mockGetEnv = getEnv as jest.MockedFunction<typeof getEnv>;
+const mockRedis = redisClient as unknown as {
+  isOpen: boolean;
+  set: jest.Mock;
+  get: jest.Mock;
+  eval: jest.Mock;
+};
+const mockWarn = logger.warn as jest.MockedFunction<typeof logger.warn>;
+const mockError = logger.error as jest.MockedFunction<typeof logger.error>;
+
+function makeEnv(overrides: Record<string, unknown> = {}): ReturnType<typeof getEnv> {
+  return {
+    MASSIVE_TICK_WS_ENABLED: true,
+    MASSIVE_TICK_LOCK_ENABLED: false,
+    MASSIVE_API_KEY: 'test-massive-key',
+    MASSIVE_TICK_WS_URL: 'wss://example.com/indices',
+    MASSIVE_TICK_SYMBOLS: 'SPX,SPY',
+    MASSIVE_TICK_EVENT_PREFIX: 'V.',
+    MASSIVE_TICK_RECONNECT_BASE_MS: 1_000,
+    MASSIVE_TICK_RECONNECT_MAX_MS: 30_000,
+    ...overrides,
+  } as ReturnType<typeof getEnv>;
+}
 
 describe('massiveTickStream helpers', () => {
   const previousL2Flag = process.env.ENABLE_L2_MICROSTRUCTURE;
 
-  afterEach(() => {
+  beforeEach(async () => {
+    await stopMassiveTickStream();
+    jest.clearAllMocks();
+    jest.useRealTimers();
+    mockGetEnv.mockReturnValue(makeEnv());
+    mockRedis.isOpen = true;
+    mockRedis.set.mockResolvedValue('OK');
+    mockRedis.get.mockResolvedValue(null);
+    mockRedis.eval.mockResolvedValue(1);
+  });
+
+  afterEach(async () => {
+    await stopMassiveTickStream();
     if (previousL2Flag == null) {
       delete process.env.ENABLE_L2_MICROSTRUCTURE;
       return;
@@ -148,5 +262,138 @@ describe('massiveTickStream helpers', () => {
       status: 'success',
       message: 'subscribed',
     })).toBe(false);
+  });
+});
+
+describe('massiveTickStream connectStream race guard', () => {
+  beforeEach(async () => {
+    await stopMassiveTickStream();
+    jest.clearAllMocks();
+    mockGetEnv.mockReturnValue(makeEnv());
+    mockRedis.isOpen = true;
+    mockRedis.set.mockResolvedValue('OK');
+    mockRedis.get.mockResolvedValue(null);
+    mockRedis.eval.mockResolvedValue(1);
+  });
+
+  afterEach(async () => {
+    await stopMassiveTickStream();
+  });
+
+  it('does not create a second websocket when first is CONNECTING', async () => {
+    await startMassiveTickStream();
+    expect(websocketConstructor).toHaveBeenCalledTimes(1);
+
+    __testables.connectStream();
+
+    expect(websocketConstructor).toHaveBeenCalledTimes(1);
+    expect(mockWarn).toHaveBeenCalled();
+  });
+
+  it('does not create a second websocket when first is OPEN', async () => {
+    await startMassiveTickStream();
+    expect(websocketConstructor).toHaveBeenCalledTimes(1);
+
+    const firstSocket = websocketConstructor.mock.results[0]?.value as { readyState: number } | undefined;
+    expect(firstSocket).toBeDefined();
+    if (firstSocket) {
+      firstSocket.readyState = (WebSocket as unknown as { OPEN: number }).OPEN;
+    }
+
+    __testables.connectStream();
+
+    expect(websocketConstructor).toHaveBeenCalledTimes(1);
+    expect(mockWarn).toHaveBeenCalled();
+  });
+});
+
+describe('massiveTickStream upstream lock', () => {
+  beforeEach(async () => {
+    await stopMassiveTickStream();
+    jest.clearAllMocks();
+    jest.useRealTimers();
+    mockGetEnv.mockReturnValue(makeEnv());
+    mockRedis.isOpen = true;
+    mockRedis.set.mockResolvedValue('OK');
+    mockRedis.get.mockResolvedValue(null);
+    mockRedis.eval.mockResolvedValue(1);
+  });
+
+  afterEach(async () => {
+    await stopMassiveTickStream();
+    jest.useRealTimers();
+  });
+
+  it('acquires lock and starts stream when no holder', async () => {
+    mockGetEnv.mockReturnValue(makeEnv({ MASSIVE_TICK_LOCK_ENABLED: true }));
+
+    await startMassiveTickStream();
+
+    expect(mockRedis.set).toHaveBeenCalledWith(
+      __testables.MASSIVE_LOCK_KEY,
+      expect.any(String),
+      { NX: true, EX: __testables.MASSIVE_LOCK_TTL_S },
+    );
+    expect(websocketConstructor).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses start when lock is held by another instance', async () => {
+    mockGetEnv.mockReturnValue(makeEnv({ MASSIVE_TICK_LOCK_ENABLED: true }));
+    mockRedis.set.mockResolvedValue(null);
+    mockRedis.get.mockResolvedValue('other-instance-token');
+
+    await startMassiveTickStream();
+
+    expect(websocketConstructor).not.toHaveBeenCalled();
+    expect(mockError).toHaveBeenCalledWith(
+      'FATAL: Another instance holds the Massive tick stream lock',
+      expect.objectContaining({
+        lockKey: __testables.MASSIVE_LOCK_KEY,
+        holder: 'other-instance-token',
+      }),
+    );
+    expect(mockError).toHaveBeenCalledWith(
+      'Massive tick stream will not start: upstream lock unavailable (poll-only mode)',
+    );
+  });
+
+  it('renews lock periodically', async () => {
+    jest.useFakeTimers();
+    mockGetEnv.mockReturnValue(makeEnv({ MASSIVE_TICK_LOCK_ENABLED: true }));
+
+    await __testables.acquireUpstreamLock();
+    await jest.advanceTimersByTimeAsync((__testables.MASSIVE_LOCK_TTL_S * 1000) / 2);
+
+    expect(mockRedis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('EXPIRE'),
+      {
+        keys: [__testables.MASSIVE_LOCK_KEY],
+        arguments: [expect.any(String), `${__testables.MASSIVE_LOCK_TTL_S}`],
+      },
+    );
+  });
+
+  it('releases lock on stopMassiveTickStream()', async () => {
+    mockGetEnv.mockReturnValue(makeEnv({ MASSIVE_TICK_LOCK_ENABLED: true }));
+
+    await __testables.acquireUpstreamLock();
+    await stopMassiveTickStream();
+
+    expect(mockRedis.eval).toHaveBeenCalledWith(
+      expect.stringContaining('DEL'),
+      {
+        keys: [__testables.MASSIVE_LOCK_KEY],
+        arguments: [expect.any(String)],
+      },
+    );
+  });
+
+  it('bypasses lock when MASSIVE_TICK_LOCK_ENABLED=false', async () => {
+    mockGetEnv.mockReturnValue(makeEnv({ MASSIVE_TICK_LOCK_ENABLED: false }));
+
+    await startMassiveTickStream();
+
+    expect(mockRedis.set).not.toHaveBeenCalled();
+    expect(websocketConstructor).toHaveBeenCalledTimes(1);
   });
 });

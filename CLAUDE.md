@@ -131,6 +131,8 @@ ITM-gd/
 | Redis | Caching, rate limiting | `REDIS_URL` |
 | Discord | Community notifications | (see `backend/src/services/discordNotifier.ts`) |
 
+> **Single-Process Massive WebSocket Constraint:** Massive upstream tick ingest must have exactly one active backend holder at a time. For horizontally scaled deployments, set `MASSIVE_TICK_LOCK_ENABLED=true` so Redis advisory locking elects a single upstream owner and non-owners remain poll-only.
+
 ---
 
 ## 5. Feature Registry
@@ -401,6 +403,8 @@ Docs Agent:
 - `package.json` - Dependencies
 - `app/globals.css` - Global styles
 - `.env.example` - Environment variable documentation
+
+> **Horizontal Scaling Callout:** `backend/src/services/massiveTickStream.ts` owns single-upstream coordination for Massive WebSocket ingest. When running multiple backend instances, `MASSIVE_TICK_LOCK_ENABLED=true` is required so only one instance opens the upstream socket.
 
 ### 7.3 Orchestration Patterns
 

@@ -231,7 +231,7 @@ async function start() {
 
     // Initialize WebSocket server for real-time price updates
     initWebSocket(httpServer);
-    startMassiveTickStream();
+    await startMassiveTickStream();
 
     // Start active background workers
     startMorningBriefWorker();
@@ -299,7 +299,7 @@ async function gracefulShutdown(signal: string) {
       stopNewsSentimentPolling();
       stopNewsSentimentPolling = null;
     }
-    stopMassiveTickStream();
+    await stopMassiveTickStream();
     shutdownWebSocket();
     // Flush pending Sentry events before shutdown
     await flushSentry();

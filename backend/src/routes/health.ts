@@ -4,10 +4,12 @@ import { testRedisConnection } from '../config/redis';
 import { testMassiveConnection, getDailyAggregates, getMinuteAggregates, getOptionsContracts, getOptionsExpirations } from '../config/massive';
 import { testOpenAIConnection, openaiClient, CHAT_MODEL } from '../config/openai';
 import { logger } from '../lib/logger';
+import { authenticateToken } from '../middleware/auth';
 import { getWorkerHealthSnapshot } from '../services/workerHealth';
 import { getMassiveTickStreamStatus } from '../services/massiveTickStream';
 import { getLatestTick } from '../services/tickCache';
 import { getMarketStatus } from '../services/marketHours';
+import { getWebSocketHealth } from '../services/websocket';
 
 const router = Router();
 
@@ -158,6 +160,10 @@ router.get('/detailed', async (_req: Request, res: Response) => {
     logger.warn('Detailed health check failed', { checks });
   }
   return res.status(statusCode).json(response);
+});
+
+router.get('/ws', authenticateToken, (_req: Request, res: Response) => {
+  return res.status(200).json(getWebSocketHealth());
 });
 
 router.get('/workers', (_req: Request, res: Response) => {

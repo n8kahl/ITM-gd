@@ -43,6 +43,7 @@ jest.mock('../../lib/tokenAuth', () => {
 });
 
 const mockVerifyAuthToken = verifyAuthToken as jest.MockedFunction<typeof verifyAuthToken>;
+const originalWsMaxClients = process.env.WS_MAX_CLIENTS;
 
 async function createServerWithWebSocket(): Promise<{ server: http.Server; wsBaseUrl: string }> {
   const app = express();
@@ -136,10 +137,34 @@ function connectForClose(
   });
 }
 
+function connectForOpen(url: string, timeoutMs: number = 3000): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+
+    const timeout = setTimeout(() => {
+      ws.terminate();
+      reject(new Error('Timed out waiting for websocket open'));
+    }, timeoutMs);
+
+    const onError = (error: Error) => {
+      clearTimeout(timeout);
+      reject(error);
+    };
+
+    ws.once('open', () => {
+      clearTimeout(timeout);
+      ws.off('error', onError);
+      resolve(ws);
+    });
+    ws.once('error', onError);
+  });
+}
+
 describeWithSockets('websocket auth + authorization integration', () => {
   let server: http.Server | null = null;
   let wsBaseUrl = '';
   let wsClient: WebSocket | null = null;
+  let additionalClients: WebSocket[] = [];
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -149,19 +174,27 @@ describeWithSockets('websocket auth + authorization integration', () => {
   });
 
   afterEach(async () => {
-    if (wsClient) {
-      wsClient.removeAllListeners();
-      if (wsClient.readyState === WebSocket.OPEN || wsClient.readyState === WebSocket.CONNECTING) {
-        wsClient.close();
+    for (const client of [wsClient, ...additionalClients]) {
+      if (!client) continue;
+      client.removeAllListeners();
+      if (client.readyState === WebSocket.OPEN || client.readyState === WebSocket.CONNECTING) {
+        client.close();
       }
-      wsClient = null;
     }
+    wsClient = null;
+    additionalClients = [];
 
     shutdownWebSocket();
 
     if (server) {
       await closeServer(server);
       server = null;
+    }
+
+    if (originalWsMaxClients === undefined) {
+      delete process.env.WS_MAX_CLIENTS;
+    } else {
+      process.env.WS_MAX_CLIENTS = originalWsMaxClients;
     }
   });
 
@@ -199,6 +232,37 @@ describeWithSockets('websocket auth + authorization integration', () => {
 
     expect(errorMsg.type).toBe('error');
     expect(String(errorMsg.message)).toContain('Forbidden channel');
+  });
+
+  it('rejects connections at capacity with 4429', async () => {
+    process.env.WS_MAX_CLIENTS = '1';
+    mockVerifyAuthToken.mockResolvedValue({
+      id: 'user-123',
+      source: 'supabase',
+    } as any);
+
+    wsClient = await connectForOpen(`${wsBaseUrl}?token=valid-token`);
+    const result = await connectForClose(`${wsBaseUrl}?token=overflow-token`);
+
+    expect(result.code).toBe(4429);
+    expect(result.reason).toBe('Server at capacity');
+    expect(mockVerifyAuthToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts connection below capacity', async () => {
+    process.env.WS_MAX_CLIENTS = '2';
+    mockVerifyAuthToken.mockResolvedValue({
+      id: 'user-123',
+      source: 'supabase',
+    } as any);
+
+    wsClient = await connectForOpen(`${wsBaseUrl}?token=valid-token-1`);
+    const secondClient = await connectForOpen(`${wsBaseUrl}?token=valid-token-2`);
+    additionalClients.push(secondClient);
+
+    expect(wsClient.readyState).toBe(WebSocket.OPEN);
+    expect(secondClient.readyState).toBe(WebSocket.OPEN);
+    expect(mockVerifyAuthToken).toHaveBeenCalledTimes(2);
   });
 
   it('allows authorized setup channel subscriptions and delivers targeted setup_update events', async () => {

@@ -332,7 +332,7 @@ export function TradeDayReplayShell() {
 
           {payload ? (
             <>
-              <ReplayChart bars={payload.bars} trades={payload.trades} />
+              <ReplayChart bars={payload.bars} trades={payload.trades} priorDayBar={payload.priorDayBar} />
               <SessionAnalysis payload={payload} />
             </>
           ) : null}

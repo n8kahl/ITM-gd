@@ -1,5 +1,6 @@
 import WebSocket, { RawData } from 'ws';
 import { getEnv } from '../config/env';
+import { redisClient } from '../config/redis';
 import { logger } from '../lib/logger';
 import { formatMassiveTicker } from '../lib/symbols';
 import {
@@ -18,6 +19,20 @@ const DEFAULT_AUTH_ACK_TIMEOUT_MS = 5_000;
 const SUBSCRIBE_ACK_TIMEOUT_MS = 3_000;
 const DEFAULT_MAX_CONNECTIONS_RECONNECT_MS = 60_000;
 const DEFAULT_POLICY_CLOSE_RECONNECT_MS = 15_000;
+const MASSIVE_LOCK_KEY = 'massive:tick:stream:lock';
+const MASSIVE_LOCK_TTL_S = 60;
+const RENEW_LOCK_IF_OWNER_SCRIPT = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+end
+return 0
+`;
+const RELEASE_LOCK_IF_OWNER_SCRIPT = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+`;
 const AUTH_ACK_TIMEOUT_MS = (() => {
   const parsed = Number.parseInt(process.env.MASSIVE_TICK_AUTH_ACK_TIMEOUT_MS || `${DEFAULT_AUTH_ACK_TIMEOUT_MS}`, 10);
   return Number.isFinite(parsed) ? Math.max(parsed, 1_000) : DEFAULT_AUTH_ACK_TIMEOUT_MS;
@@ -57,6 +72,8 @@ let lastProviderStatus: string | null = null;
 let lastProviderMessage: string | null = null;
 let lastCloseCode: number | null = null;
 let lastCloseReason: string | null = null;
+let lockOwnerToken: string | null = null;
+let lockRenewalTimer: ReturnType<typeof setInterval> | null = null;
 
 function clearReconnectTimer(): void {
   if (!reconnectTimer) return;
@@ -86,6 +103,12 @@ function clearSubscribeAckTimer(): void {
   if (!subscribeAckTimer) return;
   clearTimeout(subscribeAckTimer);
   subscribeAckTimer = null;
+}
+
+function clearLockRenewalTimer(): void {
+  if (!lockRenewalTimer) return;
+  clearInterval(lockRenewalTimer);
+  lockRenewalTimer = null;
 }
 
 function setConnectionState(nextState: MassiveTickConnectionState, reason: string): void {
@@ -476,6 +499,114 @@ function scheduleReconnect(reason: string): void {
   }, delay);
 }
 
+function isOwnerScriptSuccess(result: unknown): boolean {
+  return result === 1 || result === '1';
+}
+
+async function renewUpstreamLock(): Promise<void> {
+  const ownerToken = lockOwnerToken;
+  if (!ownerToken) return;
+
+  if (!redisClient?.isOpen) {
+    logger.error('Massive tick stream lock renewal stopped: Redis unavailable', {
+      lockKey: MASSIVE_LOCK_KEY,
+    });
+    clearLockRenewalTimer();
+    lockOwnerToken = null;
+    return;
+  }
+
+  try {
+    const renewed = await redisClient.eval(RENEW_LOCK_IF_OWNER_SCRIPT, {
+      keys: [MASSIVE_LOCK_KEY],
+      arguments: [ownerToken, `${MASSIVE_LOCK_TTL_S}`],
+    });
+
+    if (!isOwnerScriptSuccess(renewed)) {
+      logger.error('Massive tick stream lock renewal lost ownership', {
+        lockKey: MASSIVE_LOCK_KEY,
+      });
+      clearLockRenewalTimer();
+      lockOwnerToken = null;
+    }
+  } catch (error) {
+    logger.error('Massive tick stream lock renewal failed', {
+      lockKey: MASSIVE_LOCK_KEY,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    clearLockRenewalTimer();
+    lockOwnerToken = null;
+  }
+}
+
+async function acquireUpstreamLock(): Promise<boolean> {
+  if (!getEnv().MASSIVE_TICK_LOCK_ENABLED) return true;
+
+  if (!redisClient?.isOpen) {
+    logger.error('Massive tick stream lock acquisition failed: Redis unavailable', {
+      lockKey: MASSIVE_LOCK_KEY,
+    });
+    return false;
+  }
+
+  const ownerToken = `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+  try {
+    const acquired = await redisClient.set(MASSIVE_LOCK_KEY, ownerToken, {
+      NX: true,
+      EX: MASSIVE_LOCK_TTL_S,
+    });
+    if (acquired !== 'OK') {
+      const holder = await redisClient.get(MASSIVE_LOCK_KEY);
+      logger.error('FATAL: Another instance holds the Massive tick stream lock', {
+        lockKey: MASSIVE_LOCK_KEY,
+        holder,
+        thisInstance: ownerToken,
+      });
+      return false;
+    }
+
+    lockOwnerToken = ownerToken;
+    clearLockRenewalTimer();
+    lockRenewalTimer = setInterval(() => {
+      void renewUpstreamLock();
+    }, (MASSIVE_LOCK_TTL_S * 1000) / 2);
+
+    return true;
+  } catch (error) {
+    logger.error('Massive tick stream lock acquisition failed', {
+      lockKey: MASSIVE_LOCK_KEY,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+async function releaseUpstreamLock(): Promise<void> {
+  clearLockRenewalTimer();
+  const ownerToken = lockOwnerToken;
+  lockOwnerToken = null;
+  if (!ownerToken) return;
+
+  if (!redisClient?.isOpen) {
+    logger.error('Massive tick stream lock release skipped: Redis unavailable', {
+      lockKey: MASSIVE_LOCK_KEY,
+    });
+    return;
+  }
+
+  try {
+    await redisClient.eval(RELEASE_LOCK_IF_OWNER_SCRIPT, {
+      keys: [MASSIVE_LOCK_KEY],
+      arguments: [ownerToken],
+    });
+  } catch (error) {
+    logger.error('Massive tick stream lock release failed', {
+      lockKey: MASSIVE_LOCK_KEY,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 function safeSend(payload: Record<string, unknown>): void {
   if (!wsClient || wsClient.readyState !== WebSocket.OPEN) return;
   wsClient.send(JSON.stringify(payload));
@@ -500,6 +631,12 @@ function sendSubscriptions(eventPrefix: string): void {
 
 function connectStream(): void {
   if (!shouldRun) return;
+  if (wsClient && (wsClient.readyState === WebSocket.CONNECTING || wsClient.readyState === WebSocket.OPEN)) {
+    logger.warn('Massive tick stream connect skipped: socket already active', {
+      readyState: wsClient.readyState,
+    });
+    return;
+  }
 
   const env = getEnv();
   if (!env.MASSIVE_TICK_WS_ENABLED) return;
@@ -586,7 +723,7 @@ function connectStream(): void {
   });
 }
 
-export function startMassiveTickStream(): void {
+export async function startMassiveTickStream(): Promise<void> {
   if (shouldRun) return;
 
   const env = getEnv();
@@ -604,11 +741,17 @@ export function startMassiveTickStream(): void {
     return;
   }
 
+  const lockAcquired = await acquireUpstreamLock();
+  if (!lockAcquired) {
+    logger.error('Massive tick stream will not start: upstream lock unavailable (poll-only mode)');
+    return;
+  }
+
   shouldRun = true;
   connectStream();
 }
 
-export function stopMassiveTickStream(): void {
+export async function stopMassiveTickStream(): Promise<void> {
   shouldRun = false;
   clearReconnectTimer();
   clearHeartbeatTimer();
@@ -620,15 +763,17 @@ export function stopMassiveTickStream(): void {
   reconnectAttempt = 0;
   forcedReconnectDelayMs = null;
 
-  if (!wsClient) return;
-
-  try {
-    wsClient.close();
-  } catch {
-    wsClient.terminate();
-  } finally {
-    wsClient = null;
+  if (wsClient) {
+    try {
+      wsClient.close();
+    } catch {
+      wsClient.terminate();
+    } finally {
+      wsClient = null;
+    }
   }
+
+  await releaseUpstreamLock();
 }
 
 export function subscribeMassiveTickUpdates(listener: TickListener): () => void {
@@ -685,6 +830,12 @@ export function getMassiveTickStreamStatus(): {
 export const __testables = {
   AUTH_ACK_TIMEOUT_MS,
   SUBSCRIBE_ACK_TIMEOUT_MS,
+  MASSIVE_LOCK_KEY,
+  MASSIVE_LOCK_TTL_S,
+  connectStream,
+  acquireUpstreamLock,
+  releaseUpstreamLock,
+  renewUpstreamLock,
   parseSymbols,
   toSubscriptionParams,
   normalizeTimestamp,
