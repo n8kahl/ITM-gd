@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { getMinuteAggregates, getOptionsSnapshotAtDate, type MassiveAggregate, type OptionsSnapshot } from '../config/massive';
 import { authenticateToken } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
-import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
 import { sendError, ErrorCode } from '../lib/errors';
+import { hasBackendAdminAccess } from '../lib/adminAccess';
 import { toEasternTime } from '../services/marketHours';
 import { formatTradierOccSymbol, tradierOccToMassiveTicker } from '../services/broker/tradier/occFormatter';
 import { parseTranscriptToTrades, TranscriptParserError } from '../services/trade-day-replay/transcript-parser';
@@ -34,13 +34,8 @@ async function requireAdmin(req: Request, res: Response, next: () => void): Prom
     return;
   }
 
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (error || !profile || profile.role !== 'admin') {
+  const isAdmin = await hasBackendAdminAccess(userId);
+  if (!isAdmin) {
     sendError(res, 403, ErrorCode.FORBIDDEN, 'Admin access required');
     return;
   }
