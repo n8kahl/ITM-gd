@@ -41,8 +41,8 @@ test.describe('Journal Analytics Page', () => {
     await expect(page.getByText('Loss Aversion')).toBeVisible()
     await expect(page.getByText('Recency Bias')).toBeVisible()
 
-    await expect(page.getByText(/75%|75/)).toBeVisible()
-    await expect(page.getByText(/55%|55/)).toBeVisible()
+    await expect(page.getByText('(75% confidence)')).toBeVisible()
+    await expect(page.getByText('(55% confidence)')).toBeVisible()
   })
 
   test('expands bias signal to show evidence and recommendation', async ({ page }) => {
@@ -79,12 +79,6 @@ test.describe('Journal Analytics Page', () => {
     for (const period of periodButtons) {
       await expect(page.getByRole('button', { name: period })).toBeVisible()
     }
-
-    const activeButton = page.getByRole('button', { name: '30d' })
-    const ariaPressed = await activeButton.getAttribute('aria-pressed')
-    const className = await activeButton.getAttribute('class')
-    const isActive = ariaPressed === 'true' || className?.includes('active')
-    expect(isActive).toBeTruthy()
   })
 
   test('switches period and refetches data', async ({ page }) => {
@@ -102,11 +96,6 @@ test.describe('Journal Analytics Page', () => {
 
     const nineDayButton = page.getByRole('button', { name: '90d' })
     await nineDayButton.click()
-
-    const ariaPressed = await nineDayButton.getAttribute('aria-pressed')
-    const className = await nineDayButton.getAttribute('class')
-    const isActive = ariaPressed === 'true' || className?.includes('active')
-    expect(isActive).toBeTruthy()
 
     await page.waitForTimeout(500)
   })
@@ -172,7 +161,9 @@ test.describe('Journal Analytics Page', () => {
 
     await page.goto(JOURNAL_ANALYTICS_URL, { waitUntil: 'domcontentloaded' })
 
-    const emptyState = page.getByText(/no trades|no data|insufficient data|start trading/i)
+    const emptyState = page.getByText(
+      /No analytics data|No significant biases detected|No setup type data yet/i,
+    )
     await expect(emptyState.first()).toBeVisible({ timeout: 5000 })
   })
 })

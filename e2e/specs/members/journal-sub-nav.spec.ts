@@ -69,12 +69,12 @@ test.describe('JournalSubNav Component', () => {
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     const entriesLink = page.getByRole('link', { name: 'Entries' })
-    await expect(entriesLink).toHaveAttribute(/aria-current|data-active|class.*active/)
+    await expect(entriesLink).toHaveAttribute('aria-current', 'page')
 
     // Test Analytics tab is active on analytics page
     await page.goto(JOURNAL_ANALYTICS_URL, { waitUntil: 'domcontentloaded' })
 
     const analyticsLink = page.getByRole('link', { name: 'Analytics' })
-    await expect(analyticsLink).toHaveAttribute(/aria-current|data-active|class.*active/)
+    await expect(analyticsLink).toHaveAttribute('aria-current', 'page')
   })
 })

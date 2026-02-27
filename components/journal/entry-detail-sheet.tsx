@@ -128,10 +128,14 @@ export function EntryDetailSheet({
       }
 
       const result = await response.json()
+      const analysisCandidate = result?.data?.[0]?.ai_analysis ?? result?.data?.[0]?.grade
       const aiAnalysis = (
-        result?.data?.[0]?.grade
-        ?? result?.data?.[0]?.ai_analysis
-      ) as AITradeAnalysis | undefined
+        analysisCandidate
+        && typeof analysisCandidate === 'object'
+        && 'grade' in analysisCandidate
+      )
+        ? analysisCandidate as AITradeAnalysis
+        : undefined
 
       if (aiAnalysis) {
         setLocalEntry((prev) => (prev ? { ...prev, ai_analysis: aiAnalysis } : null))

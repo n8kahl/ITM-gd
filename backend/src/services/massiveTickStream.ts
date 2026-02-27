@@ -16,9 +16,25 @@ const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_HEARTBEAT_MS = 30_000;
 const DEFAULT_AUTH_ACK_TIMEOUT_MS = 5_000;
 const SUBSCRIBE_ACK_TIMEOUT_MS = 3_000;
+const DEFAULT_MAX_CONNECTIONS_RECONNECT_MS = 60_000;
+const DEFAULT_POLICY_CLOSE_RECONNECT_MS = 15_000;
 const AUTH_ACK_TIMEOUT_MS = (() => {
   const parsed = Number.parseInt(process.env.MASSIVE_TICK_AUTH_ACK_TIMEOUT_MS || `${DEFAULT_AUTH_ACK_TIMEOUT_MS}`, 10);
   return Number.isFinite(parsed) ? Math.max(parsed, 1_000) : DEFAULT_AUTH_ACK_TIMEOUT_MS;
+})();
+const MAX_CONNECTIONS_RECONNECT_MS = (() => {
+  const parsed = Number.parseInt(
+    process.env.MASSIVE_TICK_MAX_CONNECTIONS_RECONNECT_MS || `${DEFAULT_MAX_CONNECTIONS_RECONNECT_MS}`,
+    10,
+  );
+  return Number.isFinite(parsed) ? Math.max(parsed, 5_000) : DEFAULT_MAX_CONNECTIONS_RECONNECT_MS;
+})();
+const POLICY_CLOSE_RECONNECT_MS = (() => {
+  const parsed = Number.parseInt(
+    process.env.MASSIVE_TICK_POLICY_CLOSE_RECONNECT_MS || `${DEFAULT_POLICY_CLOSE_RECONNECT_MS}`,
+    10,
+  );
+  return Number.isFinite(parsed) ? Math.max(parsed, 5_000) : DEFAULT_POLICY_CLOSE_RECONNECT_MS;
 })();
 
 const tickListeners = new Set<TickListener>();
@@ -36,6 +52,11 @@ let reconnectAttempt = 0;
 let lastConnectedAt: string | null = null;
 let lastMessageAt: string | null = null;
 let subscribedSymbols: string[] = [];
+let forcedReconnectDelayMs: number | null = null;
+let lastProviderStatus: string | null = null;
+let lastProviderMessage: string | null = null;
+let lastCloseCode: number | null = null;
+let lastCloseReason: string | null = null;
 
 function clearReconnectTimer(): void {
   if (!reconnectTimer) return;
@@ -184,6 +205,20 @@ function getObjectString(
 interface MassiveStatusEvent {
   status: string;
   message?: string;
+}
+
+function requestReconnectDelay(delayMs: number): void {
+  const safeDelay = Math.max(0, Math.floor(delayMs));
+  if (forcedReconnectDelayMs == null || safeDelay > forcedReconnectDelayMs) {
+    forcedReconnectDelayMs = safeDelay;
+  }
+}
+
+function isMaxConnectionsStatus(statusEvent: MassiveStatusEvent): boolean {
+  const status = statusEvent.status.toLowerCase();
+  const message = (statusEvent.message || '').toLowerCase();
+  return status === 'max_connections'
+    || message.includes('maximum number of websocket connections');
 }
 
 function parseStatusEvent(payload: unknown): MassiveStatusEvent | null {
@@ -346,6 +381,9 @@ function handleMessage(raw: RawData): void {
   for (const event of events) {
     const statusEvent = parseStatusEvent(event);
     if (statusEvent) {
+      lastProviderStatus = statusEvent.status;
+      lastProviderMessage = statusEvent.message || null;
+
       const authControl = evaluateAuthControlEvent(connectionState, statusEvent);
       if (authControl.nextState !== connectionState) {
         setConnectionState(authControl.nextState, `status:${statusEvent.status}`);
@@ -375,6 +413,27 @@ function handleMessage(raw: RawData): void {
         }
         return;
       }
+
+      if (isMaxConnectionsStatus(statusEvent)) {
+        clearAuthAckTimer();
+        clearSubscribeAckTimer();
+        isConnected = false;
+        requestReconnectDelay(MAX_CONNECTIONS_RECONNECT_MS);
+        setConnectionState('error', `status:${statusEvent.status}`);
+        logger.error('Massive tick stream provider connection limit reached', {
+          status: statusEvent.status,
+          message: statusEvent.message,
+          reconnectDelayMs: forcedReconnectDelayMs,
+        });
+        if (wsClient) {
+          try {
+            wsClient.close();
+          } catch {
+            wsClient.terminate();
+          }
+        }
+        return;
+      }
     }
 
     if (!shouldProcessTickEvent(connectionState)) {
@@ -395,16 +454,20 @@ function scheduleReconnect(reason: string): void {
   clearReconnectTimer();
 
   const env = getEnv();
-  const delay = Math.min(
+  const baseDelay = Math.min(
     env.MASSIVE_TICK_RECONNECT_BASE_MS * (2 ** reconnectAttempt),
     env.MASSIVE_TICK_RECONNECT_MAX_MS,
   );
+  const forcedDelay = forcedReconnectDelayMs ?? 0;
+  const delay = Math.max(baseDelay, forcedDelay);
+  forcedReconnectDelayMs = null;
   reconnectAttempt += 1;
 
   logger.warn('Massive tick stream reconnect scheduled', {
     reason,
     delayMs: delay,
     attempt: reconnectAttempt,
+    forcedDelayMs: forcedDelay || undefined,
   });
 
   reconnectTimer = setTimeout(() => {
@@ -508,7 +571,12 @@ function connectStream(): void {
     clearSubscribeAckTimer();
     isConnected = false;
     wsClient = null;
+    lastCloseCode = code;
+    lastCloseReason = reason.toString('utf8') || null;
     if (!shouldRun) return;
+    if (code === 1008) {
+      requestReconnectDelay(POLICY_CLOSE_RECONNECT_MS);
+    }
     setConnectionState('error', `socket_close:${code}`);
     scheduleReconnect(`close:${code}:${reason.toString('utf8')}`);
   });
@@ -550,6 +618,7 @@ export function stopMassiveTickStream(): void {
   isConnected = false;
   setConnectionState('error', 'stream_stopped');
   reconnectAttempt = 0;
+  forcedReconnectDelayMs = null;
 
   if (!wsClient) return;
 
@@ -591,6 +660,10 @@ export function getMassiveTickStreamStatus(): {
   reconnectAttempt: number;
   lastConnectedAt: string | null;
   lastMessageAt: string | null;
+  lastProviderStatus: string | null;
+  lastProviderMessage: string | null;
+  lastCloseCode: number | null;
+  lastCloseReason: string | null;
 } {
   const env = getEnv();
   return {
@@ -602,6 +675,10 @@ export function getMassiveTickStreamStatus(): {
     reconnectAttempt,
     lastConnectedAt,
     lastMessageAt,
+    lastProviderStatus,
+    lastProviderMessage,
+    lastCloseCode,
+    lastCloseReason,
   };
 }
 
@@ -613,6 +690,7 @@ export const __testables = {
   normalizeTimestamp,
   parseTickPayload,
   parseStatusEvent,
+  isMaxConnectionsStatus,
   evaluateAuthControlEvent,
   evaluateAuthTimeout,
   shouldProcessTickEvent,

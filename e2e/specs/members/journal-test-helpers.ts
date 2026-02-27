@@ -541,6 +541,8 @@ export interface MockAnalyticsPayload {
   day_of_week_pnl: Array<{ day: string; pnl: number; count: number }>
   r_multiple_distribution: Array<{ bucket: string; count: number }>
   mfe_mae_scatter: Array<{ mfe: number; mae: number; pnl: number }>
+  setup_stats: Array<{ setup_type: string; pnl: number; count: number; win_rate: number }>
+  regime_stats: Record<string, Array<{ value: string; pnl: number; count: number; win_rate: number }>>
 }
 
 export function createMockAnalyticsPayload(tradeCount = 30): MockAnalyticsPayload {
@@ -614,6 +616,23 @@ export function createMockAnalyticsPayload(tradeCount = 30): MockAnalyticsPayloa
       { mfe: 1.0, mae: -1.5, pnl: -60 },
       { mfe: 3.0, mae: -0.3, pnl: 200 },
     ],
+    setup_stats: [
+      { setup_type: 'Breakout', pnl: 1020, count: 12, win_rate: 75 },
+      { setup_type: 'Pullback', pnl: 360, count: 8, win_rate: 63 },
+      { setup_type: 'Reversal', pnl: -100, count: 5, win_rate: 40 },
+    ],
+    regime_stats: {
+      time_bucket: [
+        { value: 'open', pnl: 240, count: 8, win_rate: 62 },
+        { value: 'midday', pnl: 120, count: 7, win_rate: 57 },
+        { value: 'close', pnl: 90, count: 5, win_rate: 60 },
+      ],
+      trend_state: [
+        { value: 'bullish', pnl: 300, count: 10, win_rate: 70 },
+        { value: 'neutral', pnl: 75, count: 9, win_rate: 56 },
+        { value: 'bearish', pnl: -50, count: 6, win_rate: 45 },
+      ],
+    },
   }
 }
 

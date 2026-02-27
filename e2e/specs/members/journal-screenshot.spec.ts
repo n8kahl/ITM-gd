@@ -203,7 +203,7 @@ test.describe('Trade Journal Screenshot UI', () => {
     await expect(page.getByText('Found 1 position')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Analyze Next Steps' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Use Detected Symbol (SPX)' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Use' }).click()
     await expect(page.locator('[role="dialog"] input[placeholder="e.g., AAPL"]')).toHaveValue('SPX')
   })
 
@@ -273,8 +273,7 @@ test.describe('Trade Journal Screenshot UI', () => {
     })
 
     await expect(page.getByText(/Found 2 positions/i)).toBeVisible()
-    await page.getByRole('button', { name: 'Create Entry' }).click()
-    await expect(page.getByText('Multiple positions detected. Enter one symbol to log a specific trade.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create Entry' })).toBeDisabled()
 
     await expect.poll(() => state.entries.length, { timeout: 10_000 }).toBe(0)
   })

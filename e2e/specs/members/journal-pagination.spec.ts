@@ -35,10 +35,15 @@ async function openWithFixtures(page: Page, entries: ReturnType<typeof createMoc
   await setupJournalCrudMocks(page, entries)
   await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: 'Trade Journal' })).toBeVisible()
+  await expect.poll(async () => getVisibleEntryCount(page), { timeout: 10_000 }).toBeGreaterThan(0)
 }
 
-function getVisibleEntryCount(page: Page) {
-  return page.locator('table[aria-label="Journal trades table"] tbody tr').count()
+async function getVisibleEntryCount(page: Page) {
+  const tableCount = await page.locator('table[aria-label="Journal trades table"] tbody tr').count()
+  if (tableCount > 0) return tableCount
+
+  // When card view is active, each entry is rendered as an article card.
+  return page.locator('article').count()
 }
 
 test.describe('Trade Journal Pagination', () => {
