@@ -9,6 +9,38 @@ import {
   normalizeDiscordRoleIds,
 } from '@/lib/discord-role-access'
 
+const TRADE_DAY_REPLAY_TAB = {
+  tab_id: 'trade-day-replay',
+  label: 'Trade Day Replay',
+  icon: 'Play',
+  path: '/members/trade-day-replay',
+  required_tier: 'admin',
+  sort_order: 8,
+  is_required: false,
+  mobile_visible: true,
+  is_active: true,
+  badge_text: null,
+  badge_variant: null,
+  description: 'Replay and analyze a full trade day from transcript + market data',
+}
+
+type DynamicTabRecord = Record<string, unknown> & {
+  tab_id?: unknown
+  sort_order?: unknown
+}
+
+function sortBySortOrder<T extends { sort_order?: unknown }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
+}
+
+function ensureReplayTab(rows: DynamicTabRecord[]): DynamicTabRecord[] {
+  const hasReplay = rows.some((row) => String(row.tab_id || '') === 'trade-day-replay')
+  if (hasReplay) {
+    return rows
+  }
+  return [...rows, TRADE_DAY_REPLAY_TAB]
+}
+
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -93,7 +125,8 @@ export async function GET() {
       )
     }
 
-    return NextResponse.json({ success: true, data: tabs })
+    const rows = (tabs || []) as DynamicTabRecord[]
+    return NextResponse.json({ success: true, data: sortBySortOrder(ensureReplayTab(rows)) })
   } catch (error) {
     return NextResponse.json(
       { success: false, error: { code: 'INTERNAL', message: error instanceof Error ? error.message : 'Internal server error' } },
