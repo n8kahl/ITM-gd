@@ -18,6 +18,7 @@ import { validateBody, validateQuery } from '../middleware/validate';
 import { supabase } from '../config/database';
 import { sendError, ErrorCode } from '../lib/errors';
 import { logger } from '../lib/logger';
+import { hasBackendAdminAccess } from '../lib/adminAccess';
 import { runDailyAggregation } from '../services/academy-aggregation';
 
 const router = Router();
@@ -36,14 +37,8 @@ async function requireAdmin(req: Request, res: Response, next: () => void): Prom
     return;
   }
 
-  // Check if user has admin role in their profile
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (error || !profile || profile.role !== 'admin') {
+  const isAdmin = await hasBackendAdminAccess(userId);
+  if (!isAdmin) {
     sendError(res, 403, ErrorCode.FORBIDDEN, 'Admin access required');
     return;
   }
