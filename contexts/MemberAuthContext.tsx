@@ -36,6 +36,7 @@ export interface MemberProfile {
   discord_roles: string[]
   discord_role_titles: Record<string, string>
   membership_tier: 'core' | 'pro' | 'executive' | null
+  role?: 'admin' | null
 }
 
 /**
@@ -48,7 +49,7 @@ export interface TabConfig {
   label: string
   icon: string
   path: string
-  required_tier: 'core' | 'pro' | 'executive'
+  required_tier: 'core' | 'pro' | 'executive' | 'admin'
   badge_text?: string | null
   badge_variant?: 'emerald' | 'champagne' | 'destructive' | null
   description?: string | null
@@ -93,6 +94,13 @@ interface MemberAuthContextValue extends MemberAuthState {
   getVisibleTabs: () => TabConfig[]
   /** V3: Get mobile-visible tab configs filtered by user's tier */
   getMobileTabs: () => TabConfig[]
+}
+
+interface AdminStatusResponse {
+  success: boolean
+  isAdmin?: boolean
+  warning?: string
+  error?: string
 }
 
 const E2E_BYPASS_AUTH_ENABLED = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === 'true'
@@ -142,6 +150,7 @@ function createE2EBypassAuthState(): MemberAuthState {
         'role-pro': 'Pro',
       },
       membership_tier: 'pro',
+      role: null,
     },
     permissions: [{
       id: 'e2e-access-ai-coach',
@@ -233,6 +242,39 @@ function buildRoleTitleMapFromPermissions(rows: any[]): Record<string, string> {
   return roleTitleMap
 }
 
+async function fetchIsAdminFromProfiles(userId: string): Promise<boolean> {
+  try {
+    const response = await fetchWithTimeout(
+      '/api/members/admin-status',
+      {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'include',
+      },
+    )
+
+    if (!response.ok) {
+      console.warn(`[MemberAuth] admin-status lookup failed for user ${userId}, defaulting isAdmin=false:`, response.status)
+      return false
+    }
+
+    const payload = await response.json().catch(() => null) as AdminStatusResponse | null
+    if (!payload || payload.success !== true || typeof payload.isAdmin !== 'boolean') {
+      console.warn(`[MemberAuth] admin-status payload invalid for user ${userId}, defaulting isAdmin=false`)
+      return false
+    }
+
+    if (payload.warning) {
+      console.warn(`[MemberAuth] admin-status warning for user ${userId}:`, payload.warning)
+    }
+
+    return payload.isAdmin
+  } catch (error) {
+    console.warn(`[MemberAuth] admin-status lookup threw for user ${userId}, defaulting isAdmin=false:`, error)
+    return false
+  }
+}
+
 function isMissingSupabaseRelationError(error: unknown, tableName: string): boolean {
   const code = typeof (error as { code?: unknown })?.code === 'string'
     ? String((error as { code: string }).code).toUpperCase()
@@ -320,6 +362,8 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   sessionRef.current = state.session
   const userRef = useRef(state.user)
   userRef.current = state.user
+  const isAdminRef = useRef(false)
+  isAdminRef.current = state.profile?.role === 'admin'
 
   // Cross-tab sync channel
   const authChannelRef = useRef<BroadcastChannel | null>(null)
@@ -372,7 +416,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   }, [roleMapping])
 
   // V3: Get allowed tabs based on membership tier + admin-configured tab_configurations
-  const getAllowedTabsForTier = useCallback((tier: 'core' | 'pro' | 'executive' | null): string[] => {
+  const getAllowedTabsForTier = useCallback((tier: 'core' | 'pro' | 'executive' | null, isAdmin = false): string[] => {
     // If we have tab configurations from the API, use them
     if (allTabConfigs.length > 0) {
       const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
@@ -381,6 +425,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       return allTabConfigs
         .filter(tab => {
           if (!tab.is_active) return false
+          if (tab.required_tier === 'admin') return isAdmin
           if (tab.is_required) return true // Always show required tabs
           const requiredLevel = tierHierarchy[tab.required_tier] || 0
           return userTierLevel >= requiredLevel
@@ -404,10 +449,14 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   }, [allTabConfigs])
 
   // Fetch allowed tabs (now based on tier, not database)
-  const fetchAllowedTabs = useCallback(async (userId: string, tier?: 'core' | 'pro' | 'executive' | null): Promise<string[]> => {
+  const fetchAllowedTabs = useCallback(async (
+    userId: string,
+    tier?: 'core' | 'pro' | 'executive' | null,
+    isAdmin?: boolean,
+  ): Promise<string[]> => {
     // If tier is provided, use it directly
     if (tier !== undefined) {
-      return getAllowedTabsForTier(tier)
+      return getAllowedTabsForTier(tier, !!isAdmin)
     }
 
     // Otherwise, this is a fallback - shouldn't happen in normal flow
@@ -486,6 +535,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       // Extract role IDs for tier determination (not names)
       const roleIds = result.roles.map((r: { id: string; name: string | null }) => r.id)
       const roleTitleMap = buildRoleTitleMapFromSyncResult(result)
+      const isAdmin = isAdminRef.current
 
       // Update state with sync results
       const profile: MemberProfile = {
@@ -497,6 +547,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         discord_roles: roleIds,
         discord_role_titles: roleTitleMap,
         membership_tier: getMembershipTierRef.current(roleIds),
+        role: isAdmin ? 'admin' : null,
       }
 
       const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
@@ -507,7 +558,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }))
 
       // Get allowed tabs based on membership tier
-      const allowedTabs = await fetchAllowedTabsRef.current(userRef.current?.id || '', profile.membership_tier)
+      const allowedTabs = await fetchAllowedTabsRef.current(userRef.current?.id || '', profile.membership_tier, isAdmin)
 
       setState(prev => ({
         ...prev,
@@ -632,6 +683,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         session,
         isAuthenticated: true,
       }))
+      const isAdmin = await fetchIsAdminFromProfiles(user.id)
 
       // Try to get cached Discord profile first
       const { data: discordProfile } = await supabase
@@ -698,6 +750,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           discord_roles: roleIds,
           discord_role_titles: roleTitleMap,
           membership_tier: getMembershipTierRef.current(roleIds),
+          role: isAdmin ? 'admin' : null,
         }
 
         const permissions: MemberPermission[] = permissionRows.map((up: any) => ({
@@ -708,7 +761,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         }))
 
         // Get allowed tabs based on membership tier
-        const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier)
+        const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier, isAdmin)
 
         setState(prev => ({
           ...prev,
@@ -763,6 +816,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             discord_roles: roleIds,
             discord_role_titles: roleTitleMap,
             membership_tier: getMembershipTierRef.current(roleIds),
+            role: isAdmin ? 'admin' : null,
           }
 
           const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
@@ -773,7 +827,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           }))
 
           // Get allowed tabs based on membership tier
-          const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier)
+          const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier, isAdmin)
 
           setState(prev => ({
             ...prev,
@@ -794,6 +848,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             discord_roles: [],
             discord_role_titles: {},
             membership_tier: null,
+            role: isAdmin ? 'admin' : null,
           }
 
           setState(prev => ({
@@ -823,6 +878,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
             discord_roles: [],
             discord_role_titles: {},
             membership_tier: null,
+            role: isAdmin ? 'admin' : null,
           }
 
           setState(prev => ({
@@ -1066,14 +1122,16 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     const userTierLevel = state.profile?.membership_tier
       ? tierHierarchy[state.profile.membership_tier] || 0
       : 0
+    const isAdmin = state.profile?.role === 'admin'
 
     return allTabConfigs.filter(tab => {
       if (!tab.is_active) return false
+      if (tab.required_tier === 'admin') return isAdmin
       if (tab.is_required) return true
       const requiredLevel = tierHierarchy[tab.required_tier] || 0
       return userTierLevel >= requiredLevel
     })
-  }, [allTabConfigs, state.profile?.membership_tier])
+  }, [allTabConfigs, state.profile?.membership_tier, state.profile?.role])
 
   const getMobileTabs = useCallback((): TabConfig[] => {
     return getVisibleTabs().filter(tab => tab.mobile_visible).slice(0, 5)

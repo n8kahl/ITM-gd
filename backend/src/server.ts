@@ -29,6 +29,7 @@ import academyGamificationRouter from './routes/academy-gamification';
 import academyActivitiesRouter from './routes/academy-activities';
 import academyAnalyticsRouter from './routes/academy-analytics';
 import academyAdminRouter from './routes/academy-admin';
+import tradeDayReplayRouter from './routes/trade-day-replay';
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
 import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers/positionTrackerWorker';
 import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/sessionCleanupWorker';
@@ -87,6 +88,8 @@ app.use(morgan('dev'));
 app.use((req: Request, res: Response, next: any) => {
   const timeout = req.path.startsWith('/api/chat')
     ? 60000
+    : req.path.startsWith('/api/trade-day-replay')
+      ? 90000
     : req.path.startsWith('/api/spx/snapshot')
       ? 75000
       : req.path.startsWith('/api/spx/contract-select')
@@ -139,6 +142,7 @@ app.use('/api/academy/gamification', academyGamificationRouter);
 app.use('/api/academy/activities', academyActivitiesRouter);
 app.use('/api/academy/analytics', academyAnalyticsRouter);
 app.use('/api/academy/admin', academyAdminRouter);
+app.use('/api/trade-day-replay', tradeDayReplayRouter);
 // Backward-compatible auth-gated endpoint retained for legacy clients and E2E checks.
 app.get('/api/journal/trades', authenticateToken, (_req: Request, res: Response) => {
   res.status(410).json({

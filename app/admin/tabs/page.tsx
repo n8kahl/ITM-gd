@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-type MembershipTier = 'core' | 'pro' | 'executive'
+type MembershipTier = 'core' | 'pro' | 'executive' | 'admin'
 type BadgeVariant = 'emerald' | 'champagne' | 'destructive' | null
 
 type TabConfig = {
@@ -341,6 +341,7 @@ export default function AdminTabsPage() {
                     <option value="core">Core</option>
                     <option value="pro">Pro</option>
                     <option value="executive">Executive</option>
+                    <option value="admin">Admin</option>
                   </select>
                 </label>
 

@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies, headers } from 'next/headers'
 import {
   extractDiscordRoleIdsFromUser,
@@ -46,6 +47,21 @@ export interface AppMetadata {
   providers?: string[]
 }
 
+function createServiceRoleSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !serviceRoleKey) {
+    return null
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
+}
+
 /**
  * Gets the current user with their app_metadata.
  * Returns null if not authenticated.
@@ -88,6 +104,22 @@ export async function isAdminUser(): Promise<boolean> {
 
   if ((user.app_metadata as AppMetadata | undefined)?.is_admin === true) {
     return true
+  }
+
+  const serviceRoleSupabase = createServiceRoleSupabaseClient()
+  if (serviceRoleSupabase) {
+    try {
+      const { data: profile } = await serviceRoleSupabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+      if ((profile as { role?: string } | null)?.role === 'admin') {
+        return true
+      }
+    } catch {
+      // Fail open to existing Discord role fallback when service-role lookup fails.
+    }
   }
 
   let roleIds = extractDiscordRoleIdsFromUser(user)

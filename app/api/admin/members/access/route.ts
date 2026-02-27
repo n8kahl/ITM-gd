@@ -302,14 +302,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const tierHierarchy: Record<MembershipTier, number> = { core: 1, pro: 2, executive: 3 }
+    const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
     const userTierLevel = resolvedTier ? tierHierarchy[resolvedTier] : 0
     const allowedTabs = Array.isArray(tabConfigs)
       ? tabConfigs
         .filter((tab: any) => {
           if (tab.is_required) return true
           const required = String(tab.required_tier || '')
-          const requiredLevel = tierHierarchy[required as MembershipTier] || 0
+          if (required === 'admin') return false
+          const requiredLevel = tierHierarchy[required] || 0
           return userTierLevel >= requiredLevel
         })
         .map((tab: any) => String(tab.tab_id))
