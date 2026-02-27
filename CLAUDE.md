@@ -1,7 +1,7 @@
 # CLAUDE.md - TradeITM Production Codex
 
 > **AI-Maintained:** This project is built and maintained by Claude Code with minimal developer intervention.
-> **Last Updated:** 2026-02-23
+> **Last Updated:** 2026-02-27
 
 ---
 
@@ -474,7 +474,156 @@ These defaults apply to SPX-related workstreams unless explicitly overridden:
 
 ---
 
-## 11. Update Log
+## 11. Gold Standard: Incremental Development & QA Process
+
+This is the proven process for building, testing, and hardening any feature surface. It separates **authoring** from **validation** across sessions to ensure clean, reproducible results.
+
+### 11.1 Process Overview
+
+The workflow has three distinct phases, each in its own session:
+
+1. **Session A — Plan & Author:** Explore the surface, identify gaps, design the test matrix, write all code/tests.
+2. **Session B — Validate & Fix:** Run validation gates (tsc, eslint, playwright), fix selector issues iteratively.
+3. **Session C — Harden & Commit:** Final green run, commit, update docs.
+
+Separating authoring from validation prevents resource exhaustion and ensures each phase gets a clean environment.
+
+### 11.2 Session A: Plan & Author
+
+**Step 1 — Enter Plan Mode and explore the surface.**
+Read every component, hook, API route, and type file for the target feature. Map the full surface area: what exists, what's tested, what's not.
+
+**Step 2 — Identify coverage gaps.**
+Compare existing E2E tests against the component/route inventory. Categorize gaps by priority: Critical (core user journeys with zero coverage), High (important interactions), Medium (edge cases, a11y).
+
+**Step 3 — Design the test matrix.**
+Produce a phased plan document with exact spec file names, test counts per file, and mock requirements. Example structure:
+
+```
+Phase 1: Mock Infrastructure (helpers file)
+Phase 2: Critical Coverage (3 spec files, ~19 tests)
+Phase 3: Detail & Navigation (3 spec files, ~16 tests)
+Phase 4: Edge Cases & Pagination (2 spec files, ~12 tests)
+Phase 5: Accessibility (1 spec file, ~4 tests)
+```
+
+**Step 4 — Build mock infrastructure first.**
+Create or expand the `*-test-helpers.ts` file with all factories and setup functions before writing any spec files. This ensures every spec file imports from a single, consistent source.
+
+**Step 5 — Write spec files in priority order.**
+Use sub-agents for parallel creation when files are independent. Each spec file follows the project's established patterns:
+
+```typescript
+test.describe.configure({ mode: 'serial' })
+test.beforeEach(async ({ page }) => {
+  test.setTimeout(60_000)
+  await enableBypass(page)
+  await setupShellMocks(page)
+  await setupFeatureMocks(page)
+})
+```
+
+**Step 6 — Verify imports and exports.**
+Before ending the session, run a read-only verification pass across all new files to confirm every import resolves and every exported helper is actually used.
+
+### 11.3 Session B: Validate & Fix
+
+**Step 1 — Type check.**
+```bash
+pnpm exec tsc --noEmit
+```
+Fix any TypeScript errors in the new files. Common issues: missing type exports, incorrect mock shapes, import paths.
+
+**Step 2 — Lint.**
+```bash
+pnpm exec eslint e2e/specs/members/<feature>*.spec.ts e2e/specs/members/<feature>-test-helpers.ts
+```
+Fix lint errors. Common issues: unused imports, missing return types, formatting.
+
+**Step 3 — Run Playwright tests.**
+```bash
+pnpm exec playwright test e2e/specs/members/<feature>*.spec.ts --project=chromium --workers=1
+```
+Expect some failures on the first run — this is normal. The iteration loop is:
+
+1. **Read the failure output.** Identify the failing selector or assertion.
+2. **Check the actual component.** Read the source file to find the correct selector (class name, aria-label, role, text content).
+3. **Update the spec file.** Fix the selector to match the actual DOM.
+4. **Re-run the single failing spec.** `pnpm exec playwright test <file> --project=chromium --workers=1 -g "test name"`
+5. **Repeat** until all tests pass.
+
+**Step 4 — Add test IDs if needed.**
+If a component's DOM is ambiguous (multiple elements match a selector), add `data-testid` attributes at the component boundary. This is the only time production code should change during QA.
+
+### 11.4 Session C: Harden & Commit
+
+**Step 1 — Full green run.**
+```bash
+pnpm exec playwright test e2e/specs/members/<feature>*.spec.ts --project=chromium --workers=1
+```
+All tests must pass. No skips, no flaky re-runs.
+
+**Step 2 — Run broader regression.**
+Ensure the new tests haven't broken existing tests:
+```bash
+pnpm exec playwright test e2e/specs/members/ --project=chromium --workers=1
+```
+
+**Step 3 — Commit with scope.**
+Stage only the new/modified E2E files and any `data-testid` additions to components:
+```bash
+git add e2e/specs/members/<feature>*.spec.ts e2e/specs/members/<feature>-test-helpers.ts
+git add <any components with new data-testid attributes>
+git commit -m "test(<feature>): add E2E coverage — <N> tests across <M> spec files"
+```
+
+**Step 4 — Update documentation.**
+Update the feature's execution spec or release notes with the new test inventory.
+
+### 11.5 Test File Conventions
+
+| Convention | Pattern |
+|------------|---------|
+| Helpers file | `<feature>-test-helpers.ts` |
+| Spec naming | `<feature>-<aspect>.spec.ts` (e.g., `journal-analytics.spec.ts`) |
+| Mock factories | `createMock<Entity>(overrides?)` returns full object with sensible defaults |
+| Setup functions | `setup<Feature>Mock(page, data?)` registers `page.route()` handlers |
+| Bundle function | `setupAll<Feature>Mocks(page)` calls all individual setup functions |
+| Selectors | Prefer `getByRole`, `getByLabel`, `getByText`; fall back to `data-testid` |
+| Assertions | Use `expect.poll(() => ..., { timeout: 10_000 })` for async state |
+| Timeouts | `test.setTimeout(60_000)` in every `beforeEach` |
+
+### 11.6 Priority Tiers for Coverage Gaps
+
+When auditing a new surface, categorize gaps into tiers to sequence work:
+
+| Tier | Description | Examples |
+|------|-------------|---------|
+| **Critical** | Core user journeys with zero E2E coverage | Page loads, primary CRUD, navigation, auth |
+| **High** | Important interactions users rely on daily | Detail sheets, filters, real-time updates |
+| **Medium** | Edge cases, advanced features, polish | Pagination, combined filters, accessibility |
+
+Always complete Critical tier before starting High. Always complete High before Medium. This ensures maximum value from partial progress if a session runs out of context.
+
+### 11.7 When to Apply This Process
+
+This process is required for:
+- E2E QA audits of any member-facing feature surface
+- Major feature additions with multiple components
+- Recovery/hardening sprints after production regressions
+- Any workstream touching more than 5 files
+
+For smaller changes (single component fix, isolated bug), the standard slice cadence in Section 6.4 is sufficient.
+
+---
+
+## 12. Update Log
+
+### 2026-02-27: Gold Standard Development Process
+- Added Section 11: Incremental Development & QA Process.
+- Documented three-session workflow (Author → Validate → Harden).
+- Added test file conventions, priority tiers, and selector iteration loop.
+- Proven across SPX Command Center (~35 tests), Trade Journal (~49 tests), and Dashboard (~40 tests) E2E audits.
 
 ### 2026-02-23: CLAUDE.md Upgrade
 - Added multi-agent orchestration guidelines (Section 7).

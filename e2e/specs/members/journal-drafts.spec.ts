@@ -37,9 +37,9 @@ test.describe('DraftNotification Component', () => {
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     // Verify draft banner is visible with count
-    const draftBanner = page.locator('text=/\\d+ unsaved draft\\(s\\)/')
+    const draftBanner = page.getByText(/\d+\s+pending draft/i)
     await expect(draftBanner).toBeVisible()
-    await expect(page.getByText(/1 unsaved draft/)).toBeVisible()
+    await expect(page.getByText(/1\s+pending draft/i)).toBeVisible()
   })
 
   test('shows latest draft symbol in banner', async ({ page }) => {
@@ -61,9 +61,9 @@ test.describe('DraftNotification Component', () => {
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     // Verify banner shows NVDA symbol
-    const draftBanner = page.locator('text=/unsaved draft.*NVDA/')
+    const draftBanner = page.getByText(/pending draft.*NVDA/i)
     await expect(draftBanner).toBeVisible({ timeout: 5000 })
-    await expect(page.getByText(/NVDA/)).toBeVisible()
+    await expect(draftBanner).toContainText('NVDA')
   })
 
   test('dismisses draft banner', async ({ page }) => {
@@ -85,16 +85,16 @@ test.describe('DraftNotification Component', () => {
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     // Verify banner is visible
-    const draftBanner = page.locator('text=/unsaved draft/')
+    const draftBanner = page.getByText(/pending draft/i)
     await expect(draftBanner).toBeVisible()
 
     // Find and click dismiss button (X icon or dismiss button)
-    const dismissButton = page.locator('button[aria-label="Dismiss"], button:has-text("×"), [role="button"]:has-text("×")').first()
+    const dismissButton = page.locator('button[aria-label="Dismiss draft notification"], button:has-text("×"), [role="button"]:has-text("×")').first()
     if (await dismissButton.isVisible()) {
       await dismissButton.click()
     } else {
       // Alternative: look for close icon within the banner
-      const banner = page.locator('text=/unsaved draft/').locator('..')
+      const banner = page.getByText(/pending draft/i).locator('..')
       const closeBtn = banner.locator('button').last()
       await closeBtn.click()
     }
@@ -120,7 +120,7 @@ test.describe('DraftNotification Component', () => {
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     // Verify no draft banner appears
-    const draftBanner = page.locator('text=/unsaved draft/')
+    const draftBanner = page.getByText(/pending draft/i)
     await expect(draftBanner).not.toBeVisible()
 
     // Verify the entry is displayed instead

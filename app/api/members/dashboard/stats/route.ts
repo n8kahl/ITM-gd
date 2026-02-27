@@ -13,6 +13,59 @@ interface DashboardStats {
   trades_last_month: number
 }
 
+function toNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeDashboardStats(value: unknown): DashboardStats | null {
+  if (!isRecord(value)) return null
+
+  const winRate = toNumber(value.win_rate)
+  const pnlMtd = toNumber(value.pnl_mtd)
+  const pnlChangePct = toNumber(value.pnl_change_pct)
+  const currentStreak = toNumber(value.current_streak)
+  const bestStreak = toNumber(value.best_streak)
+  const tradesMtd = toNumber(value.trades_mtd)
+  const tradesLastMonth = toNumber(value.trades_last_month)
+
+  if (
+    winRate == null
+    || pnlMtd == null
+    || pnlChangePct == null
+    || currentStreak == null
+    || bestStreak == null
+    || tradesMtd == null
+    || tradesLastMonth == null
+  ) {
+    return null
+  }
+
+  return {
+    win_rate: round(winRate, 1),
+    pnl_mtd: round(pnlMtd),
+    pnl_change_pct: round(pnlChangePct, 1),
+    current_streak: Math.max(0, Math.trunc(currentStreak)),
+    streak_type: value.streak_type === 'loss' ? 'loss' : 'win',
+    best_streak: Math.max(0, Math.trunc(bestStreak)),
+    avg_ai_grade: typeof value.avg_ai_grade === 'string' ? value.avg_ai_grade : null,
+    trades_mtd: Math.max(0, Math.trunc(tradesMtd)),
+    trades_last_month: Math.max(0, Math.trunc(tradesLastMonth)),
+  }
+}
+
 function round(value: number, decimals: number = 2): number {
   const factor = 10 ** decimals
   return Math.round(value * factor) / factor
@@ -81,12 +134,27 @@ async function buildFallbackStats(
   const prevMonthEnd = new Date(monthStart.getTime() - 1)
   const fetchStart = periodStart < prevMonthStart ? periodStart : prevMonthStart
 
-  const { data: entries, error } = await supabase
+  let { data: entries, error } = await supabase
     .from('journal_entries')
     .select('trade_date, pnl, is_winner, ai_analysis, created_at')
     .eq('user_id', userId)
+    .eq('is_draft', false)
+    .neq('symbol', 'PENDING')
     .gte('trade_date', fetchStart.toISOString())
     .order('trade_date', { ascending: false })
+
+  if (error && typeof error.message === 'string' && error.message.includes('is_draft')) {
+    const retry = await supabase
+      .from('journal_entries')
+      .select('trade_date, pnl, is_winner, ai_analysis, created_at')
+      .eq('user_id', userId)
+      .neq('symbol', 'PENDING')
+      .gte('trade_date', fetchStart.toISOString())
+      .order('trade_date', { ascending: false })
+
+    entries = retry.data
+    error = retry.error
+  }
 
   if (error) throw error
 
@@ -111,14 +179,14 @@ async function buildFallbackStats(
 
   const { data: streakRow } = await supabase
     .from('journal_streaks')
-    .select('current_streak, longest_streak, total_winners, total_losers')
+    .select('current_streak, longest_streak')
     .eq('user_id', userId)
     .single()
 
   // Determine streak type from recent trades (not cumulative totals)
-  const recentTrades = monthRows.filter((row: any) => row.is_winner != null)
+  const recentTrades = rows.filter((row: any) => row.is_winner != null)
   const lastTrade = recentTrades[0] // Already sorted DESC
-  const streakType: 'win' | 'loss' = lastTrade?.is_winner === true ? 'win' : 'loss'
+  const streakType: 'win' | 'loss' = lastTrade?.is_winner === false ? 'loss' : 'win'
 
   return {
     win_rate: round(winRate, 1),
@@ -160,10 +228,15 @@ export async function GET(request: NextRequest) {
     })
 
     if (!error && data) {
-      return NextResponse.json({ success: true, data })
+      const normalized = normalizeDashboardStats(data)
+      if (normalized) {
+        return NextResponse.json({ success: true, data: normalized })
+      }
+
+      console.warn('get_dashboard_stats returned legacy/incompatible shape; using fallback')
     }
 
-    // Fallback path for environments where RPC migrations are missing.
+    // Fallback path for environments where RPC migrations are missing or legacy.
     const fallbackData = await buildFallbackStats(supabase, user.id, period)
     return NextResponse.json({ success: true, data: fallbackData, fallback: true })
   } catch (error) {

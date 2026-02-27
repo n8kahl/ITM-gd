@@ -91,14 +91,14 @@ test.describe('Entry Detail Sheet', () => {
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
     // Verify all text fields are visible
-    await expect(page.locator('text=Breakout Strategy')).toBeVisible()
-    await expect(page.locator('text=Found support at 148')).toBeVisible()
-    await expect(page.locator('text=Entered on break of 150.50')).toBeVisible()
-    await expect(page.locator('text=Need to wait for volume confirmation')).toBeVisible()
+    await expect(dialog.getByText('Breakout Strategy')).toBeVisible()
+    await expect(dialog.getByText('Found support at 148')).toBeVisible()
+    await expect(dialog.getByText('Entered on break of 150.50')).toBeVisible()
+    await expect(dialog.getByText('Need to wait for volume confirmation')).toBeVisible()
 
     // Verify tags are visible
-    await expect(page.locator('text=breakout')).toBeVisible()
-    await expect(page.locator('text=technical')).toBeVisible()
+    await expect(dialog.getByText('breakout', { exact: true })).toBeVisible()
+    await expect(dialog.getByText('technical', { exact: true })).toBeVisible()
   })
 
   test('shows Share button only for closed trades with P&L', async ({ page }) => {

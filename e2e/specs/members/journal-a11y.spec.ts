@@ -114,7 +114,12 @@ test.describe('Trade Journal Accessibility', () => {
 
     // Switch to cards view and open detail
     await page.getByLabel('View').selectOption('cards')
-    await page.getByLabel('Open SPY trade details').click()
+    const spyCardOpen = page
+      .locator('article')
+      .filter({ has: page.getByRole('heading', { name: 'SPY' }) })
+      .locator('button')
+      .first()
+    await spyCardOpen.click()
 
     // Dialog semantics
     const dialog = page.locator('[role="dialog"]')

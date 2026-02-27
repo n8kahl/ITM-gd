@@ -113,9 +113,25 @@ export async function POST(request: NextRequest) {
       .select('id')
       .single()
 
+    let importId: string | null = importRecord?.id ?? null
+
     if (importError || !importRecord) {
-      console.error('Failed to create import history:', importError)
-      return errorResponse('Failed to initialize import history', 500)
+      const recoverableImportHistoryCodes = new Set(['42P01', '42501', '42703'])
+      const code = typeof importError?.code === 'string' ? importError.code : null
+      const isRecoverableHistoryFailure = code != null && recoverableImportHistoryCodes.has(code)
+
+      if (!isRecoverableHistoryFailure) {
+        console.error('Failed to create import history:', importError)
+        return errorResponse('Failed to initialize import history', 500)
+      }
+
+      console.warn('Import history unavailable, continuing without history tracking', {
+        code: importError?.code,
+        message: importError?.message,
+        details: importError?.details,
+        hint: importError?.hint,
+      })
+      importId = null
     }
 
     let parseErrors = 0
@@ -183,14 +199,14 @@ export async function POST(request: NextRequest) {
         expiration_date: normalized.expirationDate,
         is_open: normalized.exitPrice == null,
         tags: [],
-        import_id: importRecord.id,
+        import_id: importId,
       })
 
       rowsToUpsert.push({
         ...base,
         id,
         user_id: user.id,
-        import_id: importRecord.id,
+        import_id: importId,
       })
     }
 
@@ -215,20 +231,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await supabase
-      .from('import_history')
-      .update({
-        inserted,
-        duplicates,
-        errors: parseErrors,
-      })
-      .eq('id', importRecord.id)
+    if (importId) {
+      await supabase
+        .from('import_history')
+        .update({
+          inserted,
+          duplicates,
+          errors: parseErrors,
+        })
+        .eq('id', importId)
+    }
 
     return successResponse({
-      importId: importRecord.id,
+      importId,
       inserted,
       duplicates,
       errors: parseErrors,
+      historyTracked: Boolean(importId),
     })
   } catch (error) {
     if (error instanceof ZodError) {
