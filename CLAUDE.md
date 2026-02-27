@@ -258,6 +258,104 @@ This project is designed for autonomous multi-agent development. The following g
 | **Backend Agent** | Express routes, services, middleware, backend tests | Read, Write, Edit, Bash (tsc/test), Glob, Grep | sonnet |
 | **SPX Engine Agent** | `lib/spx/` modules, decision engine, optimizer, replay | Read, Write, Edit, Bash (vitest), Glob, Grep | opus |
 | **Database Agent** | Supabase migrations, RLS policies, edge functions, SQL | Read, Write, Supabase MCP tools | sonnet |
+
+---
+
+## 8. Prompt-Driven Production Loop (Replicable Playbook)
+
+Use this when the operator is non-technical and wants safe, production-grade delivery via short Codex sessions.
+
+### 8.1 Operating Model
+1. Work in thin slices. One prompt = one scoped change with explicit boundaries.
+2. Always require validation command output before moving to next slice.
+3. Keep a running "done vs remaining" list to avoid hidden drift.
+4. Keep backend and frontend contracts explicit (status codes, payload shapes, units).
+5. Prefer fail-closed behavior for auth and security checks.
+
+### 8.2 Session Contract (What to Ask For Every Time)
+Every implementation prompt must require this exact response format:
+1. `Changed files`
+2. `Command outputs (pass/fail)`
+3. `Risks/notes`
+4. `Suggested commit message`
+
+If any section is missing, do not advance to next slice.
+
+### 8.3 Prompt Template (Copy/Paste)
+```md
+Implement <slice name>.
+
+Scope:
+- <absolute file path 1>
+- <absolute file path 2>
+
+Requirements:
+1) <requirement>
+2) <requirement>
+3) No unrelated changes.
+
+Validation:
+- <exact command 1>
+- <exact command 2>
+
+Return:
+- changed files
+- command outputs (pass/fail)
+- risks/notes
+- suggested commit message
+```
+
+### 8.4 Slice Ordering Pattern (Recommended)
+1. Data contracts and canonical types.
+2. Auth and route skeletons.
+3. Core backend pipeline.
+4. Proxy/transport layer.
+5. Frontend shell + health preflight.
+6. UI feature surfaces (charts, panels, controls).
+7. Cross-surface consistency (units, limits, status mapping).
+8. Test hardening (unit + route tests).
+9. Auth alignment and operational drift mitigation.
+10. Release evidence + runbook updates.
+
+### 8.5 Hard Gates Before Moving Forward
+1. Typecheck passes in every touched package (`root` and `backend` as needed).
+2. Lint passes for touched files.
+3. New behavior has at least one targeted test for non-happy-path.
+4. Error handling is deterministic and user-facing where appropriate.
+5. No hidden contract mismatch (units, enum values, response schema).
+
+### 8.6 Common Failure Modes to Actively Prevent
+1. Frontend/backend unit mismatch (percent vs decimal, timestamp zone assumptions).
+2. Route/status mismatch (e.g., 422 vs 502 vs 500).
+3. Admin gate drift between page and API layers.
+4. DB constraint drift vs TypeScript unions.
+5. "Config constant" mistaken as enforced runtime limiter.
+6. Tests placed outside discovery pattern (`__tests__` for Jest in backend).
+
+### 8.7 Review Rhythm (One-Line Status Rule)
+After each completed slice, produce:
+1. What changed.
+2. What remains (highest-risk item next).
+3. Next exact prompt.
+
+### 8.8 Safety Rules for Non-Developers Running Sessions
+1. Never accept "done" without validation command output.
+2. Never merge slices that modify out-of-scope files.
+3. Never skip auth/error-path tests for privileged routes.
+4. Prefer additive migrations and fail-closed auth behavior.
+5. Keep prompts explicit: file paths, commands, and "no unrelated changes".
+
+### 8.9 Release Checklist (Prompt-Run Projects)
+1. Route contracts documented and tested.
+2. Admin/auth consistency documented with operational runbook note.
+3. Timeouts and size limits enforced both server and UI.
+4. External dependency failures mapped to explicit status codes.
+5. At least one route test for each privileged endpoint: 401, 403, and happy path.
+6. Final summary includes:
+   - implemented slices,
+   - residual risks,
+   - rollback points,
+   - suggested commit grouping.
 | **QA Agent** | E2E tests, integration tests, a11y audits, validation | Read, Bash (playwright/vitest), Glob, Grep | sonnet |
 | **Docs Agent** | Spec authoring, release notes, runbooks, tracker updates | Read, Write, Edit, Glob | haiku |
 | **Explorer Agent** | Codebase investigation, drift analysis, file discovery | Read, Glob, Grep (read-only) | haiku |
