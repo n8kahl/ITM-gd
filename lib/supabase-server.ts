@@ -87,55 +87,64 @@ export async function getServerUser() {
  * 2) the user has the privileged Discord admin role.
  */
 export async function isAdminUser(): Promise<boolean> {
-  const e2eBypassEnabled = process.env.E2E_BYPASS_AUTH === 'true'
-  const e2eBypassAllowed = process.env.NODE_ENV !== 'production' && e2eBypassEnabled
-  if (e2eBypassAllowed) {
-    const headerStore = await headers()
-    if (headerStore.get('x-e2e-bypass-auth') === '1') {
+  try {
+    const e2eBypassEnabled = process.env.E2E_BYPASS_AUTH === 'true'
+    const e2eBypassAllowed = process.env.NODE_ENV !== 'production' && e2eBypassEnabled
+    if (e2eBypassAllowed) {
+      try {
+        const headerStore = await headers()
+        if (headerStore.get('x-e2e-bypass-auth') === '1') {
+          return true
+        }
+      } catch {
+        // Continue with standard auth checks when request headers are unavailable.
+      }
+    }
+
+    const supabase = await createServerSupabaseClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) {
+      return false
+    }
+
+    if ((user.app_metadata as AppMetadata | undefined)?.is_admin === true) {
       return true
     }
-  }
 
-  const supabase = await createServerSupabaseClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) {
-    return false
-  }
+    const serviceRoleSupabase = createServiceRoleSupabaseClient()
+    if (serviceRoleSupabase) {
+      try {
+        const { data: profile } = await serviceRoleSupabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle()
+        if ((profile as { role?: string } | null)?.role === 'admin') {
+          return true
+        }
+      } catch {
+        // Fail open to existing Discord role fallback when service-role lookup fails.
+      }
+    }
 
-  if ((user.app_metadata as AppMetadata | undefined)?.is_admin === true) {
-    return true
-  }
-
-  const serviceRoleSupabase = createServiceRoleSupabaseClient()
-  if (serviceRoleSupabase) {
+    let roleIds = extractDiscordRoleIdsFromUser(user)
     try {
-      const { data: profile } = await serviceRoleSupabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
+      const { data: profile } = await supabase
+        .from('user_discord_profiles')
+        .select('discord_roles')
+        .eq('user_id', user.id)
         .maybeSingle()
-      if ((profile as { role?: string } | null)?.role === 'admin') {
-        return true
+      // Treat cached Discord profile roles as source-of-truth when available.
+      if (profile) {
+        roleIds = normalizeDiscordRoleIds(profile.discord_roles)
       }
     } catch {
-      // Fail open to existing Discord role fallback when service-role lookup fails.
+      // Fall back to JWT/user metadata claims when profile lookup fails.
     }
-  }
 
-  let roleIds = extractDiscordRoleIdsFromUser(user)
-  try {
-    const { data: profile } = await supabase
-      .from('user_discord_profiles')
-      .select('discord_roles')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    // Treat cached Discord profile roles as source-of-truth when available.
-    if (profile) {
-      roleIds = normalizeDiscordRoleIds(profile.discord_roles)
-    }
+    return hasAdminRoleAccess(roleIds)
   } catch {
-    // Fall back to JWT/user metadata claims when profile lookup fails.
+    // Admin resolution must fail closed for callers relying on a boolean.
+    return false
   }
-
-  return hasAdminRoleAccess(roleIds)
 }

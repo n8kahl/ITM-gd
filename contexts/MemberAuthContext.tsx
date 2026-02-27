@@ -108,6 +108,37 @@ const E2E_BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001'
 const E2E_BYPASS_SHARED_SECRET = process.env.NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET || ''
 const DISCORD_GUILD_ROLES_MISSING_CACHE_KEY = 'member_auth:discord_guild_roles_missing_at_ms'
 const DISCORD_GUILD_ROLES_MISSING_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const ADMIN_TRADE_DAY_REPLAY_TAB_ID = 'trade-day-replay'
+const ADMIN_TRADE_DAY_REPLAY_TAB_CONFIG: TabConfig = {
+  id: ADMIN_TRADE_DAY_REPLAY_TAB_ID,
+  tab_id: ADMIN_TRADE_DAY_REPLAY_TAB_ID,
+  label: 'Trade Day Replay',
+  icon: 'Play',
+  path: '/members/trade-day-replay',
+  required_tier: 'admin',
+  badge_text: null,
+  badge_variant: null,
+  description: 'Replay and analyze a full trade day from transcript + market data',
+  mobile_visible: true,
+  sort_order: 8,
+  is_required: false,
+  is_active: true,
+}
+
+function ensureAdminReplayTabIds(tabIds: string[], isAdmin: boolean): string[] {
+  if (!isAdmin || tabIds.includes(ADMIN_TRADE_DAY_REPLAY_TAB_ID)) {
+    return tabIds
+  }
+  return [...tabIds, ADMIN_TRADE_DAY_REPLAY_TAB_ID]
+}
+
+function ensureAdminReplayTabConfig(tabs: TabConfig[], isAdmin: boolean): TabConfig[] {
+  if (!isAdmin || tabs.some((tab) => tab.tab_id === ADMIN_TRADE_DAY_REPLAY_TAB_ID)) {
+    return tabs
+  }
+
+  return [...tabs, ADMIN_TRADE_DAY_REPLAY_TAB_CONFIG].sort((a, b) => a.sort_order - b.sort_order)
+}
 
 function createE2EBypassAuthState(): MemberAuthState {
   const nowIso = new Date().toISOString()
@@ -422,7 +453,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
       const userTierLevel = tier ? tierHierarchy[tier] || 0 : 0
 
-      return allTabConfigs
+      const allowedTabIds = allTabConfigs
         .filter(tab => {
           if (!tab.is_active) return false
           if (tab.required_tier === 'admin') return isAdmin
@@ -431,21 +462,29 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
           return userTierLevel >= requiredLevel
         })
         .map(tab => tab.tab_id)
+
+      return ensureAdminReplayTabIds(allowedTabIds, isAdmin)
     }
 
     // Fallback: hardcoded tabs if API not yet loaded
-    if (!tier) return ['dashboard', 'profile']
+    if (!tier) return ensureAdminReplayTabIds(['dashboard', 'profile'], isAdmin)
 
+    let fallbackTabs: string[]
     switch (tier) {
       case 'executive':
-        return ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'studio', 'profile']
+        fallbackTabs = ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'studio', 'profile']
+        break
       case 'pro':
-        return ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'profile']
+        fallbackTabs = ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'profile']
+        break
       case 'core':
-        return ['dashboard', 'journal', 'social', 'profile']
+        fallbackTabs = ['dashboard', 'journal', 'social', 'profile']
+        break
       default:
-        return ['dashboard', 'profile']
+        fallbackTabs = ['dashboard', 'profile']
     }
+
+    return ensureAdminReplayTabIds(fallbackTabs, isAdmin)
   }, [allTabConfigs])
 
   // Fetch allowed tabs (now based on tier, not database)
@@ -1124,13 +1163,15 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       : 0
     const isAdmin = state.profile?.role === 'admin'
 
-    return allTabConfigs.filter(tab => {
+    const visibleTabs = allTabConfigs.filter(tab => {
       if (!tab.is_active) return false
       if (tab.required_tier === 'admin') return isAdmin
       if (tab.is_required) return true
       const requiredLevel = tierHierarchy[tab.required_tier] || 0
       return userTierLevel >= requiredLevel
     })
+
+    return ensureAdminReplayTabConfig(visibleTabs, isAdmin)
   }, [allTabConfigs, state.profile?.membership_tier, state.profile?.role])
 
   const getMobileTabs = useCallback((): TabConfig[] => {
