@@ -117,6 +117,24 @@ function parseModelJson(content: string): unknown {
   }
 }
 
+function summarizeTradeValidationIssues(
+  issues: Array<{ path: string; message: string }>,
+): string {
+  if (!issues.length) {
+    return 'Parsed trades failed replay validation checks.'
+  }
+
+  const previewLimit = 3
+  const preview = issues
+    .slice(0, previewLimit)
+    .map((issue) => `${issue.path}: ${issue.message}`)
+    .join(' | ')
+  const remaining = issues.length - previewLimit
+  const remainingSuffix = remaining > 0 ? ` (+${remaining} more)` : ''
+
+  return `Parsed trades failed replay validation checks. ${preview}${remainingSuffix}`
+}
+
 function errorDetails(error: unknown): Record<string, unknown> {
   if (!(error instanceof Error)) {
     return { message: String(error) };
@@ -193,7 +211,7 @@ export async function parseTranscriptToTrades(params: ParseTranscriptParams): Pr
         if (error instanceof TradeValidationError) {
           throw new TranscriptParserError(
             'TRADE_VALIDATION_FAILED',
-            'Parsed trades failed replay validation checks.',
+            summarizeTradeValidationIssues(error.issues),
             { issues: error.issues }
           );
         }
