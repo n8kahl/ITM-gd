@@ -8,11 +8,22 @@ import {
   type SPXReplayEngine,
   type SPXReplaySpeed,
 } from '@/lib/spx/replay-engine'
-import { createSeriesMarkers, type IChartApi, type ISeriesApi, type IPriceLine, type ISeriesMarkersPluginApi } from 'lightweight-charts'
+import {
+  createSeriesMarkers,
+  type IChartApi,
+  type IPriceLine,
+  type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type Time,
+} from 'lightweight-charts'
 import type { IndicatorConfig } from '@/components/ai-coach/chart-indicators'
 import type { ChartBar, EnrichedTrade, PriorDayBar } from '@/lib/trade-day-replay/types'
 import { buildTradeMarkers, buildStopPriceLines } from './trade-chart-markers'
-import { IndicatorToolbar } from './indicator-toolbar'
+import {
+  IndicatorToolbar,
+  type ReplayIndicatorKey,
+  type ReplayLevelVisibility,
+} from './indicator-toolbar'
 import { ReplayControls } from './replay-controls'
 
 interface ReplayChartProps {
@@ -34,6 +45,11 @@ const DEFAULT_REPLAY_INDICATORS: IndicatorConfig = {
   openingRange: true,
   rsi: false,
   macd: false,
+}
+
+const DEFAULT_LEVEL_VISIBILITY: ReplayLevelVisibility = {
+  priorDayLevels: true,
+  openingRange: true,
 }
 
 function parseEpochSeconds(value: string | null | undefined): number | null {
@@ -71,11 +87,12 @@ function ReplayChartPanel({ replayEngine, trades, priorDayBar }: ReplayChartPane
   const [cursorIndex, setCursorIndex] = useState<number>(replayEngine.firstCursorIndex)
   const [selectedTradeIndex, setSelectedTradeIndex] = useState<number | null>(null)
   const [indicators, setIndicators] = useState<IndicatorConfig>(DEFAULT_REPLAY_INDICATORS)
+  const [levels, setLevels] = useState<ReplayLevelVisibility>(DEFAULT_LEVEL_VISIBILITY)
 
   // Chart API refs for native markers
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
-  const markersPluginRef = useRef<ISeriesMarkersPluginApi<number> | null>(null)
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const priceLinesRef = useRef<IPriceLine[]>([])
 
   const handleChartReady = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
@@ -83,12 +100,16 @@ function ReplayChartPanel({ replayEngine, trades, priorDayBar }: ReplayChartPane
     seriesRef.current = series
     // Create markers plugin once
     try {
-      markersPluginRef.current = createSeriesMarkers(series) as ISeriesMarkersPluginApi<number>
+      markersPluginRef.current = createSeriesMarkers(series)
     } catch { /* noop if API unavailable */ }
   }, [])
 
-  const handleToggleIndicator = useCallback((key: keyof IndicatorConfig) => {
+  const handleToggleIndicator = useCallback((key: ReplayIndicatorKey) => {
     setIndicators((prev) => ({ ...prev, [key]: !prev[key] }))
+  }, [])
+
+  const handleToggleLevel = useCallback((key: keyof ReplayLevelVisibility) => {
+    setLevels((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
   const clampCursorIndex = useCallback((nextCursorIndex: number): number => (
@@ -120,6 +141,10 @@ function ReplayChartPanel({ replayEngine, trades, priorDayBar }: ReplayChartPane
   const frame = useMemo(
     () => replayEngine.getFrame(cursorIndex),
     [cursorIndex, replayEngine],
+  )
+  const chartIndicators = useMemo(
+    () => ({ ...indicators, openingRange: levels.openingRange }),
+    [indicators, levels.openingRange],
   )
   const hasBars = replayEngine.bars.length > 0
   const visibleBars = frame.visibleBars
@@ -153,7 +178,7 @@ function ReplayChartPanel({ replayEngine, trades, priorDayBar }: ReplayChartPane
     }
 
     // Create PDH/PDL price lines
-    if (priorDayBar) {
+    if (priorDayBar && levels.priorDayLevels) {
       try {
         const pdhLine = series.createPriceLine({
           price: priorDayBar.high,
@@ -176,7 +201,7 @@ function ReplayChartPanel({ replayEngine, trades, priorDayBar }: ReplayChartPane
         priceLinesRef.current.push(pdlLine)
       } catch { /* noop */ }
     }
-  }, [visibleBars, trades, selectedTradeIndex, priorDayBar])
+  }, [visibleBars, trades, selectedTradeIndex, priorDayBar, levels.priorDayLevels])
 
   const handleTogglePlay = useCallback(() => {
     if (!hasBars) return
@@ -235,7 +260,13 @@ function ReplayChartPanel({ replayEngine, trades, priorDayBar }: ReplayChartPane
         onJumpToTrade={handleJumpToTrade}
       />
 
-      <IndicatorToolbar indicators={indicators} onToggle={handleToggleIndicator} />
+      <IndicatorToolbar
+        indicators={indicators}
+        levels={levels}
+        priorDayAvailable={Boolean(priorDayBar)}
+        onToggleIndicator={handleToggleIndicator}
+        onToggleLevel={handleToggleLevel}
+      />
 
       <div className="relative h-[440px] overflow-hidden rounded-lg border border-white/10 bg-[#0a0f0d]">
         {hasBars ? (
@@ -243,7 +274,7 @@ function ReplayChartPanel({ replayEngine, trades, priorDayBar }: ReplayChartPane
             bars={visibleBars}
             symbol="SPX"
             timeframe="1m"
-            indicators={indicators}
+            indicators={chartIndicators}
             futureOffsetBars={0}
             onChartReady={handleChartReady}
           />

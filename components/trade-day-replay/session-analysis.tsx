@@ -214,6 +214,7 @@ export function SessionAnalysis({ payload }: SessionAnalysisProps) {
               <TradeCard
                 key={`${trade.tradeIndex}-${trade.entryTimestamp}-${trade.contract?.strike ?? 'strike'}`}
                 trade={trade}
+                bars={payload.bars}
               />
             ))}
           </div>

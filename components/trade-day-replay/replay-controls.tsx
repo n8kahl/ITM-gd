@@ -85,7 +85,7 @@ export function ReplayControls({
 
   return (
     <div className="rounded-lg border border-white/10 bg-black/20 p-3 lg:p-4">
-      <div className="grid gap-3 lg:grid-cols-[auto_140px_1fr_220px] lg:items-center">
+      <div className="grid gap-3 lg:grid-cols-[auto_140px_minmax(0,1fr)_220px] lg:items-center">
         <Button
           type="button"
           size="sm"
@@ -108,7 +108,7 @@ export function ReplayControls({
           }}
           disabled={disabled}
         >
-          <SelectTrigger aria-label="Replay speed">
+          <SelectTrigger aria-label="Replay speed" className="w-full">
             <SelectValue placeholder="Speed" />
           </SelectTrigger>
           <SelectContent>
@@ -118,7 +118,7 @@ export function ReplayControls({
           </SelectContent>
         </Select>
 
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <div className="flex items-center justify-between text-xs text-white/60">
             <span>Replay Progress</span>
             <span>{Math.round(clampedProgress * 100)}%</span>
@@ -149,7 +149,7 @@ export function ReplayControls({
           }}
           disabled={isJumpDisabled}
         >
-          <SelectTrigger aria-label="Jump to trade">
+          <SelectTrigger aria-label="Jump to trade" className="w-full">
             <SelectValue placeholder="Jump to Trade" />
           </SelectTrigger>
           <SelectContent>

@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type {
+  ChartBar,
   EnrichedTrade,
   OptionsContext,
   ParsedStopLevel,
@@ -23,11 +24,51 @@ const ET_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('en-US', {
 
 interface TradeCardProps {
   trade: EnrichedTrade
+  bars: ChartBar[]
   defaultExpanded?: boolean
 }
 
+interface SparklinePoint {
+  x: number
+  y: number
+  time: number
+  close: number
+}
+
+interface TradeSparklineAvailable {
+  available: true
+  allPath: string
+  holdSegmentPath: string
+  entryPoint: SparklinePoint
+  exitPoint: SparklinePoint
+}
+
+interface TradeSparklineUnavailable {
+  available: false
+}
+
+type TradeSparklineResult = TradeSparklineAvailable | TradeSparklineUnavailable
+
+const SPARKLINE_WIDTH = 260
+const SPARKLINE_HEIGHT = 72
+const SPARKLINE_PADDING_X = 8
+const SPARKLINE_PADDING_Y = 8
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
+}
+
+function parseEpochSeconds(value: string | null | undefined): number | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null
+  }
+
+  const epochMs = Date.parse(value)
+  if (!Number.isFinite(epochMs)) {
+    return null
+  }
+
+  return Math.floor(epochMs / 1000)
 }
 
 function formatContractLabel(trade: EnrichedTrade): string {
@@ -172,10 +213,134 @@ function getPnlTone(value: number | null | undefined): string {
   return 'border-red-500/40 bg-red-500/15 text-red-200'
 }
 
-export function TradeCard({ trade, defaultExpanded = false }: TradeCardProps) {
+function resolveTradeExitEpochSeconds(trade: EnrichedTrade, entryEpochSeconds: number): number | null {
+  const exitEvents = Array.isArray(trade.exitEvents) ? trade.exitEvents : []
+  const allExitTimes: number[] = []
+  const fullExitTimes: number[] = []
+
+  for (const exitEvent of exitEvents) {
+    const eventEpochSeconds = parseEpochSeconds(exitEvent?.timestamp)
+    if (eventEpochSeconds == null || eventEpochSeconds < entryEpochSeconds) {
+      continue
+    }
+
+    allExitTimes.push(eventEpochSeconds)
+    if (exitEvent.type === 'full_exit') {
+      fullExitTimes.push(eventEpochSeconds)
+    }
+  }
+
+  if (fullExitTimes.length > 0) {
+    return Math.max(...fullExitTimes)
+  }
+
+  if (allExitTimes.length > 0) {
+    return Math.max(...allExitTimes)
+  }
+
+  if (isFiniteNumber(trade.holdDurationMin) && trade.holdDurationMin > 0) {
+    return entryEpochSeconds + Math.round(trade.holdDurationMin * 60)
+  }
+
+  return null
+}
+
+function buildPath(points: SparklinePoint[]): string {
+  return points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ')
+}
+
+function findNearestPoint(points: SparklinePoint[], targetTime: number): SparklinePoint {
+  let nearestPoint = points[0]!
+  let nearestDistance = Math.abs(nearestPoint.time - targetTime)
+
+  for (let index = 1; index < points.length; index += 1) {
+    const candidate = points[index]!
+    const distance = Math.abs(candidate.time - targetTime)
+    if (distance < nearestDistance) {
+      nearestPoint = candidate
+      nearestDistance = distance
+    }
+  }
+
+  return nearestPoint
+}
+
+function buildTradeSparkline(trade: EnrichedTrade, bars: ChartBar[]): TradeSparklineResult {
+  if (!Array.isArray(bars) || bars.length === 0) {
+    return { available: false }
+  }
+
+  const entryEpochSeconds = parseEpochSeconds(trade.entryTimestamp)
+  if (entryEpochSeconds == null) {
+    return { available: false }
+  }
+
+  const exitEpochSeconds = resolveTradeExitEpochSeconds(trade, entryEpochSeconds)
+  if (exitEpochSeconds == null || exitEpochSeconds <= entryEpochSeconds) {
+    return { available: false }
+  }
+
+  const windowBars = bars
+    .filter((bar) => (
+      bar != null
+      && isFiniteNumber(bar.time)
+      && isFiniteNumber(bar.close)
+      && bar.time >= entryEpochSeconds
+      && bar.time <= exitEpochSeconds
+    ))
+    .slice()
+    .sort((left, right) => left.time - right.time)
+
+  if (windowBars.length < 2) {
+    return { available: false }
+  }
+
+  const closes = windowBars.map((bar) => bar.close)
+  const minClose = Math.min(...closes)
+  const maxClose = Math.max(...closes)
+  const closeRange = maxClose - minClose
+  const timeRange = Math.max(exitEpochSeconds - entryEpochSeconds, 1)
+  const drawWidth = SPARKLINE_WIDTH - (SPARKLINE_PADDING_X * 2)
+  const drawHeight = SPARKLINE_HEIGHT - (SPARKLINE_PADDING_Y * 2)
+  const flatY = SPARKLINE_PADDING_Y + (drawHeight / 2)
+
+  const points = windowBars.map((bar) => {
+    const x = SPARKLINE_PADDING_X + (((bar.time - entryEpochSeconds) / timeRange) * drawWidth)
+    const y = closeRange <= 0
+      ? flatY
+      : SPARKLINE_PADDING_Y + (((maxClose - bar.close) / closeRange) * drawHeight)
+
+    return {
+      x,
+      y,
+      time: bar.time,
+      close: bar.close,
+    }
+  })
+
+  const entryPoint = findNearestPoint(points, entryEpochSeconds)
+  const exitPoint = findNearestPoint(points, exitEpochSeconds)
+  const holdStart = Math.min(entryPoint.time, exitPoint.time)
+  const holdEnd = Math.max(entryPoint.time, exitPoint.time)
+  const segmentPoints = points.filter((point) => point.time >= holdStart && point.time <= holdEnd)
+  const highlightedSegment = segmentPoints.length >= 2 ? segmentPoints : [entryPoint, exitPoint]
+
+  return {
+    available: true,
+    allPath: buildPath(points),
+    holdSegmentPath: buildPath(highlightedSegment),
+    entryPoint,
+    exitPoint,
+  }
+}
+
+export function TradeCard({ trade, bars, defaultExpanded = false }: TradeCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
 
   const tradeIndexLabel = Number.isFinite(trade.tradeIndex) ? trade.tradeIndex : '--'
+  const tradeIndexToken = String(tradeIndexLabel)
   const contractLabel = formatContractLabel(trade)
   const entryTimestampLabel = formatTimestamp(trade.entryTimestamp)
   const holdDurationLabel = formatHoldDuration(trade.holdDurationMin)
@@ -191,9 +356,16 @@ export function TradeCard({ trade, defaultExpanded = false }: TradeCardProps) {
   )
   const drivers = normalizeStringArray(evaluation?.drivers)
   const risks = normalizeStringArray(evaluation?.risks)
+  const sparkline = useMemo(
+    () => buildTradeSparkline(trade, bars),
+    [bars, trade],
+  )
 
   return (
-    <article className="rounded-lg border border-white/10 bg-black/20 p-4">
+    <article
+      className="rounded-lg border border-white/10 bg-black/20 p-4"
+      data-testid={`trade-card-${tradeIndexToken}`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.1em] text-white/60">Trade {tradeIndexLabel}</p>
@@ -218,6 +390,7 @@ export function TradeCard({ trade, defaultExpanded = false }: TradeCardProps) {
             onClick={() => setExpanded((current) => !current)}
             aria-expanded={expanded}
             aria-controls={`trade-replay-card-body-${tradeIndexLabel}`}
+            data-testid={`trade-card-toggle-${tradeIndexToken}`}
           >
             {expanded ? (
               <>
@@ -236,6 +409,74 @@ export function TradeCard({ trade, defaultExpanded = false }: TradeCardProps) {
 
       {expanded ? (
         <div id={`trade-replay-card-body-${tradeIndexLabel}`} className="mt-4 space-y-4">
+          <section className="rounded-md border border-white/10 bg-white/[0.02] p-3">
+            <h4 className="text-[11px] uppercase tracking-[0.1em] text-white/60">SPX Hold Window</h4>
+            {sparkline.available ? (
+              <div
+                className="mt-2 rounded border border-white/10 bg-black/25 p-2"
+                data-testid={`trade-card-sparkline-${tradeIndexToken}`}
+              >
+                <svg
+                  viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
+                  role="img"
+                  aria-label={`SPX hold window sparkline for trade ${tradeIndexToken}`}
+                  className="h-[72px] w-full"
+                >
+                  <path
+                    d={sparkline.allPath}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.35)"
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d={sparkline.holdSegmentPath}
+                    fill="none"
+                    stroke="#10B981"
+                    strokeWidth={2.25}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    data-testid={`trade-card-sparkline-segment-${tradeIndexToken}`}
+                  />
+                  <circle
+                    cx={sparkline.entryPoint.x}
+                    cy={sparkline.entryPoint.y}
+                    r={3}
+                    fill="#F3E5AB"
+                    stroke="#000000"
+                    strokeWidth={1}
+                    data-testid={`trade-card-sparkline-entry-marker-${tradeIndexToken}`}
+                  />
+                  <circle
+                    cx={sparkline.exitPoint.x}
+                    cy={sparkline.exitPoint.y}
+                    r={3}
+                    fill="#ef4444"
+                    stroke="#000000"
+                    strokeWidth={1}
+                    data-testid={`trade-card-sparkline-exit-marker-${tradeIndexToken}`}
+                  />
+                </svg>
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[10px] text-white/65">
+                  <span>
+                    Entry <span className="font-mono text-white/85">SPX {formatPlainNumber(sparkline.entryPoint.close, 2)}</span>
+                  </span>
+                  <span>
+                    Exit <span className="font-mono text-white/85">SPX {formatPlainNumber(sparkline.exitPoint.close, 2)}</span>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p
+                className="mt-2 rounded border border-dashed border-white/15 bg-black/25 px-2 py-1 text-xs text-white/65"
+                data-testid={`trade-card-sparkline-fallback-${tradeIndexToken}`}
+              >
+                Sparkline unavailable
+              </p>
+            )}
+          </section>
+
           <section className="rounded-md border border-white/10 bg-white/[0.02] p-3">
             <h4 className="text-[11px] uppercase tracking-[0.1em] text-white/60">Pricing Summary</h4>
             <div className="mt-2 grid gap-3 text-sm md:grid-cols-3">
