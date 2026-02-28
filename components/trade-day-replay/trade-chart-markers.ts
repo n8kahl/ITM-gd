@@ -1,25 +1,28 @@
-import type { SeriesMarker } from 'lightweight-charts'
+import type {
+  CreatePriceLineOptions,
+  LineStyle,
+  LineWidth,
+  SeriesMarker,
+  Time,
+  UTCTimestamp,
+} from 'lightweight-charts'
 import type { ChartBar, EnrichedTrade } from '@/lib/trade-day-replay/types'
 
 /**
- * Alias for lightweight-charts v5 SeriesMarker with numeric time (epoch seconds).
+ * Alias for lightweight-charts v5 SeriesMarker.
  */
-export type TradeSeriesMarker = SeriesMarker<number>
-
-export interface TradePriceLineOptions {
-  price: number
-  color: string
-  lineWidth: number
-  lineStyle: number // 0=Solid, 1=Dotted, 2=Dashed, 3=LargeDashed
-  title: string
-  axisLabelVisible: boolean
-}
+export type TradeSeriesMarker = SeriesMarker<Time>
+export type TradePriceLineOptions = CreatePriceLineOptions
 
 function parseEpochSeconds(value: string | null | undefined): number | null {
   if (!value) return null
   const epochMs = Date.parse(value)
   if (!Number.isFinite(epochMs)) return null
   return Math.floor(epochMs / 1000)
+}
+
+function toUtcTimestamp(seconds: number): UTCTimestamp {
+  return seconds as UTCTimestamp
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -89,7 +92,7 @@ export function buildTradeMarkers(
       const barTime = findNearestBarTime(visibleBars, entryTimeSec)
       if (barTime != null) {
         markers.push({
-          time: barTime,
+          time: toUtcTimestamp(barTime),
           position: 'belowBar',
           color: '#10B981',
           shape: 'arrowUp',
@@ -112,7 +115,7 @@ export function buildTradeMarkers(
 
       if (exitEvent.type === 'full_exit') {
         markers.push({
-          time: barTime,
+          time: toUtcTimestamp(barTime),
           position: 'aboveBar',
           color: '#ef4444',
           shape: 'arrowDown',
@@ -125,7 +128,7 @@ export function buildTradeMarkers(
           ? `T ${exitEvent.percentage}%`
           : 'Trim'
         markers.push({
-          time: barTime,
+          time: toUtcTimestamp(barTime),
           position: 'aboveBar',
           color: '#F3E5AB',
           shape: 'circle',
@@ -137,7 +140,7 @@ export function buildTradeMarkers(
   }
 
   // lightweight-charts requires markers sorted by time ascending
-  markers.sort((a, b) => a.time - b.time)
+  markers.sort((a, b) => Number(a.time) - Number(b.time))
 
   return markers
 }
@@ -171,8 +174,8 @@ export function buildStopPriceLines(
       lines.push({
         price: stop.spxLevel,
         color: '#ef4444',
-        lineWidth: 1,
-        lineStyle: 2, // Dashed
+        lineWidth: 1 as LineWidth,
+        lineStyle: 2 as LineStyle, // Dashed
         title: `Stop ${priceKey}`,
         axisLabelVisible: true,
       })
