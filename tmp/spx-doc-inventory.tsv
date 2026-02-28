@@ -1,0 +1,129 @@
+file	title	first_subheading	hint
+docs/specs/SPX_AI_COACH_INTELLIGENCE_AND_UX_CLARITY_PRODUCTION_SPEC_2026-02-19.md	SPX AI Coach Intelligence + UX Clarity Production Spec	1. Executive Decisions	1. No broker order placement integration in this phase.
+docs/specs/SPX_AI_COACH_TICK_LEVEL_ROLLOUT_PLAN_2026-02-17.md	SPX + AI Coach Tick-Level Rollout Plan	1. Current State (as implemented)	## Phase 1: Tick Ingest Foundation (Backend)
+docs/specs/SPX_AI_COACH_UX_MODERNIZATION_PRODUCTION_SPEC_2026-02-19.md	SPX AI Coach UX Modernization Production Spec	1. Executive Decisions	- `in_trade`: Coach panel pinned directly under in-trade summary; critical alert strip near header if present.
+docs/specs/SPX_CALIBRATION_AGENT_PROMPTS_2026-02-24.md	SPX Calibration Tuning — Agent Session Prompts	PHASE 1: Stop-Loss Heat Analysis Script (Workstream 1)	**Usage:** Each section below is a standalone prompt to paste into a fresh Claude Code session. Never carry one phase into the next session. Each session starts clean.
+docs/specs/SPX_CALIBRATION_BASELINE_2026-02-24.md	SPX Calibration Baseline (2026-02-24)	1) Backtest Results (Pre-Tuning)	### `git status`
+docs/specs/SPX_CALIBRATION_TUNING_DEV_SPEC_2026-02-24.md	SPX Command Center Calibration Tuning — Development Specification	Executive Summary	**Status:** Draft — Pending Multi-Agent Review
+docs/specs/SPX_COMMAND_CENTER_AUTONOMOUS_PROD_SPEC_2026-02-19.md	SPX Command Center Autonomous Production Spec	1. Objective	## 1. Objective
+docs/specs/SPX_COMMAND_CENTER_DEV_SPEC.docx	N/A	N/A	N/A
+docs/specs/SPX_COMMAND_CENTER_DEV_SPEC.md	N/A	N/A	  Status          Spec Complete --- Ready for Implementation
+docs/specs/SPX_COMMAND_CENTER_GOLD_STANDARD_CONFIG_2026-02-22.md	SPX Command Center Gold Standard Configuration	Scope	Status: Active baseline for SPX setup detection, backtest, and optimizer safety gates.
+docs/specs/SPX_COMMAND_CENTER_MASTER_AUDIT_2026-02-26.md	SPX Command Center — Master System Audit	Executive Summary	**Status:** All 10 audits complete. Implementation pending.
+docs/specs/SPX_COMMAND_CENTER_OPTIMIZER_EXECUTION_2026-02-21.md	SPX Command Center Optimizer Execution (Spec-Driven)	1. Objective	## 1. Objective
+docs/specs/SPX_COMMAND_CENTER_PHASE0_BASELINE_2026-02-20.md	SPX Command Center Phase 0 Baseline Report	1. Command Executed	# SPX Command Center Phase 0 Baseline Report
+docs/specs/SPX_COMMAND_CENTER_PHASE10_SLICE_P10-S1_2026-02-21.md	SPX Command Center Phase 10 Slice Report	Objective	# SPX Command Center Phase 10 Slice Report
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S10_2026-02-22.md	SPX Command Center Phase 11 - Slice P11-S10	Objective	# SPX Command Center Phase 11 - Slice P11-S10
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S11_2026-02-22.md	SPX Command Center Phase 11 - Slice P11-S11	Objectives	# SPX Command Center Phase 11 - Slice P11-S11
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S1_2026-02-21.md	SPX Command Center Phase 11 - Slice P11-S1	Objective	# SPX Command Center Phase 11 - Slice P11-S1
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S2_2026-02-21.md	SPX Command Center Phase 11 - Slice P11-S2	Objective	# SPX Command Center Phase 11 - Slice P11-S2
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S3_2026-02-21.md	SPX Command Center Phase 11 - Slice P11-S3	Objective	# SPX Command Center Phase 11 - Slice P11-S3
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S4_2026-02-22.md	SPX Command Center Phase 11 - Slice P11-S4	Objective	# SPX Command Center Phase 11 - Slice P11-S4
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S5_2026-02-22.md	SPX Command Center Phase 11 - Slice P11-S5	Objective	# SPX Command Center Phase 11 - Slice P11-S5
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S6_2026-02-22.md	SPX Command Center Phase 11 - Slice P11-S6	Objective	# SPX Command Center Phase 11 - Slice P11-S6
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S7_2026-02-22.md	SPX Command Center Phase 11 - Slice P11-S7	Objective	# SPX Command Center Phase 11 - Slice P11-S7
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S8_2026-02-22.md	SPX Command Center Phase 11 - Slice P11-S8	Objective	# SPX Command Center Phase 11 - Slice P11-S8
+docs/specs/SPX_COMMAND_CENTER_PHASE11_SLICE_P11-S9_2026-02-22.md	SPX Command Center Phase 11 - Slice P11-S9	Objective	# SPX Command Center Phase 11 - Slice P11-S9
+docs/specs/SPX_COMMAND_CENTER_PHASE12_SLICE_P12-S1_2026-02-22.md	SPX Command Center Phase 12 - Slice P12-S1	Objectives	# SPX Command Center Phase 12 - Slice P12-S1
+docs/specs/SPX_COMMAND_CENTER_PHASE12_SLICE_P12-S2_2026-02-22.md	SPX Command Center Phase 12 Slice P12-S2 (2026-02-22)	Objective	# SPX Command Center Phase 12 Slice P12-S2 (2026-02-22)
+docs/specs/SPX_COMMAND_CENTER_PHASE12_SLICE_P12-S3_2026-02-22.md	SPX Command Center Phase 12 Slice P12-S3 (2026-02-22)	Objective	# SPX Command Center Phase 12 Slice P12-S3 (2026-02-22)
+docs/specs/SPX_COMMAND_CENTER_PHASE12_SLICE_P12-S4_2026-02-22.md	SPX Command Center Phase 12 Slice P12-S4 (2026-02-22)	Objective	# SPX Command Center Phase 12 Slice P12-S4 (2026-02-22)
+docs/specs/SPX_COMMAND_CENTER_PHASE12_SLICE_P12-S5_2026-02-22.md	SPX Command Center Phase 12 Slice P12-S5 (2026-02-22)	Objective	# SPX Command Center Phase 12 Slice P12-S5 (2026-02-22)
+docs/specs/SPX_COMMAND_CENTER_PHASE12_SLICE_P12-S6_2026-02-22.md	SPX Command Center Phase 12 Slice P12-S6 (2026-02-22)	Objective	# SPX Command Center Phase 12 Slice P12-S6 (2026-02-22)
+docs/specs/SPX_COMMAND_CENTER_PHASE13_INSTITUTIONAL_FIDELITY_SPEC_2026-02-22.md	SPX Command Center Phase 13: Institutional Fidelity & Hardening	1) Objective	# SPX Command Center Phase 13: Institutional Fidelity & Hardening
+docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S1_2026-02-22.md	SPX Command Center Phase 13 Slice P13-S1 (2026-02-22)	Objective	# SPX Command Center Phase 13 Slice P13-S1 (2026-02-22)
+docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S2_2026-02-22.md	SPX Command Center Phase 13 Slice P13-S2 (2026-02-22)	Objective	# SPX Command Center Phase 13 Slice P13-S2 (2026-02-22)
+docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S3_2026-02-22.md	SPX Command Center Phase 13 Slice P13-S3 (2026-02-22)	Objective	# SPX Command Center Phase 13 Slice P13-S3 (2026-02-22)
+docs/specs/SPX_COMMAND_CENTER_PHASE13_SLICE_P13-S4_2026-02-22.md	SPX Command Center Phase 13 Slice P13-S4 (2026-02-22)	Objective	# SPX Command Center Phase 13 Slice P13-S4 (2026-02-22)
+docs/specs/SPX_COMMAND_CENTER_PHASE14_INSTITUTIONAL_UPGRADE_SPEC_2026-02-22.md	SPX Command Center Phase 14: Institutional Upgrade & Tradier Readiness	1) Objective	# SPX Command Center Phase 14: Institutional Upgrade & Tradier Readiness
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S10_2026-02-23.md	Phase 14 — Slice P14-S10: Time-Bucket Expansion (3→5 Buckets + Late-Session Geometry)	Date: 2026-02-23	# Phase 14 — Slice P14-S10: Time-Bucket Expansion (3→5 Buckets + Late-Session Geometry)
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S11_2026-02-23.md	Phase 14 — Slice P14-S11: Expand Geometry Sweep to 7 Families	Date: 2026-02-23	# Phase 14 — Slice P14-S11: Expand Geometry Sweep to 7 Families
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S12_2026-02-23.md	Phase 14 — Slice P14-S12: Direction-Aware Sweep Library	Date: 2026-02-23	# Phase 14 — Slice P14-S12: Direction-Aware Sweep Library
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S13_2026-02-23.md	Phase 14 — Slice P14-S13: Direction-Aware Optimizer Integration	Date: 2026-02-23	# Phase 14 — Slice P14-S13: Direction-Aware Optimizer Integration
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S14_2026-02-23.md	Phase 14 — Slice P14-S14: Regime-Adaptive Partials + Breakeven+ Stop	Date: 2026-02-23	# Phase 14 — Slice P14-S14: Regime-Adaptive Partials + Breakeven+ Stop
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S15_2026-02-23.md	Phase 14 — Slice P14-S15: GEX-Adaptive Stop Scaling	Date: 2026-02-23	# Phase 14 — Slice P14-S15: GEX-Adaptive Stop Scaling
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S16_2026-02-23.md	Phase 14 — Slice P14-S16: VWAP Bridge to Optimizer	Date: 2026-02-23	# Phase 14 — Slice P14-S16: VWAP Bridge to Optimizer
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S1_2026-02-22.md	SPX Command Center Phase 14 Slice Report: P14-S1	1) Scope	# SPX Command Center Phase 14 Slice Report: P14-S1
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S2_2026-02-22.md	SPX Command Center Phase 14 Slice Report: P14-S2	1) Scope	# SPX Command Center Phase 14 Slice Report: P14-S2
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S3_2026-02-22.md	SPX Command Center Phase 14 Slice Report: P14-S3	1) Scope	# SPX Command Center Phase 14 Slice Report: P14-S3
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S4_2026-02-22.md	SPX Command Center Phase 14 Slice Report: P14-S4	1) Scope	# SPX Command Center Phase 14 Slice Report: P14-S4
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S5_2026-02-22.md	SPX Command Center Phase 14 Slice Report: P14-S5	1) Scope	# SPX Command Center Phase 14 Slice Report: P14-S5
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S6_2026-02-22.md	SPX Command Center Phase 14 Slice Report: P14-S6	1) Scope	# SPX Command Center Phase 14 Slice Report: P14-S6
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S7_2026-02-23.md	SPX Command Center Phase 14 Slice Report: P14-S7	1) Scope	# SPX Command Center Phase 14 Slice Report: P14-S7
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S8_2026-02-23.md	Phase 14 — Slice P14-S8: Rescue ORB Breakout (Flow Grace + Range Width Filter)	Date: 2026-02-23	# Phase 14 — Slice P14-S8: Rescue ORB Breakout (Flow Grace + Range Width Filter)
+docs/specs/SPX_COMMAND_CENTER_PHASE14_SLICE_P14-S9_2026-02-23.md	Phase 14 — Slice P14-S9: Strategy Gate Recalibration	Date: 2026-02-23	# Phase 14 — Slice P14-S9: Strategy Gate Recalibration
+docs/specs/SPX_COMMAND_CENTER_PHASE15_SLICE_P15-S1_2026-02-22.md	SPX Command Center Phase 15 Slice Report: P15-S1	1) Scope	# SPX Command Center Phase 15 Slice Report: P15-S1
+docs/specs/SPX_COMMAND_CENTER_PHASE15_SLICE_P15-S2_2026-02-22.md	SPX Command Center Phase 15 Slice Report: P15-S2	1) Scope	# SPX Command Center Phase 15 Slice Report: P15-S2
+docs/specs/SPX_COMMAND_CENTER_PHASE15_SLICE_P15-S3_2026-02-22.md	SPX Command Center Phase 15 Slice Report: P15-S3	1) Scope	# SPX Command Center Phase 15 Slice Report: P15-S3
+docs/specs/SPX_COMMAND_CENTER_PHASE15_SLICE_P15-S4_2026-02-22.md	SPX Command Center Phase 15 Slice Report: P15-S4	1) Scope	# SPX Command Center Phase 15 Slice Report: P15-S4
+docs/specs/SPX_COMMAND_CENTER_PHASE15_SLICE_P15-S5_2026-02-22.md	SPX Command Center Phase 15 Slice Report: P15-S5	1) Scope	# SPX Command Center Phase 15 Slice Report: P15-S5
+docs/specs/SPX_COMMAND_CENTER_PHASE15_SLICE_P15-S6_2026-02-22.md	SPX Command Center Phase 15 Slice Report: P15-S6	1) Scope	# SPX Command Center Phase 15 Slice Report: P15-S6
+docs/specs/SPX_COMMAND_CENTER_PHASE16_INSTITUTIONAL_COMPLETION_PLAN_2026-02-22.md	SPX Command Center Phase 16: Institutional Completion Plan	1) Objective	# SPX Command Center Phase 16: Institutional Completion Plan
+docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S1_2026-02-22.md	SPX Command Center Phase 16 Slice Report: P16-S1	1) Scope	# SPX Command Center Phase 16 Slice Report: P16-S1
+docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S2_2026-02-22.md	SPX Command Center Phase 16 Slice Report: P16-S2	1) Scope	# SPX Command Center Phase 16 Slice Report: P16-S2
+docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S3_2026-02-23.md	SPX Command Center Phase 16 Slice Report: P16-S3	1) Scope	# SPX Command Center Phase 16 Slice Report: P16-S3
+docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S4_2026-02-23.md	SPX Command Center Phase 16 Slice Report: P16-S4	1) Scope	# SPX Command Center Phase 16 Slice Report: P16-S4
+docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S5_2026-02-23.md	SPX Command Center Phase 16 Slice Report: P16-S5	1) Scope	# SPX Command Center Phase 16 Slice Report: P16-S5
+docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S6_2026-02-23.md	SPX Command Center Phase 16 Slice Report: P16-S6	1) Scope	# SPX Command Center Phase 16 Slice Report: P16-S6
+docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S7_2026-02-22.md	P16-S7: Full Telemetry Persistence for Continuous Improvement	Objective	## Objective
+docs/specs/SPX_COMMAND_CENTER_PHASE16_SLICE_P16-S7_2026-02-23.md	SPX Command Center Phase 16 Slice Report: P16-S7	1) Scope	# SPX Command Center Phase 16 Slice Report: P16-S7
+docs/specs/SPX_COMMAND_CENTER_PHASE17_EXECUTION_SPEC_2026-02-23.md	SPX Command Center Phase 17: Execution Hardening & Strategy Optimization	1. Objective	# SPX Command Center Phase 17: Execution Hardening & Strategy Optimization
+docs/specs/SPX_COMMAND_CENTER_PHASE18_CLOSEOUT_AUDIT_2026-02-24.md	SPX Command Center Phase 18 Closeout Audit	Completion Verdict	# SPX Command Center Phase 18 Closeout Audit
+docs/specs/SPX_COMMAND_CENTER_PHASE18_EXECUTION_SPEC_2026-02-23.md	SPX Command Center — Phase 18: Strategic Intelligence & Full Data Integration	Header Metadata	# SPX Command Center — Phase 18: Strategic Intelligence & Full Data Integration
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_A_SLICE_1.md	SPX Command Center Phase 18 — Phase A Slice 1 (A.PR-1 Start)	Objective	# SPX Command Center Phase 18 — Phase A Slice 1 (A.PR-1 Start)
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_A_SLICE_2.md	SPX Command Center Phase 18 — Phase A Slice 2	Slice Objective	# SPX Command Center Phase 18 — Phase A Slice 2
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_A_SLICE_3.md	SPX Command Center Phase 18 — Phase A Slice 3	Slice Objective	# SPX Command Center Phase 18 — Phase A Slice 3
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_A_SLICE_4.md	SPX Command Center Phase 18 — Phase A Slice 4	Slice Objective	# SPX Command Center Phase 18 — Phase A Slice 4
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_B_SLICE_1.md	SPX Command Center Phase 18 — Phase B Slice 1	Slice Objective	# SPX Command Center Phase 18 — Phase B Slice 1
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_B_SLICE_2.md	SPX Command Center Phase 18 — Phase B Slice 2	Slice Objective	# SPX Command Center Phase 18 — Phase B Slice 2
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_B_SLICE_3.md	SPX Command Center Phase 18 — Phase B Slice 3	Slice Objective	# SPX Command Center Phase 18 — Phase B Slice 3
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_C_SLICE_1.md	SPX Command Center Phase 18 — Phase C Slice 1	Scope delivered	# SPX Command Center Phase 18 — Phase C Slice 1
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_C_SLICE_2.md	SPX Command Center Phase 18 — Phase C Slice 2	Scope delivered	# SPX Command Center Phase 18 — Phase C Slice 2
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_D_SLICE_1.md	SPX Command Center Phase 18 — Phase D Slice 1	Scope delivered	# SPX Command Center Phase 18 — Phase D Slice 1
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_D_SLICE_2.md	SPX Command Center Phase 18 — Phase D Slice 2	Scope delivered	# SPX Command Center Phase 18 — Phase D Slice 2
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_D_SLICE_3.md	SPX Command Center Phase 18 — Phase D Slice 3	Scope delivered	# SPX Command Center Phase 18 — Phase D Slice 3
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_D_SLICE_4.md	SPX Command Center Phase 18 — Phase D Slice 4	Scope delivered	# SPX Command Center Phase 18 — Phase D Slice 4
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_D_SLICE_5.md	SPX Command Center Phase 18 — Phase D Slice 5	Scope delivered	# SPX Command Center Phase 18 — Phase D Slice 5
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_D_SLICE_6.md	SPX Command Center Phase 18 — Phase D Slice 6	Scope	# SPX Command Center Phase 18 — Phase D Slice 6
+docs/specs/SPX_COMMAND_CENTER_PHASE18_PHASE_D_SLICE_7.md	SPX Command Center Phase 18 — Phase D Slice 7	Scope	# SPX Command Center Phase 18 — Phase D Slice 7
+docs/specs/SPX_COMMAND_CENTER_PHASE18_RELEASE_NOTES_2026-02-23.md	SPX Command Center Phase 18 Release Notes	Summary	# SPX Command Center Phase 18 Release Notes
+docs/specs/SPX_COMMAND_CENTER_PHASE18_RUNBOOK_2026-02-23.md	SPX Command Center Phase 18 Runbook	1. Scope in production	# SPX Command Center Phase 18 Runbook
+docs/specs/SPX_COMMAND_CENTER_PHASE1_RECOVERY_2026-02-20.md	SPX Command Center Phase 1 Recovery Report	1. Objective	# SPX Command Center Phase 1 Recovery Report
+docs/specs/SPX_COMMAND_CENTER_PHASE2_SLICE_P2-S1_2026-02-20.md	SPX Command Center Phase 2 Slice Report (`P2-S1`)	1. Objective	# SPX Command Center Phase 2 Slice Report (`P2-S1`)
+docs/specs/SPX_COMMAND_CENTER_PHASE2_SLICE_P2-S2_2026-02-20.md	SPX Command Center Phase 2 Slice Report (`P2-S2`)	1. Objective	# SPX Command Center Phase 2 Slice Report (`P2-S2`)
+docs/specs/SPX_COMMAND_CENTER_PHASE3_SLICE_P3-S1_2026-02-20.md	SPX Command Center Phase 3 Slice Report (`P3-S1`)	1. Objective	# SPX Command Center Phase 3 Slice Report (`P3-S1`)
+docs/specs/SPX_COMMAND_CENTER_PHASE3_SLICE_P3-S2_2026-02-20.md	SPX Command Center Phase 3 Slice Report (`P3-S2`)	1. Objective	# SPX Command Center Phase 3 Slice Report (`P3-S2`)
+docs/specs/SPX_COMMAND_CENTER_PHASE3_SLICE_P3-S3_2026-02-20.md	SPX Command Center Phase 3 Slice Report (`P3-S3`)	1. Objective	# SPX Command Center Phase 3 Slice Report (`P3-S3`)
+docs/specs/SPX_COMMAND_CENTER_PHASE3_SLICE_P3-S4_2026-02-20.md	SPX Command Center Phase 3 Slice Report (`P3-S4`)	1. Objective	# SPX Command Center Phase 3 Slice Report (`P3-S4`)
+docs/specs/SPX_COMMAND_CENTER_PHASE3_SLICE_P3-S5_2026-02-20.md	SPX Command Center Phase 3 Slice Report (`P3-S5`)	1. Objective	# SPX Command Center Phase 3 Slice Report (`P3-S5`)
+docs/specs/SPX_COMMAND_CENTER_PHASE3_SLICE_P3-S6_2026-02-20.md	SPX Command Center Phase 3 Slice Report (`P3-S6`)	1. Objective	# SPX Command Center Phase 3 Slice Report (`P3-S6`)
+docs/specs/SPX_COMMAND_CENTER_PHASE3_SLICE_P3-S7_2026-02-20.md	SPX Command Center Phase 3 Slice Report (`P3-S7`)	1. Objective	# SPX Command Center Phase 3 Slice Report (`P3-S7`)
+docs/specs/SPX_COMMAND_CENTER_PHASE3_SLICE_P3-S8_2026-02-20.md	SPX Command Center Phase 3 Slice Report (`P3-S8`)	1. Objective	# SPX Command Center Phase 3 Slice Report (`P3-S8`)
+docs/specs/SPX_COMMAND_CENTER_PHASE3_SLICE_P3-S9_2026-02-20.md	SPX Command Center Phase 3 Slice Report (`P3-S9`)	1. Objective	# SPX Command Center Phase 3 Slice Report (`P3-S9`)
+docs/specs/SPX_COMMAND_CENTER_PHASE4_SLICE_P4-S1_2026-02-20.md	SPX Command Center Phase 4 Slice Report (`P4-S1`)	1. Objective	# SPX Command Center Phase 4 Slice Report (`P4-S1`)
+docs/specs/SPX_COMMAND_CENTER_PHASE4_SLICE_P4-S2_2026-02-20.md	SPX Command Center Phase 4 Slice Report (`P4-S2`)	1. Objective	# SPX Command Center Phase 4 Slice Report (`P4-S2`)
+docs/specs/SPX_COMMAND_CENTER_PHASE5_SLICE_P5-S1_2026-02-20.md	SPX Command Center Phase 5 Slice Report (`P5-S1`)	1. Objective	# SPX Command Center Phase 5 Slice Report (`P5-S1`)
+docs/specs/SPX_COMMAND_CENTER_PHASE5_SLICE_P5-S2_2026-02-20.md	SPX Command Center Phase 5 Slice Report (`P5-S2`)	1. Objective	# SPX Command Center Phase 5 Slice Report (`P5-S2`)
+docs/specs/SPX_COMMAND_CENTER_PHASE5_SLICE_P5-S3_2026-02-20.md	SPX Command Center Phase 5 Slice Report (`P5-S3`)	1. Objective	# SPX Command Center Phase 5 Slice Report (`P5-S3`)
+docs/specs/SPX_COMMAND_CENTER_PHASE6_SLICE_P6-S1_2026-02-20.md	SPX Command Center Phase 6 Slice Report (`P6-S1`)	1. Objective	# SPX Command Center Phase 6 Slice Report (`P6-S1`)
+docs/specs/SPX_COMMAND_CENTER_PHASE7_SLICE_P7-S1_2026-02-21.md	SPX Command Center Phase 7 Slice Report (`P7-S1`)	1. Objective	# SPX Command Center Phase 7 Slice Report (`P7-S1`)
+docs/specs/SPX_COMMAND_CENTER_PHASE7_SLICE_P7-S2_2026-02-21.md	SPX Command Center Phase 7 Slice Report (`P7-S2`)	1. Objective	# SPX Command Center Phase 7 Slice Report (`P7-S2`)
+docs/specs/SPX_COMMAND_CENTER_PHASE8_SLICE_P8-S1_2026-02-21.md	SPX Command Center Phase 8 Slice Report (`P8-S1`)	1. Objective	# SPX Command Center Phase 8 Slice Report (`P8-S1`)
+docs/specs/SPX_COMMAND_CENTER_PHASE8_SLICE_P8-S2_2026-02-21.md	SPX Command Center Phase 8 Slice Report (`P8-S2`)	1. Objective	# SPX Command Center Phase 8 Slice Report (`P8-S2`)
+docs/specs/SPX_COMMAND_CENTER_PHASE8_SLICE_P8-S3_2026-02-21.md	SPX Command Center Phase 8 Slice Report (`P8-S3`)	1. Objective	# SPX Command Center Phase 8 Slice Report (`P8-S3`)
+docs/specs/SPX_COMMAND_CENTER_PHASE9_SLICE_P9-S1_2026-02-21.md	SPX Command Center Phase 9 Slice Report	Objective	# SPX Command Center Phase 9 Slice Report
+docs/specs/SPX_COMMAND_CENTER_PRODUCTION_RECOVERY_EXECUTION_SPEC_2026-02-20.md	SPX Command Center Production Recovery Execution Spec	1. Objective	## 1. Objective
+docs/specs/SPX_COMMAND_CENTER_RELEASE_NOTES_2026-02-21.md	SPX Command Center Release Notes	Highlights	# SPX Command Center Release Notes
+docs/specs/SPX_COMMAND_CENTER_RUNBOOK_2026-02-20.md	SPX Command Center Runbook (Recovery Track)	1. Scope	# SPX Command Center Runbook (Recovery Track)
+docs/specs/SPX_COMMAND_CENTER_SELECTOR_CONTRACT_2026-02-20.md	SPX Command Center Selector Contract Manifest	1. Purpose	| Contract ID | Selector / Locator | Expected Behavior | Primary Surface | Status (2026-02-20 baseline) |
+docs/specs/SPX_COMMAND_CENTER_SETUP_AUDIT_AND_OPTIMIZATION_SPEC_2026-02-21.md	SPX Command Center Setup Audit + Optimization Spec	1) Discovery + Drift (Last 5 Hours)	## 3) Phase Audit Findings
+docs/specs/SPX_COMMAND_CENTER_WIN_RATE_AUDIT_SPEC_2026-02-21.md	SPX Command Center Win-Rate Audit Spec	1. Objective	## 1. Objective
+docs/specs/SPX_COMMAND_CENTER_WIN_RATE_BACKTEST_EXECUTION_2026-02-21.md	SPX Command Center Win-Rate Backtest Execution	1. Discovery (Last 5 Hours Commit Drift)	3. Historical reconstruction now uses time-sliced intraday inputs per bar:
+docs/specs/SPX_E2E_TEST_AGENT_PROMPTS_2026-02-25.md	SPX E2E Test Suites — Agent Session Prompts	SUITE 1: Massive.com API Data Validation Tests	4. `backend/src/services/spx/types.ts` — Setup interface, Regime, SetupType, gateStatus
+docs/specs/SPX_FULL_VALIDATION_PASS_2026-02-26.md	SPX Command Center — Full Production Validation Pass	Context	4. **Fix Implementation** — All Phase 1 (safety-critical), Phase 2 (accuracy), and Phase 3 (quality/UX) fixes from the master audit
+docs/specs/SPX_MARKET_OPEN_E2E_TEST_PLAN_2026-02-24.md	SPX Market-Open E2E Test Plan	1. Inspection Summary (Executed 2026-02-23)	## 1. Inspection Summary (Executed 2026-02-23)
+docs/specs/SPX_QA_VALIDATION_PROMPT_2026-02-26.md	SPX Command Center — Full QA Validation Prompt	Instructions	## Phase 1: Safety-Critical Fixes
+docs/specs/SPX_ROLLBACK_NON_SETUP_DETECTION_CHANGES_SINCE_BBED195_2026-02-23.md	SPX Rollback Report: Non-Setup-Detection Changes Since bbed195	Baseline	## Summary
+docs/specs/SPX_SETUP_DETECTION_IMPLEMENTATION_CHECKLIST_2026-02-18.md	SPX Setup Detection Implementation Checklist	1. Delivery Strategy	## 2. Phase Plan
+docs/specs/SPX_SETUP_DETECTION_PRODUCTION_SPEC_2026-02-18.md	SPX Setup Detection Production Spec	1. Executive Decisions	## 2. Detection Objectives
+docs/specs/SPX_SNIPER_COMMAND_CENTER_PROD_IMPLEMENTATION_PLAN_2026-02-17.md	SPX Sniper Command Center: Production Implementation Plan	1. Inputs Reviewed	- Header has hero SPX price, posture cluster, direction pills, and actionable summary.

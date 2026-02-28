@@ -14,6 +14,7 @@ import { computeUnifiedGEXLandscape } from '../services/spx/gexEngine';
 import { getSPXSnapshot } from '../services/spx';
 import { getMergedLevels } from '../services/spx/levelEngine';
 import { getSPXWinRateAnalytics } from '../services/spx/outcomeTracker';
+import { buildTradeStreamSnapshot, type TradeStreamFeedTrustMetadata } from '../services/spx/tradeStream';
 import {
   getSPXOptimizerScorecard,
   getActiveSPXOptimizationProfile,
@@ -43,6 +44,7 @@ import {
 
 const router = Router();
 const KNOWN_MISSING_RELATIONS = new Set<string>();
+const TRADE_STREAM_STALE_THRESHOLD_MS = 30_000;
 
 function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
@@ -76,6 +78,33 @@ function parsePositiveInteger(value: unknown, fallback: number, min: number, max
   if (parsed < min) return min;
   if (parsed > max) return max;
   return parsed;
+}
+
+function toTradeStreamFeedTrust(generatedAt: string): TradeStreamFeedTrustMetadata {
+  const snapshotMs = Date.parse(generatedAt);
+  if (!Number.isFinite(snapshotMs)) {
+    return {
+      source: 'unknown',
+      generatedAt,
+      ageMs: 0,
+      degraded: true,
+      stale: true,
+      reason: 'Snapshot freshness timestamp is invalid.',
+    };
+  }
+
+  const ageMs = Math.max(0, Date.now() - snapshotMs);
+  const stale = ageMs > TRADE_STREAM_STALE_THRESHOLD_MS;
+  return {
+    source: stale ? 'fallback' : 'live',
+    generatedAt,
+    ageMs,
+    degraded: stale,
+    stale,
+    reason: stale
+      ? `Snapshot age ${ageMs}ms exceeds freshness threshold ${TRADE_STREAM_STALE_THRESHOLD_MS}ms.`
+      : null,
+  };
 }
 
 function isMissingSupabaseRelationError(error: unknown, tableName: string): boolean {
@@ -147,6 +176,27 @@ router.get('/snapshot', async (req: Request, res: Response) => {
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to load SPX command center snapshot.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/trade-stream', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await getSPXSnapshot({ forceRefresh: parseBoolean(req.query.forceRefresh) });
+    const tradeStream = buildTradeStreamSnapshot({
+      setups: snapshot.setups,
+      feedTrust: toTradeStreamFeedTrust(snapshot.generatedAt),
+      generatedAt: new Date().toISOString(),
+    });
+    return res.json(tradeStream);
+  } catch (error) {
+    logger.error('SPX trade-stream endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load SPX expert trade stream.',
       retryAfter: 10,
     });
   }

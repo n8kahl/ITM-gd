@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { AICoachFeed } from '@/components/spx-command-center/ai-coach-feed'
+import { CoachFactsRail } from '@/components/spx-command-center/coach-facts-rail'
 import { CoachDock } from '@/components/spx-command-center/coach-dock'
 import { ContractSelector } from '@/components/spx-command-center/contract-selector'
 import { DecisionContext } from '@/components/spx-command-center/decision-context'
@@ -22,6 +23,32 @@ type GEXProfileLike = {
   spx?: any
   spy?: any
 } | null | undefined
+
+function parseBooleanEnvFlag(value: string | undefined): boolean | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) return false
+  return null
+}
+
+function resolveCoachFactsRuntimeOverride(): boolean | null {
+  if (typeof window === 'undefined') return null
+  if (window.navigator.webdriver !== true) return null
+  const candidate = (window as Window & { __spxCoachFactsModeEnabled?: unknown }).__spxCoachFactsModeEnabled
+  return typeof candidate === 'boolean' ? candidate : null
+}
+
+function resolveCoachFactsModeEnabled(): boolean {
+  return (
+    resolveCoachFactsRuntimeOverride()
+    ?? parseBooleanEnvFlag(process.env.SPX_COACH_FACTS_MODE_ENABLED)
+    ?? parseBooleanEnvFlag(process.env.NEXT_PUBLIC_SPX_COACH_FACTS_MODE_ENABLED)
+    ?? false
+  )
+}
+
+const SPX_COACH_FACTS_MODE_ENABLED = resolveCoachFactsModeEnabled()
 
 export type SPXDesktopMainSurfaceProps = {
   className?: string
@@ -97,12 +124,15 @@ export function SPXDesktopSidebarSurface({
   const showSetupFeed = focusMode !== 'risk_only'
   const showContractSelector = showSetupFeed && (!stateDrivenLayoutEnabled || layoutMode !== 'scan')
   const showDecisionContext = focusMode === 'risk_only'
-  const showInlineCoachFeed = !stateDrivenLayoutEnabled || layoutMode !== 'scan'
+  const showInlineCoachFeed = SPX_COACH_FACTS_MODE_ENABLED || !stateDrivenLayoutEnabled || layoutMode !== 'scan'
   const showAnalytics = focusMode !== 'execution' && (!stateDrivenLayoutEnabled || layoutMode === 'evaluate')
+  const coachPanel = SPX_COACH_FACTS_MODE_ENABLED
+    ? <CoachFactsRail />
+    : <AICoachFeed suppressPrimaryTradeActions />
 
   return (
     <div className={cn('h-full space-y-2.5 overflow-auto', className)}>
-      {stateDrivenLayoutEnabled && layoutMode === 'scan' && (
+      {!SPX_COACH_FACTS_MODE_ENABLED && stateDrivenLayoutEnabled && layoutMode === 'scan' && (
         coachDockEnabled ? (
           <div className="sticky top-0 z-10 bg-[#07090D]/90 pb-2 backdrop-blur">
             <CoachDock
@@ -112,7 +142,7 @@ export function SPXDesktopSidebarSurface({
             />
             {desktopCoachPanelOpen ? (
               <div className="mt-2">
-                <AICoachFeed suppressPrimaryTradeActions />
+                {coachPanel}
               </div>
             ) : null}
           </div>
@@ -123,7 +153,7 @@ export function SPXDesktopSidebarSurface({
 
       {showSetupFeed && <SetupFeed suppressLocalPrimaryCta />}
       {showContractSelector && <ContractSelector />}
-      {showInlineCoachFeed && <AICoachFeed suppressPrimaryTradeActions />}
+      {showInlineCoachFeed && coachPanel}
       {showDecisionContext && <DecisionContext />}
 
       {showAnalytics && (
@@ -198,12 +228,15 @@ export function SPXSpatialSidebarContent({
   )
   const showSetupFeed = focusMode !== 'risk_only'
   const showContractSelector = showSetupFeed && layoutMode !== 'scan'
-  const showInlineCoachFeed = layoutMode !== 'scan' || desktopCoachPanelOpen
+  const showInlineCoachFeed = SPX_COACH_FACTS_MODE_ENABLED || layoutMode !== 'scan' || desktopCoachPanelOpen
   const showDecisionContext = focusMode === 'risk_only'
+  const coachPanel = SPX_COACH_FACTS_MODE_ENABLED
+    ? <CoachFactsRail />
+    : <AICoachFeed suppressPrimaryTradeActions />
 
   return (
     <div className="space-y-3" data-testid="spx-sidebar-decision-zone">
-      {layoutMode === 'scan' && coachDockEnabled && (
+      {!SPX_COACH_FACTS_MODE_ENABLED && layoutMode === 'scan' && coachDockEnabled && (
         <CoachDock
           surface="desktop"
           isOpen={desktopCoachPanelOpen}
@@ -212,7 +245,7 @@ export function SPXSpatialSidebarContent({
       )}
       {showSetupFeed && <SetupFeed suppressLocalPrimaryCta />}
       {showContractSelector && <ContractSelector />}
-      {showInlineCoachFeed && <AICoachFeed suppressPrimaryTradeActions />}
+      {showInlineCoachFeed && coachPanel}
       {showDecisionContext && <DecisionContext />}
       {analyticsDrawer}
     </div>

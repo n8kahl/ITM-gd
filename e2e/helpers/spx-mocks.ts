@@ -1,10 +1,17 @@
 import type { Page, Route } from '@playwright/test'
+import {
+  getContractOrderedTradeStreamSnapshot,
+  readTradeStreamSnapshotFixture,
+  type TradeStreamFixtureId,
+} from './spx-trade-stream-contract'
 
 interface SPXMockOptions {
   delayMs?: number
   omitPrediction?: boolean
   alignCoachMessagesToChart?: boolean
   snapshotDegraded?: boolean
+  tradeStreamFixtureId?: TradeStreamFixtureId
+  disableTradeStreamOrdering?: boolean
 }
 
 const nowIso = '2026-02-15T15:12:00.000Z'
@@ -498,8 +505,14 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
     omitPrediction = false,
     alignCoachMessagesToChart = false,
     snapshotDegraded = false,
+    tradeStreamFixtureId = 'expectedOrdered',
+    disableTradeStreamOrdering = false,
   } = options
   let coachMessageSequence = 0
+  const rawTradeStreamSnapshot = readTradeStreamSnapshotFixture(tradeStreamFixtureId)
+  const tradeStreamSnapshot = disableTradeStreamOrdering
+    ? rawTradeStreamSnapshot
+    : getContractOrderedTradeStreamSnapshot(rawTradeStreamSnapshot)
   const coachMessagesPayload = buildCoachMessagesPayload({ alignToChart: alignCoachMessagesToChart })
   const coachStatePayload = {
     ...coachState,
@@ -690,6 +703,11 @@ export async function setupSPXCommandCenterMocks(page: Page, options: SPXMockOpt
 
     if (endpoint === 'snapshot') {
       await fulfillJson(route, snapshotPayload)
+      return
+    }
+
+    if (endpoint === 'trade-stream') {
+      await fulfillJson(route, tradeStreamSnapshot)
       return
     }
 

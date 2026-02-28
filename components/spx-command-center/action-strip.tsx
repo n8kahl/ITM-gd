@@ -71,6 +71,7 @@ export function ActionStrip(props: ActionStripProps) {
   const overlayCapability = props.overlayCapability || {}
   const sidebarToggleEnabled = props.sidebarToggleEnabled ?? true
   const immersiveToggleEnabled = props.immersiveToggleEnabled ?? true
+  const viewModeToggleEnabled = Boolean(props.showViewModeToggle && props.onToggleViewMode)
   const quickTimeframes: ChartTimeframe[] = (() => {
     const base: ChartTimeframe[] = ['1m', '5m', '15m']
     if (!base.includes(selectedTimeframe)) base.push(selectedTimeframe)
@@ -215,144 +216,115 @@ export function ActionStrip(props: ActionStripProps) {
           </button>
         </div>
       </div>
-      {/* Desktop layout: single row (unchanged) */}
-      <div className="hidden items-center justify-between gap-2 md:flex">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-2">
-          {quickTimeframes.map((timeframe) => (
+      {/* Desktop layout: default strip exposes core-six controls only */}
+      <div className="hidden items-center gap-2 md:flex">
+        <div
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-2"
+          data-testid="spx-action-core-controls"
+        >
+          <div className="flex items-center gap-1" data-testid="spx-action-core-timeframe">
+            {quickTimeframes.map((timeframe) => (
+              <button
+                key={timeframe}
+                type="button"
+                onClick={() => {
+                  setChartTimeframe(timeframe)
+                  trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+                    surface: 'action_strip_timeframe',
+                    timeframe,
+                  })
+                }}
+                className={cn(
+                  'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                  selectedTimeframe === timeframe
+                    ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
+                    : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+                )}
+              >
+                {timeframe}
+              </button>
+            ))}
+          </div>
+
+          <div className="mx-1 h-5 w-px shrink-0 bg-white/10" />
+
+          <div className="shrink-0" data-testid="spx-action-core-levels">
             <button
-              key={timeframe}
               type="button"
+              aria-pressed={props.showLevels}
+              disabled={!(overlayCapability.levels ?? true)}
+              title={(overlayCapability.levels ?? true) ? undefined : 'Available in Spatial HUD view'}
               onClick={() => {
-                setChartTimeframe(timeframe)
-                trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
-                  surface: 'action_strip_timeframe',
-                  timeframe,
+                if (!(overlayCapability.levels ?? true)) {
+                  trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.OVERLAY_CONTROL_BLOCKED, {
+                    surface: 'action_strip',
+                    overlay: 'levels',
+                    reason: 'view_mode_unavailable',
+                  })
+                  return
+                }
+                props.onToggleLevels()
+                trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
+                  surface: 'action_strip_primary',
+                  nextState: !props.showLevels,
                 })
               }}
+              data-testid="spx-action-overlay-levels"
               className={cn(
                 'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-                selectedTimeframe === timeframe
-                  ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-200'
+                props.showLevels
+                  ? 'border-champagne/30 bg-champagne/10 text-champagne'
                   : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
+                !(overlayCapability.levels ?? true) && 'cursor-not-allowed border-white/10 bg-white/[0.015] text-white/25',
               )}
             >
-              {timeframe}
+              Levels
+              {props.activeLevelCategoryCount != null && props.activeLevelCategoryCount < 6 && (
+                <span className="ml-0.5 text-[8px] text-white/40">·{props.activeLevelCategoryCount}</span>
+              )}
             </button>
-          ))}
+          </div>
 
           <div className="mx-1 h-5 w-px shrink-0 bg-white/10" />
 
-          <button
-            type="button"
-            aria-pressed={props.showLevels}
-            disabled={!(overlayCapability.levels ?? true)}
-            title={(overlayCapability.levels ?? true) ? undefined : 'Available in Spatial HUD view'}
-            onClick={() => {
-              if (!(overlayCapability.levels ?? true)) {
-                trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.OVERLAY_CONTROL_BLOCKED, {
-                  surface: 'action_strip',
-                  overlay: 'levels',
-                  reason: 'view_mode_unavailable',
-                })
-                return
-              }
-              props.onToggleLevels()
-              trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.LEVEL_MAP_INTERACTION, {
-                surface: 'action_strip_primary',
-                nextState: !props.showLevels,
-              })
-            }}
-            data-testid="spx-action-overlay-levels"
-            className={cn(
-              'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-              props.showLevels
-                ? 'border-champagne/30 bg-champagne/10 text-champagne'
-                : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80',
-              !(overlayCapability.levels ?? true) && 'cursor-not-allowed border-white/10 bg-white/[0.015] text-white/25',
-            )}
-          >
-            Levels
-            {props.activeLevelCategoryCount != null && props.activeLevelCategoryCount < 6 && (
-              <span className="ml-0.5 text-[8px] text-white/40">·{props.activeLevelCategoryCount}</span>
-            )}
-          </button>
-
-          <div className="mx-1 h-5 w-px shrink-0 bg-white/10" />
-
-          <button
-            type="button"
-            disabled={!props.primaryActionEnabled}
-            onClick={props.onPrimaryAction}
-            data-testid="spx-action-primary-cta-desktop"
-            title={!props.primaryActionEnabled ? (props.primaryActionBlockedReason || 'Action unavailable') : undefined}
-            className={cn(
-              'ml-1 min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-              props.primaryActionMode === 'in_trade'
-                ? 'border-rose-300/40 bg-rose-500/16 text-rose-100 hover:bg-rose-500/24'
-                : props.primaryActionMode === 'evaluate'
-                  ? 'border-emerald-300/40 bg-emerald-500/16 text-emerald-100 hover:bg-emerald-500/24'
-                  : 'border-champagne/40 bg-champagne/14 text-champagne hover:bg-champagne/20',
-            )}
-          >
-            {props.primaryActionLabel}
-          </button>
-          <button
-            type="button"
-            onClick={props.onShowWhy}
-            data-testid="spx-action-primary-why-desktop"
-            className="min-h-[36px] rounded-md border border-white/18 bg-white/[0.03] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] text-white/72 transition-colors hover:text-white"
-          >
-            Why
-          </button>
-          <span
-            data-testid="spx-action-decision-state"
-            className="ml-1.5 rounded border border-white/18 bg-white/[0.04] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-white/78"
-          >
-            {decisionStateLabel}
-          </span>
-          {props.guidedStatusLabel && (
-            <span
-              data-testid="spx-action-guided-status"
-              className="ml-1.5 rounded border border-white/18 bg-white/[0.04] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-white/75"
+          <div className="ml-1 shrink-0" data-testid="spx-action-core-primary-cta">
+            <button
+              type="button"
+              disabled={!props.primaryActionEnabled}
+              onClick={props.onPrimaryAction}
+              data-testid="spx-action-primary-cta-desktop"
+              title={!props.primaryActionEnabled ? (props.primaryActionBlockedReason || 'Action unavailable') : undefined}
+              className={cn(
+                'min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                props.primaryActionMode === 'in_trade'
+                  ? 'border-rose-300/40 bg-rose-500/16 text-rose-100 hover:bg-rose-500/24'
+                  : props.primaryActionMode === 'evaluate'
+                    ? 'border-emerald-300/40 bg-emerald-500/16 text-emerald-100 hover:bg-emerald-500/24'
+                    : 'border-champagne/40 bg-champagne/14 text-champagne hover:bg-champagne/20',
+              )}
             >
-              {props.guidedStatusLabel}
-            </span>
-          )}
-          {showBlockedReasonChip && (
-            <span
-              data-testid="spx-action-primary-cta-blocked-reason"
-              className="ml-1.5 rounded border border-amber-300/35 bg-amber-500/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-amber-100"
+              {props.primaryActionLabel}
+            </button>
+          </div>
+          <div className="shrink-0" data-testid="spx-action-core-why">
+            <button
+              type="button"
+              onClick={props.onShowWhy}
+              data-testid="spx-action-primary-why-desktop"
+              className="min-h-[36px] rounded-md border border-white/18 bg-white/[0.03] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.07em] text-white/72 transition-colors hover:text-white"
             >
-              {props.primaryActionBlockedReason}
+              Why
+            </button>
+          </div>
+          <div className="ml-1.5 shrink-0" data-testid="spx-action-core-state-chip">
+            <span
+              data-testid="spx-action-decision-state"
+              className="rounded border border-white/18 bg-white/[0.04] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-white/78"
+            >
+              {decisionStateLabel}
             </span>
-          )}
-        </div>
-
-        {/* Advanced HUD + View Mode — hidden on mobile to prevent overflow */}
-        <div className="hidden items-center gap-1.5 md:flex">
-          <button
-            type="button"
-              onClick={() => {
-                const next = !props.showAdvancedHud
-                props.onToggleAdvancedHud()
-                trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
-                  surface: 'action_strip_advanced_hud',
-                  action: next ? 'open' : 'close',
-                })
-              }}
-            aria-expanded={props.showAdvancedHud}
-            data-testid="spx-action-advanced-hud-toggle"
-            className={cn(
-              'flex min-h-[36px] items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
-              props.showAdvancedHud
-                ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
-                : 'border-white/10 bg-white/[0.02] text-white/55 hover:text-white/80',
-            )}
-          >
-            Advanced HUD
-          </button>
-
-          {props.showViewModeToggle && props.onToggleViewMode && (
+          </div>
+          <div className="ml-auto shrink-0" data-testid="spx-action-core-view-mode">
             <div
               className="inline-flex items-center rounded-lg border border-white/15 bg-white/[0.03] p-1"
               data-testid="spx-view-mode-toggle"
@@ -361,11 +333,13 @@ export function ActionStrip(props: ActionStripProps) {
                 type="button"
                 data-testid="spx-view-mode-classic"
                 aria-pressed={props.desktopViewMode === 'classic'}
+                disabled={!viewModeToggleEnabled}
                 onClick={() => {
+                  if (!viewModeToggleEnabled) return
                   if (props.desktopViewMode === 'spatial') props.onToggleViewMode?.()
                 }}
                 className={cn(
-                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors disabled:cursor-not-allowed disabled:opacity-45',
                   props.desktopViewMode === 'classic'
                     ? 'bg-emerald-500/15 text-emerald-200'
                     : 'text-white/55 hover:text-white/80',
@@ -377,11 +351,13 @@ export function ActionStrip(props: ActionStripProps) {
                 type="button"
                 data-testid="spx-view-mode-spatial"
                 aria-pressed={props.desktopViewMode === 'spatial'}
+                disabled={!viewModeToggleEnabled}
                 onClick={() => {
+                  if (!viewModeToggleEnabled) return
                   if (props.desktopViewMode !== 'spatial') props.onToggleViewMode?.()
                 }}
                 className={cn(
-                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors',
+                  'min-h-[36px] rounded-md px-2.5 py-1 text-[10px] uppercase tracking-[0.1em] transition-colors disabled:cursor-not-allowed disabled:opacity-45',
                   props.desktopViewMode === 'spatial'
                     ? 'bg-emerald-500/15 text-emerald-200'
                     : 'text-white/55 hover:text-white/80',
@@ -390,8 +366,48 @@ export function ActionStrip(props: ActionStripProps) {
                 Spatial HUD
               </button>
             </div>
-          )}
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const next = !props.showAdvancedHud
+            props.onToggleAdvancedHud()
+            trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
+              surface: 'action_strip_advanced_hud',
+              action: next ? 'open' : 'close',
+            })
+          }}
+          aria-expanded={props.showAdvancedHud}
+          data-testid="spx-action-advanced-hud-toggle"
+          className={cn(
+            'shrink-0 min-h-[36px] rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+            props.showAdvancedHud
+              ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
+              : 'border-white/10 bg-white/[0.02] text-white/55 hover:text-white/80',
+          )}
+        >
+          Advanced HUD
+        </button>
+
+        {showBlockedReasonChip && (
+          <span
+            data-testid="spx-action-primary-cta-blocked-reason"
+            className="ml-1.5 rounded border border-amber-300/35 bg-amber-500/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-amber-100"
+          >
+            {props.primaryActionBlockedReason}
+          </span>
+        )}
+
+        {props.guidedStatusLabel && (
+          <span
+            data-testid="spx-action-guided-status"
+            className="hidden rounded border border-white/18 bg-white/[0.04] px-2 py-1 font-mono text-[9px] uppercase tracking-[0.07em] text-white/75"
+          >
+            {props.guidedStatusLabel}
+          </span>
+        )}
       </div>
 
       <div

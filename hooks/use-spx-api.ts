@@ -3,6 +3,7 @@
 import useSWR, { type SWRConfiguration } from 'swr'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import type { TradeStreamSnapshot } from '@/lib/types/spx-command-center'
 
 type SPXKey = [url: string, token: string]
 const browserSupabase = createBrowserSupabase()
@@ -254,14 +255,14 @@ const fetcher = async <T>(key: SPXKey): Promise<T> => {
 }
 
 export function useSPXQuery<T>(
-  endpoint: string,
+  endpoint: string | null,
   config?: SWRConfiguration<T, Error>,
 ) {
   const { session, isLoading: authLoading } = useMemberAuth()
   const token = session?.access_token
 
   const { data, error, isLoading, mutate } = useSWR<T, Error>(
-    !authLoading && token ? [endpoint, token] : null,
+    !authLoading && token && endpoint ? [endpoint, token] : null,
     fetcher,
     {
       revalidateOnFocus: true,
@@ -278,6 +279,30 @@ export function useSPXQuery<T>(
     isLoading,
     mutate,
     hasSession: Boolean(token),
+  }
+}
+
+export function useSPXTradeStream(
+  options?: {
+    enabled?: boolean
+    config?: SWRConfiguration<TradeStreamSnapshot, Error>
+  },
+) {
+  const enabled = options?.enabled ?? true
+  const query = useSPXQuery<TradeStreamSnapshot>(
+    enabled ? '/api/spx/trade-stream' : null,
+    {
+      refreshInterval: 5_000,
+      ...(options?.config || {}),
+    },
+  )
+
+  return {
+    snapshot: query.data || null,
+    isLoading: query.isLoading,
+    error: query.error,
+    mutate: query.mutate,
+    hasSession: query.hasSession,
   }
 }
 

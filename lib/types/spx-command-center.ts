@@ -335,6 +335,68 @@ export interface Setup {
   triggeredAt: string | null
 }
 
+export type TradeStreamLifecycleState = 'forming' | 'triggered' | 'past'
+
+export type TradeStreamRecommendedAction = 'WAIT' | 'STAGE' | 'MANAGE' | 'REVIEW'
+
+export interface TradeStreamItem {
+  id: string
+  stableIdHash: string
+  lifecycleState: TradeStreamLifecycleState
+  status: string
+  direction: Setup['direction']
+  setupType: SetupType
+  entryZone: { low: number; high: number }
+  stop: number
+  target1: number
+  target2: number
+  probability: number
+  confluenceScore: number
+  evR: number
+  alignmentScore: number
+  momentPriority: number
+  recommendedAction: TradeStreamRecommendedAction
+  actionBlockedReason: string | null
+  freshness: {
+    source: string
+    generatedAt: string
+    ageMs: number
+    degraded: boolean
+  }
+  timing: {
+    createdAt: string
+    triggeredAt: string | null
+    resolvedAt: string | null
+    etaToTriggerMs: number | null
+  }
+  reason: {
+    triggerContext: string
+    gateReasons: string[]
+    decisionDrivers: string[]
+    decisionRisks: string[]
+  }
+  outcome: {
+    result: string
+    rMultiple: number
+    resolvedBy: string
+  } | null
+}
+
+export interface TradeStreamSnapshot {
+  items: TradeStreamItem[]
+  nowFocusItemId: string | null
+  countsByLifecycle: Record<TradeStreamLifecycleState, number>
+  feedTrust: {
+    source: string
+    generatedAt: string
+    ageMs: number
+    degraded: boolean
+    stale: boolean
+    reason: string | null
+  }
+  generatedAt: string
+}
+
 // ─── Prediction Types ───
 
 export interface PredictionState {

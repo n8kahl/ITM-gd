@@ -70,6 +70,11 @@ export const SPX_TELEMETRY_EVENT = {
   SPATIAL_FALLBACK_ANCHOR_USED: 'spx_spatial_fallback_anchor_used',
   SETUP_LOCK_STATE_CHANGED: 'spx_setup_lock_state_changed',
   SETUP_LOCK_PULSE_PLAYED: 'spx_setup_lock_pulse_played',
+  TRADE_STREAM_RENDERED: 'spx_trade_stream_rendered',
+  TRADE_STREAM_ROW_SELECTED: 'spx_trade_stream_row_selected',
+  TRADE_STREAM_ROW_ACTION: 'spx_trade_stream_row_action',
+  TRADE_STREAM_STAGE_PATH_SUPPRESSED: 'spx_trade_stream_stage_path_suppressed',
+  DECISION_LATENCY_MEASURED: 'spx_decision_latency_measured',
 } as const
 
 export type SPXTelemetryEventName = (typeof SPX_TELEMETRY_EVENT)[keyof typeof SPX_TELEMETRY_EVENT]

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="50%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#0a100d"/>
+    </linearGradient>
+    <linearGradient id="emerald3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+    <linearGradient id="fadeRight" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow3">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="bigGlow3">
+      <feGaussianBlur stdDeviation="40" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="card3"><rect x="0" y="0" width="1200" height="630" rx="16"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#card3)">
+    <rect width="1200" height="630" fill="url(#bg3)"/>
+
+    <!-- Radial glow center right -->
+    <ellipse cx="900" cy="315" rx="400" ry="300" fill="#10B981" opacity="0.025" filter="url(#bigGlow3)"/>
+
+    <!-- SPX Price chart — smooth area chart -->
+    <g transform="translate(500, 60)">
+      <!-- Area fill -->
+      <path d="M0,400 L0,350 C40,340 80,320 120,310 C160,300 200,280 240,250 C280,220 320,200 360,180 C400,160 440,150 480,120 C520,90 560,70 600,50 C640,30 660,40 680,35 L680,400 Z"
+        fill="url(#fadeRight)" opacity="0.15"/>
+
+      <!-- Line -->
+      <path d="M0,350 C40,340 80,320 120,310 C160,300 200,280 240,250 C280,220 320,200 360,180 C400,160 440,150 480,120 C520,90 560,70 600,50 C640,30 660,40 680,35"
+        fill="none" stroke="#10B981" stroke-width="2.5" filter="url(#glow3)"/>
+
+      <!-- Current price dot -->
+      <circle cx="680" cy="35" r="5" fill="#10B981" filter="url(#glow3)"/>
+      <circle cx="680" cy="35" r="2" fill="#ffffff"/>
+
+      <!-- Price label -->
+      <rect x="640" y="5" width="90" height="24" rx="4" fill="#10B981" opacity="0.15"/>
+      <text x="685" y="22" text-anchor="middle" fill="#10B981" font-family="Geist Mono, monospace" font-size="12" font-weight="600">5,892.41</text>
+
+      <!-- Horizontal grid lines -->
+      <line x1="0" y1="100" x2="680" y2="100" stroke="#ffffff" stroke-width="0.3" opacity="0.05"/>
+      <line x1="0" y1="200" x2="680" y2="200" stroke="#ffffff" stroke-width="0.3" opacity="0.05"/>
+      <line x1="0" y1="300" x2="680" y2="300" stroke="#ffffff" stroke-width="0.3" opacity="0.05"/>
+    </g>
+
+    <!-- Terminal-style data readout -->
+    <g transform="translate(80, 420)" opacity="0.5">
+      <text x="0" y="0" fill="#10B981" font-family="Geist Mono, monospace" font-size="12">SPX  5892.41  ▲ +1.24%</text>
+      <text x="0" y="22" fill="#71717a" font-family="Geist Mono, monospace" font-size="12">VIX  14.32  │  DTE  0-2  │  IV_R  42</text>
+      <text x="0" y="44" fill="#71717a" font-family="Geist Mono, monospace" font-size="12">SIGNAL  ████████░░  BULLISH</text>
+    </g>
+
+    <!-- Text content -->
+    <g transform="translate(80, 120)">
+      <rect x="0" y="0" width="140" height="32" rx="16" fill="#10B981" opacity="0.15"/>
+      <text x="70" y="21" text-anchor="middle" fill="#10B981" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" letter-spacing="1.5">ADVANCED</text>
+
+      <text x="0" y="80" fill="#ffffff" font-family="Playfair Display, Georgia, serif" font-size="56" font-weight="700">SPX</text>
+      <text x="0" y="140" fill="#ffffff" font-family="Playfair Display, Georgia, serif" font-size="56" font-weight="700">Mastery</text>
+
+      <text x="0" y="190" fill="#a1a1aa" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400">0DTE strategies and the Command Center</text>
+
+      <rect x="0" y="220" width="80" height="2" rx="1" fill="#F3E5AB" opacity="0.5"/>
+
+      <text x="0" y="265" fill="#F3E5AB" font-family="Geist Mono, monospace" font-size="14" opacity="0.7">16 LESSONS</text>
+      <text x="145" y="265" fill="#71717a" font-family="Geist Mono, monospace" font-size="14">•</text>
+      <text x="165" y="265" fill="#F3E5AB" font-family="Geist Mono, monospace" font-size="14" opacity="0.7">6.8 HOURS</text>
+    </g>
+
+    <rect x="0" y="620" width="1200" height="10" fill="url(#emerald3)" opacity="0.6"/>
+  </g>
+</svg>

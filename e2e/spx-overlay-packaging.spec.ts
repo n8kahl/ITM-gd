@@ -29,7 +29,7 @@ test.describe('SPX overlay packaging', () => {
     await expect(page.getByTestId('spx-action-preset-flow')).toBeVisible()
     await expect(page.getByTestId('spx-action-preset-spatial')).toBeVisible()
 
-    const levels = page.getByTestId('spx-action-overlay-levels')
+    const levels = page.getByTestId('spx-action-core-levels').getByTestId('spx-action-overlay-levels')
     const cone = page.getByTestId('spx-action-overlay-cone')
     const coach = page.getByTestId('spx-action-overlay-coach')
     const gex = page.getByTestId('spx-action-overlay-gex')

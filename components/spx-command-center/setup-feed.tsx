@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useSPXCommandCenter } from '@/contexts/SPXCommandCenterContext'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
 import { useTradierBroker } from '@/hooks/use-tradier-broker'
+import { useSPXTradeStream } from '@/hooks/use-spx-api'
 import { resolveExecutionEntryGate } from '@/lib/spx/execution-gating'
 import { SetupCard } from '@/components/spx-command-center/setup-card'
+import { TradeStreamPanel } from '@/components/spx-command-center/trade-stream-panel'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import { buildSetupDisplayPolicy, DEFAULT_PRIMARY_SETUP_LIMIT } from '@/lib/spx/setup-display-policy'
 import {
@@ -19,7 +21,7 @@ import {
   type TriggeredAlertHistoryItem,
   type TriggeredAlertState,
 } from '@/lib/spx/triggered-alert-history'
-import type { Setup } from '@/lib/types/spx-command-center'
+import type { Setup, TradeStreamItem, TradeStreamSnapshot } from '@/lib/types/spx-command-center'
 import { cn } from '@/lib/utils'
 
 function prioritizeSelected(setups: Setup[], selectedSetupId: string | null): Setup[] {
@@ -39,10 +41,76 @@ type TriggeredAlertAction = {
 }
 
 const TRIGGER_ALERT_HISTORY_STORAGE_KEY = 'spx_command_center:trigger_alert_history'
+const TRADE_STREAM_STAGE_ACTIONABLE_STATUSES: ReadonlySet<Setup['status']> = new Set(['ready', 'triggered'])
+const TRADE_STREAM_MODE = 'trade_stream'
+
+function parseBooleanEnvFlag(value: string | undefined): boolean | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) return false
+  return null
+}
+
+function resolveTradeStreamRuntimeOverride(): boolean | null {
+  if (typeof window === 'undefined') return null
+  if (window.navigator.webdriver !== true) return null
+  const candidate = (window as Window & { __spxExpertTradeStreamEnabled?: unknown }).__spxExpertTradeStreamEnabled
+  return typeof candidate === 'boolean' ? candidate : null
+}
+
+function resolveTradeStreamFeatureEnabled(): boolean {
+  return (
+    resolveTradeStreamRuntimeOverride()
+    ?? parseBooleanEnvFlag(process.env.SPX_EXPERT_TRADE_STREAM_ENABLED)
+    ?? parseBooleanEnvFlag(process.env.NEXT_PUBLIC_SPX_EXPERT_TRADE_STREAM_ENABLED)
+    ?? false
+  )
+}
+
+const SPX_EXPERT_TRADE_STREAM_ENABLED = resolveTradeStreamFeatureEnabled()
 
 function formatMaybeFixed(value: unknown, digits: number): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
   return value.toFixed(digits)
+}
+
+function parseTimestampMs(value: string | null | undefined): number | null {
+  if (typeof value !== 'string' || value.length === 0) return null
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function resolveTradeStreamGeneratedAt(item: TradeStreamItem, snapshot: TradeStreamSnapshot | null): string | null {
+  if (parseTimestampMs(item.freshness.generatedAt) != null) return item.freshness.generatedAt
+  if (snapshot && parseTimestampMs(snapshot.generatedAt) != null) return snapshot.generatedAt
+  return null
+}
+
+function resolveTradeStreamSnapshotAgeMs(snapshot: TradeStreamSnapshot | null, nowMs: number): number | null {
+  if (!snapshot) return null
+  if (typeof snapshot.feedTrust.ageMs === 'number' && Number.isFinite(snapshot.feedTrust.ageMs) && snapshot.feedTrust.ageMs >= 0) {
+    return Math.round(snapshot.feedTrust.ageMs)
+  }
+  const snapshotGeneratedAtMs = parseTimestampMs(snapshot.generatedAt)
+  if (snapshotGeneratedAtMs == null) return null
+  return Math.max(0, nowMs - snapshotGeneratedAtMs)
+}
+
+function resolveTradeStreamDecisionTiming(item: TradeStreamItem, snapshot: TradeStreamSnapshot | null): {
+  generatedAt: string | null
+  snapshotAgeMs: number | null
+  latencyMs: number | null
+} {
+  const nowMs = Date.now()
+  const generatedAt = resolveTradeStreamGeneratedAt(item, snapshot)
+  const generatedAtMs = parseTimestampMs(generatedAt)
+
+  return {
+    generatedAt,
+    snapshotAgeMs: resolveTradeStreamSnapshotAgeMs(snapshot, nowMs),
+    latencyMs: generatedAtMs == null ? null : Math.max(0, nowMs - generatedAtMs),
+  }
 }
 
 function restoreTriggeredAlertHistory(): TriggeredAlertHistoryItem[] {
@@ -104,6 +172,16 @@ export function SetupFeed({
     undefined,
     createTriggeredAlertStateFromStorage,
   )
+  const tradeStreamQuery = useSPXTradeStream({
+    enabled: SPX_EXPERT_TRADE_STREAM_ENABLED,
+  })
+  const tradeStreamSnapshot = SPX_EXPERT_TRADE_STREAM_ENABLED ? tradeStreamQuery.snapshot : null
+  const hasTradeStreamItems = Boolean(tradeStreamSnapshot && tradeStreamSnapshot.items.length > 0)
+  const showTradeStreamPanel = SPX_EXPERT_TRADE_STREAM_ENABLED && hasTradeStreamItems
+  const showLegacySetupList = !showTradeStreamPanel
+  const renderedTradeStreamSnapshotKeyRef = useRef<string | null>(null)
+  const suppressedTradeStreamSnapshotKeyRef = useRef<string | null>(null)
+  const suppressedTradeStreamRowKeysRef = useRef<Set<string>>(new Set())
 
   const policy = useMemo(
     () => buildSetupDisplayPolicy({
@@ -147,6 +225,7 @@ export function SetupFeed({
   )
   const standbyActive = tradeMode !== 'in_trade' && standbyGuidance?.status === 'STANDBY'
   const localPrimaryCtaEnabled = !readOnly && !suppressLocalPrimaryCta
+  const suppressTradeStreamStagePathway = suppressLocalPrimaryCta
   const oneClickEntryEnabled = uxFlags.oneClickEntry && localPrimaryCtaEnabled && !executionBlocked
   const executionBlockMessage = executionGate.message
 
@@ -183,6 +262,55 @@ export function SetupFeed({
     )
   }, [triggeredAlertHistory])
 
+  useEffect(() => {
+    if (!showTradeStreamPanel || !tradeStreamSnapshot) return
+    const snapshotKey = `${tradeStreamSnapshot.generatedAt}:${tradeStreamSnapshot.items.length}:${tradeStreamSnapshot.nowFocusItemId || ''}`
+    if (renderedTradeStreamSnapshotKeyRef.current === snapshotKey) return
+    renderedTradeStreamSnapshotKeyRef.current = snapshotKey
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.TRADE_STREAM_RENDERED, {
+      mode: TRADE_STREAM_MODE,
+      surface: 'setup_feed',
+      blocked: executionBlocked,
+      rowCount: tradeStreamSnapshot.items.length,
+      formingCount: tradeStreamSnapshot.countsByLifecycle.forming,
+      triggeredCount: tradeStreamSnapshot.countsByLifecycle.triggered,
+      pastCount: tradeStreamSnapshot.countsByLifecycle.past,
+      generatedAt: tradeStreamSnapshot.generatedAt,
+      snapshotAgeMs: resolveTradeStreamSnapshotAgeMs(tradeStreamSnapshot, Date.now()),
+    })
+  }, [executionBlocked, showTradeStreamPanel, tradeStreamSnapshot])
+
+  useEffect(() => {
+    if (!showTradeStreamPanel || !tradeStreamSnapshot || !suppressTradeStreamStagePathway) return
+    const snapshotKey = `${tradeStreamSnapshot.generatedAt}:${tradeStreamSnapshot.items.length}:${tradeStreamSnapshot.nowFocusItemId || ''}`
+    if (suppressedTradeStreamSnapshotKeyRef.current !== snapshotKey) {
+      suppressedTradeStreamSnapshotKeyRef.current = snapshotKey
+      suppressedTradeStreamRowKeysRef.current = new Set()
+    }
+
+    for (const item of tradeStreamSnapshot.items) {
+      if (item.recommendedAction !== 'STAGE') continue
+      const rowKey = item.stableIdHash || item.id
+      if (suppressedTradeStreamRowKeysRef.current.has(rowKey)) continue
+      suppressedTradeStreamRowKeysRef.current.add(rowKey)
+
+      const timing = resolveTradeStreamDecisionTiming(item, tradeStreamSnapshot)
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.TRADE_STREAM_STAGE_PATH_SUPPRESSED, {
+        mode: TRADE_STREAM_MODE,
+        surface: 'trade_stream_row_action',
+        blocked: true,
+        blockedReason: 'primary_cta_ownership',
+        lifecycleState: item.lifecycleState,
+        recommendedAction: item.recommendedAction,
+        setupId: item.id || null,
+        stableIdHash: item.stableIdHash || null,
+        generatedAt: timing.generatedAt,
+        snapshotAgeMs: timing.snapshotAgeMs,
+      })
+    }
+  }, [showTradeStreamPanel, suppressTradeStreamStagePathway, tradeStreamSnapshot])
+
   const handleOneClickEntry = (setup: Setup) => {
     if (executionBlocked) {
       trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
@@ -205,6 +333,126 @@ export function SetupFeed({
       source: 'setup_card_cta',
       mobile: typeof window !== 'undefined' ? window.innerWidth < 768 : false,
     }, { persist: true })
+  }
+
+  const resolveTradeStreamSetup = (item: TradeStreamItem): Setup | null => {
+    const direct = activeSetups.find((setup) => setup.id === item.id) || null
+    if (direct) return direct
+    return activeSetups.find((setup) => Boolean(setup.stableIdHash) && setup.stableIdHash === item.stableIdHash) || null
+  }
+
+  const focusTradeStreamSetup = (item: TradeStreamItem): Setup | null => {
+    const setup = resolveTradeStreamSetup(item)
+    if (!setup) return null
+    selectSetup(setup)
+    return setup
+  }
+
+  const handleTradeStreamRowSelect = (item: TradeStreamItem) => {
+    if (readOnly) return
+    const setup = focusTradeStreamSetup(item)
+    const blocked = !setup
+    const blockedReason = blocked ? 'setup_not_found' : null
+    const timing = resolveTradeStreamDecisionTiming(item, tradeStreamSnapshot)
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.TRADE_STREAM_ROW_SELECTED, {
+      mode: TRADE_STREAM_MODE,
+      surface: 'trade_stream_row_select',
+      blocked,
+      blockedReason,
+      lifecycleState: item.lifecycleState,
+      recommendedAction: item.recommendedAction,
+      setupId: item.id || null,
+      stableIdHash: item.stableIdHash || null,
+      generatedAt: timing.generatedAt,
+      snapshotAgeMs: timing.snapshotAgeMs,
+    })
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.DECISION_LATENCY_MEASURED, {
+      mode: TRADE_STREAM_MODE,
+      surface: 'trade_stream_row_select',
+      decisionType: 'row_select',
+      blocked,
+      blockedReason,
+      lifecycleState: item.lifecycleState,
+      recommendedAction: item.recommendedAction,
+      setupId: item.id || null,
+      stableIdHash: item.stableIdHash || null,
+      generatedAt: timing.generatedAt,
+      snapshotAgeMs: timing.snapshotAgeMs,
+      latencyMs: timing.latencyMs,
+    })
+  }
+
+  const handleTradeStreamRowAction = (item: TradeStreamItem) => {
+    if (readOnly) return
+    const setup = focusTradeStreamSetup(item)
+    const stagePathSuppressed = suppressTradeStreamStagePathway && item.recommendedAction === 'STAGE'
+    const setupActionable = Boolean(setup && TRADE_STREAM_STAGE_ACTIONABLE_STATUSES.has(setup.status))
+    const stageRecommended = item.recommendedAction === 'STAGE'
+    const stagePermitted = Boolean(setup && stageRecommended && setupActionable && !executionBlocked && !stagePathSuppressed)
+
+    const blockedReason = !setup
+      ? 'setup_not_found'
+      : stagePathSuppressed
+      ? 'primary_cta_ownership'
+      : !stageRecommended
+      ? 'recommended_action_not_stage'
+      : !setupActionable
+      ? 'setup_status_not_stageable'
+      : executionBlocked
+      ? 'execution_blocked'
+      : null
+    const blocked = blockedReason !== null
+    const timing = resolveTradeStreamDecisionTiming(item, tradeStreamSnapshot)
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.TRADE_STREAM_ROW_ACTION, {
+      mode: TRADE_STREAM_MODE,
+      surface: 'trade_stream_row_action',
+      blocked,
+      blockedReason,
+      lifecycleState: item.lifecycleState,
+      recommendedAction: item.recommendedAction,
+      setupId: item.id || null,
+      stableIdHash: item.stableIdHash || null,
+      generatedAt: timing.generatedAt,
+      snapshotAgeMs: timing.snapshotAgeMs,
+    })
+
+    trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.DECISION_LATENCY_MEASURED, {
+      mode: TRADE_STREAM_MODE,
+      surface: 'trade_stream_row_action',
+      decisionType: 'row_action',
+      blocked,
+      blockedReason,
+      lifecycleState: item.lifecycleState,
+      recommendedAction: item.recommendedAction,
+      setupId: item.id || null,
+      stableIdHash: item.stableIdHash || null,
+      generatedAt: timing.generatedAt,
+      snapshotAgeMs: timing.snapshotAgeMs,
+      latencyMs: timing.latencyMs,
+    })
+
+    if (stagePathSuppressed) {
+      trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.TRADE_STREAM_STAGE_PATH_SUPPRESSED, {
+        mode: TRADE_STREAM_MODE,
+        surface: 'trade_stream_row_action',
+        blocked: true,
+        blockedReason: 'primary_cta_ownership',
+        lifecycleState: item.lifecycleState,
+        recommendedAction: item.recommendedAction,
+        setupId: item.id || null,
+        stableIdHash: item.stableIdHash || null,
+        generatedAt: timing.generatedAt,
+        snapshotAgeMs: timing.snapshotAgeMs,
+      })
+      return
+    }
+
+    if (stagePermitted && setup) {
+      handleOneClickEntry(setup)
+    }
   }
 
   return (
@@ -456,7 +704,20 @@ export function SetupFeed({
         </div>
       )}
 
-      <div className="relative z-10 mt-2 space-y-2 max-h-[420px] overflow-auto overscroll-contain pr-0.5">
+      {showTradeStreamPanel && tradeStreamSnapshot && (
+        <TradeStreamPanel
+          snapshot={tradeStreamSnapshot}
+          onRowSelect={readOnly ? undefined : handleTradeStreamRowSelect}
+          onRowAction={readOnly ? undefined : handleTradeStreamRowAction}
+          suppressStageAction={suppressTradeStreamStagePathway}
+        />
+      )}
+
+      {showLegacySetupList && (
+        <div
+          className="relative z-10 mt-2 space-y-2 max-h-[420px] overflow-auto overscroll-contain pr-0.5"
+          data-testid="spx-legacy-setup-list"
+        >
         {activeSetups.length === 0 ? (
           <p className="text-xs text-white/55">No active setups detected.</p>
         ) : (
@@ -563,7 +824,8 @@ export function SetupFeed({
             ))}
           </>
         )}
-      </div>
+        </div>
+      )}
     </section>
   )
 }

@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg4" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="50%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#0f0a11"/>
+    </linearGradient>
+    <linearGradient id="emerald4" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <filter id="glow4">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="bigGlow4">
+      <feGaussianBlur stdDeviation="50" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="card4"><rect x="0" y="0" width="1200" height="630" rx="16"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#card4)">
+    <rect width="1200" height="630" fill="url(#bg4)"/>
+
+    <!-- Ambient glow -->
+    <circle cx="850" cy="280" r="280" fill="#10B981" opacity="0.02" filter="url(#bigGlow4)"/>
+
+    <!-- Brain/Mind visualization — neural network nodes -->
+    <g transform="translate(700, 100)" opacity="0.6">
+      <!-- Connection lines -->
+      <line x1="200" y1="200" x2="80" y2="80" stroke="#10B981" stroke-width="0.8" opacity="0.3"/>
+      <line x1="200" y1="200" x2="320" y2="100" stroke="#10B981" stroke-width="0.8" opacity="0.3"/>
+      <line x1="200" y1="200" x2="100" y2="300" stroke="#10B981" stroke-width="0.8" opacity="0.25"/>
+      <line x1="200" y1="200" x2="340" y2="280" stroke="#10B981" stroke-width="0.8" opacity="0.25"/>
+      <line x1="200" y1="200" x2="200" y2="50" stroke="#10B981" stroke-width="0.8" opacity="0.35"/>
+      <line x1="200" y1="200" x2="50" y2="200" stroke="#10B981" stroke-width="0.8" opacity="0.2"/>
+      <line x1="200" y1="200" x2="380" y2="200" stroke="#10B981" stroke-width="0.8" opacity="0.2"/>
+      <line x1="200" y1="200" x2="140" y2="360" stroke="#10B981" stroke-width="0.8" opacity="0.2"/>
+      <line x1="200" y1="200" x2="300" y2="360" stroke="#10B981" stroke-width="0.8" opacity="0.2"/>
+
+      <!-- Secondary connections -->
+      <line x1="80" y1="80" x2="200" y2="50" stroke="#10B981" stroke-width="0.5" opacity="0.15"/>
+      <line x1="320" y1="100" x2="380" y2="200" stroke="#10B981" stroke-width="0.5" opacity="0.15"/>
+      <line x1="100" y1="300" x2="140" y2="360" stroke="#10B981" stroke-width="0.5" opacity="0.15"/>
+      <line x1="340" y1="280" x2="300" y2="360" stroke="#10B981" stroke-width="0.5" opacity="0.15"/>
+
+      <!-- Outer nodes -->
+      <circle cx="80" cy="80" r="8" fill="#10B981" opacity="0.3"/>
+      <circle cx="320" cy="100" r="6" fill="#10B981" opacity="0.25"/>
+      <circle cx="200" cy="50" r="7" fill="#10B981" opacity="0.3"/>
+      <circle cx="100" cy="300" r="5" fill="#10B981" opacity="0.2"/>
+      <circle cx="340" cy="280" r="7" fill="#10B981" opacity="0.25"/>
+      <circle cx="50" cy="200" r="4" fill="#10B981" opacity="0.15"/>
+      <circle cx="380" cy="200" r="5" fill="#10B981" opacity="0.15"/>
+      <circle cx="140" cy="360" r="4" fill="#10B981" opacity="0.15"/>
+      <circle cx="300" cy="360" r="5" fill="#10B981" opacity="0.15"/>
+
+      <!-- Pulse rings around center -->
+      <circle cx="200" cy="200" r="40" fill="none" stroke="#10B981" stroke-width="0.5" opacity="0.2"/>
+      <circle cx="200" cy="200" r="80" fill="none" stroke="#10B981" stroke-width="0.3" opacity="0.1"/>
+      <circle cx="200" cy="200" r="130" fill="none" stroke="#10B981" stroke-width="0.3" opacity="0.06"/>
+      <circle cx="200" cy="200" r="180" fill="none" stroke="#10B981" stroke-width="0.2" opacity="0.03"/>
+
+      <!-- Center node — glowing -->
+      <circle cx="200" cy="200" r="14" fill="#10B981" opacity="0.6" filter="url(#glow4)"/>
+      <circle cx="200" cy="200" r="6" fill="#ffffff" opacity="0.8"/>
+    </g>
+
+    <!-- Emotion spectrum bar -->
+    <g transform="translate(700, 490)" opacity="0.4">
+      <rect x="0" y="0" width="400" height="6" rx="3" fill="#1a1a2e"/>
+      <rect x="0" y="0" width="60" height="6" rx="3" fill="#ef4444" opacity="0.6"/>
+      <rect x="60" y="0" width="80" height="6" fill="#eab308" opacity="0.4"/>
+      <rect x="140" y="0" width="160" height="6" fill="#10B981" opacity="0.5"/>
+      <rect x="300" y="0" width="100" height="6" rx="3" fill="#10B981" opacity="0.7"/>
+
+      <text x="0" y="25" fill="#71717a" font-family="Geist Mono, monospace" font-size="10">FEAR</text>
+      <text x="190" y="25" fill="#71717a" font-family="Geist Mono, monospace" font-size="10">NEUTRAL</text>
+      <text x="365" y="25" fill="#71717a" font-family="Geist Mono, monospace" font-size="10">GREED</text>
+
+      <!-- Current marker -->
+      <rect x="260" y="-4" width="3" height="14" rx="1" fill="#F3E5AB" opacity="0.8"/>
+    </g>
+
+    <!-- Text content -->
+    <g transform="translate(80, 140)">
+      <rect x="0" y="0" width="120" height="32" rx="16" fill="#10B981" opacity="0.15"/>
+      <text x="60" y="21" text-anchor="middle" fill="#10B981" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" letter-spacing="1.5">MODULE 05</text>
+
+      <text x="0" y="80" fill="#ffffff" font-family="Playfair Display, Georgia, serif" font-size="52" font-weight="700">Trading</text>
+      <text x="0" y="140" fill="#ffffff" font-family="Playfair Display, Georgia, serif" font-size="52" font-weight="700">Psychology</text>
+
+      <text x="0" y="190" fill="#a1a1aa" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400">Master your emotions, master the market</text>
+
+      <rect x="0" y="220" width="80" height="2" rx="1" fill="#F3E5AB" opacity="0.5"/>
+
+      <text x="0" y="270" fill="#F3E5AB" font-family="Geist Mono, monospace" font-size="14" opacity="0.7">10 LESSONS</text>
+      <text x="130" y="270" fill="#71717a" font-family="Geist Mono, monospace" font-size="14">•</text>
+      <text x="150" y="270" fill="#F3E5AB" font-family="Geist Mono, monospace" font-size="14" opacity="0.7">3.8 HOURS</text>
+    </g>
+
+    <rect x="0" y="620" width="1200" height="10" fill="url(#emerald4)" opacity="0.6"/>
+  </g>
+</svg>

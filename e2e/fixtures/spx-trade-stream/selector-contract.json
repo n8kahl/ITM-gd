@@ -1,0 +1,28 @@
+{
+  "route": "/members/spx-command-center",
+  "version": "2026-02-28",
+  "lifecycleOrder": [
+    "forming",
+    "triggered",
+    "past"
+  ],
+  "selectors": {
+    "shell": "spx-command-center",
+    "nowFocusCard": "spx-now-focus",
+    "nowFocusLifecycleBadge": "spx-now-focus-lifecycle",
+    "nowFocusAction": "spx-now-focus-action",
+    "tradeStreamPanel": "spx-trade-stream",
+    "tradeStreamRow": "spx-trade-stream-row",
+    "tradeStreamRowLifecycle": "spx-trade-stream-row-lifecycle",
+    "tradeStreamRowFreshness": "spx-trade-stream-row-freshness",
+    "tradeStreamRowAction": "spx-trade-stream-row-action",
+    "tradeStreamRowToggle": "spx-trade-stream-row-details-toggle",
+    "tradeStreamRowExpanded": "spx-trade-stream-row-expanded",
+    "lifecycleGroupForming": "spx-trade-stream-lifecycle-forming",
+    "lifecycleGroupTriggered": "spx-trade-stream-lifecycle-triggered",
+    "lifecycleGroupPast": "spx-trade-stream-lifecycle-past"
+  },
+  "dynamicSelectors": {
+    "tradeStreamRowByStableHash": "spx-trade-stream-row-{stableIdHash}"
+  }
+}

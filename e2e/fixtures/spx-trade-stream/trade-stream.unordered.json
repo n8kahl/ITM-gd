@@ -1,0 +1,299 @@
+{
+  "items": [
+    {
+      "id": "ts-past-b",
+      "stableIdHash": "stable-past-b",
+      "lifecycleState": "past",
+      "status": "resolved",
+      "direction": "bullish",
+      "setupType": "orb_reclaim",
+      "entryZone": {
+        "low": 6014,
+        "high": 6016
+      },
+      "stop": 6009,
+      "target1": 6022,
+      "target2": 6031,
+      "probability": 61,
+      "confluenceScore": 3.7,
+      "evR": 1.4,
+      "alignmentScore": 0.62,
+      "momentPriority": 91,
+      "recommendedAction": "REVIEW",
+      "actionBlockedReason": "resolved",
+      "freshness": {
+        "source": "live",
+        "generatedAt": "2026-02-28T14:30:00.000Z",
+        "ageMs": 15000,
+        "degraded": false
+      },
+      "timing": {
+        "createdAt": "2026-02-28T14:06:00.000Z",
+        "triggeredAt": "2026-02-28T14:10:30.000Z",
+        "resolvedAt": "2026-02-28T14:22:00.000Z",
+        "etaToTriggerMs": null
+      },
+      "reason": {
+        "triggerContext": "Opened through prior day high reclaim.",
+        "gateReasons": [],
+        "decisionDrivers": [
+          "Strong reclaim continuation at trigger."
+        ],
+        "decisionRisks": [
+          "Thin liquidity during midday."
+        ]
+      },
+      "outcome": {
+        "result": "target1",
+        "rMultiple": 0.8,
+        "resolvedBy": "target1"
+      }
+    },
+    {
+      "id": "ts-triggered-b",
+      "stableIdHash": "stable-triggered-b",
+      "lifecycleState": "triggered",
+      "status": "triggered",
+      "direction": "bearish",
+      "setupType": "breakout_vacuum",
+      "entryZone": {
+        "low": 6018,
+        "high": 6020
+      },
+      "stop": 6024,
+      "target1": 6008,
+      "target2": 5998,
+      "probability": 76,
+      "confluenceScore": 4.7,
+      "evR": 2.2,
+      "alignmentScore": 0.84,
+      "momentPriority": 93,
+      "recommendedAction": "MANAGE",
+      "actionBlockedReason": null,
+      "freshness": {
+        "source": "live",
+        "generatedAt": "2026-02-28T14:30:00.000Z",
+        "ageMs": 15000,
+        "degraded": false
+      },
+      "timing": {
+        "createdAt": "2026-02-28T14:20:00.000Z",
+        "triggeredAt": "2026-02-28T14:28:30.000Z",
+        "resolvedAt": null,
+        "etaToTriggerMs": null
+      },
+      "reason": {
+        "triggerContext": "Price accepted below 6020 with bearish flow.",
+        "gateReasons": [],
+        "decisionDrivers": [
+          "Flow and regime remain aligned."
+        ],
+        "decisionRisks": [
+          "Fast reversal risk near 6012."
+        ]
+      },
+      "outcome": null
+    },
+    {
+      "id": "ts-forming-b",
+      "stableIdHash": "stable-forming-b",
+      "lifecycleState": "forming",
+      "status": "forming",
+      "direction": "bullish",
+      "setupType": "fade_at_wall",
+      "entryZone": {
+        "low": 6028,
+        "high": 6030
+      },
+      "stop": 6024,
+      "target1": 6038,
+      "target2": 6044,
+      "probability": 70,
+      "confluenceScore": 4.2,
+      "evR": 2.0,
+      "alignmentScore": 0.77,
+      "momentPriority": 84,
+      "recommendedAction": "WAIT",
+      "actionBlockedReason": "waiting_for_trigger",
+      "freshness": {
+        "source": "live",
+        "generatedAt": "2026-02-28T14:30:00.000Z",
+        "ageMs": 15000,
+        "degraded": false
+      },
+      "timing": {
+        "createdAt": "2026-02-28T14:18:00.000Z",
+        "triggeredAt": null,
+        "resolvedAt": null,
+        "etaToTriggerMs": 420000
+      },
+      "reason": {
+        "triggerContext": "Awaiting reclaim and hold above 6030.",
+        "gateReasons": [
+          "Awaiting final trigger print."
+        ],
+        "decisionDrivers": [
+          "Gamma support around defended level."
+        ],
+        "decisionRisks": [
+          "Flow confirmation is mixed."
+        ]
+      },
+      "outcome": null
+    },
+    {
+      "id": "ts-past-a",
+      "stableIdHash": "stable-past-a",
+      "lifecycleState": "past",
+      "status": "resolved",
+      "direction": "bearish",
+      "setupType": "breakdown_retest",
+      "entryZone": {
+        "low": 6026,
+        "high": 6028
+      },
+      "stop": 6032,
+      "target1": 6017,
+      "target2": 6008,
+      "probability": 69,
+      "confluenceScore": 4.0,
+      "evR": 1.9,
+      "alignmentScore": 0.79,
+      "momentPriority": 99,
+      "recommendedAction": "REVIEW",
+      "actionBlockedReason": "resolved",
+      "freshness": {
+        "source": "live",
+        "generatedAt": "2026-02-28T14:30:00.000Z",
+        "ageMs": 15000,
+        "degraded": false
+      },
+      "timing": {
+        "createdAt": "2026-02-28T14:21:00.000Z",
+        "triggeredAt": "2026-02-28T14:24:00.000Z",
+        "resolvedAt": "2026-02-28T14:29:55.000Z",
+        "etaToTriggerMs": null
+      },
+      "reason": {
+        "triggerContext": "Late-session rejection from intraday highs.",
+        "gateReasons": [],
+        "decisionDrivers": [
+          "Strong downside expansion after trigger."
+        ],
+        "decisionRisks": [
+          "Trend exhaustion risk into close."
+        ]
+      },
+      "outcome": {
+        "result": "target2",
+        "rMultiple": 1.9,
+        "resolvedBy": "target2"
+      }
+    },
+    {
+      "id": "ts-forming-a",
+      "stableIdHash": "stable-forming-a",
+      "lifecycleState": "forming",
+      "status": "forming",
+      "direction": "bullish",
+      "setupType": "vwap_reclaim",
+      "entryZone": {
+        "low": 6023,
+        "high": 6025
+      },
+      "stop": 6019,
+      "target1": 6031,
+      "target2": 6038,
+      "probability": 72,
+      "confluenceScore": 4.3,
+      "evR": 2.1,
+      "alignmentScore": 0.81,
+      "momentPriority": 84,
+      "recommendedAction": "STAGE",
+      "actionBlockedReason": null,
+      "freshness": {
+        "source": "live",
+        "generatedAt": "2026-02-28T14:30:00.000Z",
+        "ageMs": 15000,
+        "degraded": false
+      },
+      "timing": {
+        "createdAt": "2026-02-28T14:19:00.000Z",
+        "triggeredAt": null,
+        "resolvedAt": null,
+        "etaToTriggerMs": 180000
+      },
+      "reason": {
+        "triggerContext": "VWAP reclaim approaching trigger band.",
+        "gateReasons": [],
+        "decisionDrivers": [
+          "Regime is supportive with improving flow."
+        ],
+        "decisionRisks": [
+          "Reclaim can fail on volume fade."
+        ]
+      },
+      "outcome": null
+    },
+    {
+      "id": "ts-triggered-a",
+      "stableIdHash": "stable-triggered-a",
+      "lifecycleState": "triggered",
+      "status": "triggered",
+      "direction": "bearish",
+      "setupType": "breakout_vacuum",
+      "entryZone": {
+        "low": 6016,
+        "high": 6018
+      },
+      "stop": 6022,
+      "target1": 6007,
+      "target2": 5995,
+      "probability": 78,
+      "confluenceScore": 4.9,
+      "evR": 2.4,
+      "alignmentScore": 0.86,
+      "momentPriority": 93,
+      "recommendedAction": "MANAGE",
+      "actionBlockedReason": null,
+      "freshness": {
+        "source": "live",
+        "generatedAt": "2026-02-28T14:30:00.000Z",
+        "ageMs": 15000,
+        "degraded": false
+      },
+      "timing": {
+        "createdAt": "2026-02-28T14:17:00.000Z",
+        "triggeredAt": "2026-02-28T14:29:35.000Z",
+        "resolvedAt": null,
+        "etaToTriggerMs": null
+      },
+      "reason": {
+        "triggerContext": "Break below 6018 with flow expansion.",
+        "gateReasons": [],
+        "decisionDrivers": [
+          "Momentum and flow remain aligned."
+        ],
+        "decisionRisks": [
+          "Whipsaw risk if reclaim above 6021."
+        ]
+      },
+      "outcome": null
+    }
+  ],
+  "nowFocusItemId": "ts-triggered-b",
+  "countsByLifecycle": {
+    "forming": 2,
+    "triggered": 2,
+    "past": 2
+  },
+  "feedTrust": {
+    "source": "live",
+    "generatedAt": "2026-02-28T14:30:00.000Z",
+    "ageMs": 15000,
+    "degraded": false,
+    "stale": false,
+    "reason": null
+  },
+  "generatedAt": "2026-02-28T14:30:00.000Z"
+}

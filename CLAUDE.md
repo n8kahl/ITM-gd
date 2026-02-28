@@ -1,13 +1,13 @@
 # CLAUDE.md - TradeITM Production Codex
 
 > **AI-Maintained:** This project is built and maintained by Claude Code with minimal developer intervention.
-> **Last Updated:** 2026-02-27
+> **Last Updated:** 2026-02-28
 
 ---
 
 ## 1. Stack & Environment
 
-* **Runtime:** Node.js >= 22 (enforced via `.nvmrc`)
+* **Runtime:** Node.js >= 20.19.5
 * **Package Manager:** pnpm 10+ (never npm or yarn)
 * **Frontend:** Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4
 * **Backend:** Express.js (TypeScript) in `backend/`
@@ -224,7 +224,7 @@ pnpm vitest run lib/spx/__tests__
 pnpm exec playwright test e2e/spx-*.spec.ts --project=chromium --workers=1
 ```
 
-**Runtime requirement:** Final release evidence must be validated under Node >= 22.
+**Runtime requirement:** Final release evidence must be validated under Node >= 20.19.5.
 
 ### 6.6 Test Contract Rules
 1. Use deterministic selectors for critical state assertions.
@@ -240,7 +240,7 @@ pnpm exec playwright test e2e/spx-*.spec.ts --project=chromium --workers=1
 ### 6.8 Closure Criteria
 A workstream is complete only when:
 1. Execution spec checklist is fully checked.
-2. Release gates are green under Node >= 22.
+2. Release gates are green under Node >= 20.19.5.
 3. Release notes + runbook are current.
 4. Change control + risk/decision log + tracker are current.
 5. Production deploy approval is explicitly recorded.

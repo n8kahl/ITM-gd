@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradeITM Academy — SVG Cover Previews</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; color: #fff; font-family: Inter, system-ui, sans-serif; padding: 40px; }
+  h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 36px; margin-bottom: 8px; }
+  .subtitle { color: #71717a; font-size: 16px; margin-bottom: 48px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; max-width: 1400px; margin: 0 auto; }
+  .card { border-radius: 16px; overflow: hidden; border: 1px solid rgba(16,185,129,0.1); transition: transform 0.2s, border-color 0.3s; }
+  .card:hover { transform: translateY(-4px); border-color: rgba(16,185,129,0.3); }
+  .card img { width: 100%; height: auto; display: block; }
+  .label { padding: 16px 20px; background: rgba(16,185,129,0.05); }
+  .label h3 { font-size: 14px; color: #10B981; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <h1>Academy Cover Previews</h1>
+  <p class="subtitle">SVG module covers in the Emerald Standard style</p>
+  <div class="grid">
+    <div class="card">
+      <img src="options-fundamentals.svg" alt="Options Fundamentals">
+      <div class="label"><h3>Options Fundamentals</h3></div>
+    </div>
+    <div class="card">
+      <img src="risk-management.svg" alt="Risk Management">
+      <div class="label"><h3>Risk Management</h3></div>
+    </div>
+    <div class="card">
+      <img src="spx-mastery.svg" alt="SPX Mastery">
+      <div class="label"><h3>SPX Mastery</h3></div>
+    </div>
+    <div class="card">
+      <img src="trading-psychology.svg" alt="Trading Psychology">
+      <div class="label"><h3>Trading Psychology</h3></div>
+    </div>
+  </div>
+</body>
+</html>

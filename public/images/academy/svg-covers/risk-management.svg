@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="40%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#110a0a"/>
+    </linearGradient>
+    <linearGradient id="emerald2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.05"/>
+    </linearGradient>
+    <filter id="glow2">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="bigGlow">
+      <feGaussianBlur stdDeviation="30" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="card2"><rect x="0" y="0" width="1200" height="630" rx="16"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#card2)">
+    <rect width="1200" height="630" fill="url(#bg2)"/>
+
+    <!-- Radial accent -->
+    <circle cx="900" cy="315" r="300" fill="#10B981" opacity="0.02" filter="url(#bigGlow)"/>
+
+    <!-- Shield icon - large background element -->
+    <g transform="translate(750, 100)" opacity="0.8">
+      <path d="M200,20 L200,20 C280,20 340,60 340,60 L340,220 C340,340 200,420 200,420 C200,420 60,340 60,340 L60,60 C60,60 120,20 200,20 Z"
+        fill="url(#shieldGrad)" stroke="#10B981" stroke-width="1.5" opacity="0.5"/>
+
+      <!-- Inner shield detail -->
+      <path d="M200,60 L200,60 C260,60 300,90 300,90 L300,200 C300,290 200,360 200,360 C200,360 100,290 100,290 L100,90 C100,90 140,60 200,60 Z"
+        fill="none" stroke="#10B981" stroke-width="1" opacity="0.3"/>
+
+      <!-- Checkmark inside shield -->
+      <polyline points="155,210 185,250 255,170"
+        stroke="#10B981" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow2)"/>
+
+      <!-- Shield pulse rings -->
+      <circle cx="200" cy="220" r="120" fill="none" stroke="#10B981" stroke-width="0.5" opacity="0.15"/>
+      <circle cx="200" cy="220" r="170" fill="none" stroke="#10B981" stroke-width="0.3" opacity="0.08"/>
+      <circle cx="200" cy="220" r="220" fill="none" stroke="#10B981" stroke-width="0.3" opacity="0.04"/>
+    </g>
+
+    <!-- Risk metric bars -->
+    <g transform="translate(700, 460)" opacity="0.5">
+      <rect x="0" y="0" width="60" height="80" rx="4" fill="#10B981" opacity="0.2"/>
+      <rect x="0" y="30" width="60" height="50" rx="4" fill="url(#emerald2)" opacity="0.4"/>
+
+      <rect x="80" y="0" width="60" height="80" rx="4" fill="#10B981" opacity="0.2"/>
+      <rect x="80" y="15" width="60" height="65" rx="4" fill="url(#emerald2)" opacity="0.5"/>
+
+      <rect x="160" y="0" width="60" height="80" rx="4" fill="#10B981" opacity="0.2"/>
+      <rect x="160" y="40" width="60" height="40" rx="4" fill="url(#emerald2)" opacity="0.3"/>
+
+      <rect x="240" y="0" width="60" height="80" rx="4" fill="#ef4444" opacity="0.2"/>
+      <rect x="240" y="55" width="60" height="25" rx="4" fill="#ef4444" opacity="0.3"/>
+
+      <rect x="320" y="0" width="60" height="80" rx="4" fill="#10B981" opacity="0.2"/>
+      <rect x="320" y="10" width="60" height="70" rx="4" fill="url(#emerald2)" opacity="0.6"/>
+    </g>
+
+    <!-- Text content -->
+    <g transform="translate(80, 140)">
+      <rect x="0" y="0" width="120" height="32" rx="16" fill="#10B981" opacity="0.15"/>
+      <text x="60" y="21" text-anchor="middle" fill="#10B981" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="600" letter-spacing="1.5">MODULE 03</text>
+
+      <text x="0" y="80" fill="#ffffff" font-family="Playfair Display, Georgia, serif" font-size="52" font-weight="700">Risk</text>
+      <text x="0" y="140" fill="#ffffff" font-family="Playfair Display, Georgia, serif" font-size="52" font-weight="700">Management</text>
+
+      <text x="0" y="190" fill="#a1a1aa" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400">Position sizing, stop losses, and portfolio protection</text>
+
+      <rect x="0" y="220" width="80" height="2" rx="1" fill="#F3E5AB" opacity="0.5"/>
+
+      <text x="0" y="270" fill="#F3E5AB" font-family="Geist Mono, monospace" font-size="14" opacity="0.7">8 LESSONS</text>
+      <text x="120" y="270" fill="#71717a" font-family="Geist Mono, monospace" font-size="14">•</text>
+      <text x="140" y="270" fill="#F3E5AB" font-family="Geist Mono, monospace" font-size="14" opacity="0.7">3.2 HOURS</text>
+    </g>
+
+    <rect x="0" y="620" width="1200" height="10" fill="url(#emerald2)" opacity="0.6"/>
+  </g>
+</svg>
