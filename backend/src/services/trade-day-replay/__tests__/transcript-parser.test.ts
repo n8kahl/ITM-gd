@@ -94,7 +94,7 @@ describe('trade-day-replay/transcript-parser retry behavior', () => {
     expect(mockCreate).toHaveBeenCalledTimes(2);
     expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
     expect(mockLoggerWarn).toHaveBeenCalledWith(
-      'Trade transcript parser retrying after malformed/empty structured output.',
+      'Trade transcript parser retrying after parser/validation failure.',
       expect.objectContaining({ code: 'OPENAI_EMPTY_RESPONSE', attempt: 1, nextAttempt: 2 }),
     );
   });
@@ -113,7 +113,7 @@ describe('trade-day-replay/transcript-parser retry behavior', () => {
     expect(mockCreate).toHaveBeenCalledTimes(2);
     expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
     expect(mockLoggerWarn).toHaveBeenCalledWith(
-      'Trade transcript parser retrying after malformed/empty structured output.',
+      'Trade transcript parser retrying after parser/validation failure.',
       expect.objectContaining({ code: 'OPENAI_SCHEMA_MISMATCH', attempt: 1, nextAttempt: 2 }),
     );
   });
@@ -140,21 +140,29 @@ describe('trade-day-replay/transcript-parser retry behavior', () => {
     expect(mockCreate).toHaveBeenCalledTimes(2);
   });
 
-  it('maps trade validation failures to TRADE_VALIDATION_FAILED without retry', async () => {
+  it('retries once on trade validation failure and succeeds on second attempt', async () => {
     const issues = [
       { path: 'trades[0].entryTimestamp', message: 'Entry timestamp must be ISO-8601 with timezone offset.' },
     ];
+    const parsedTrades = [{ tradeIndex: 1 }];
 
-    mockCreate.mockResolvedValueOnce(completionWithContent('{"trades":[{"tradeIndex":1}]}'));
-    mockValidateParsedTrades.mockImplementationOnce(() => {
-      throw new TradeValidationError('Parsed trades failed replay validation checks.', issues);
-    });
+    mockCreate
+      .mockResolvedValueOnce(completionWithContent('{"trades":[{"tradeIndex":1}]}'))
+      .mockResolvedValueOnce(completionWithContent('{"trades":[{"tradeIndex":1}]}'));
+    mockValidateParsedTrades
+      .mockImplementationOnce(() => {
+        throw new TradeValidationError('Parsed trades failed replay validation checks.', issues);
+      })
+      .mockReturnValueOnce(parsedTrades);
 
-    const error = await expectTranscriptParserError(parseTranscriptToTrades({ transcript: 'Filled 1.20' }));
+    const result = await parseTranscriptToTrades({ transcript: 'Filled 1.20' });
 
-    expect(error.code).toBe('TRADE_VALIDATION_FAILED');
-    expect(error.details).toEqual(expect.objectContaining({ issues }));
-    expect(mockCreate).toHaveBeenCalledTimes(1);
-    expect(mockLoggerWarn).not.toHaveBeenCalled();
+    expect(result).toEqual(parsedTrades);
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'Trade transcript parser retrying after parser/validation failure.',
+      expect.objectContaining({ code: 'TRADE_VALIDATION_FAILED', attempt: 1, nextAttempt: 2 }),
+    );
   });
 });

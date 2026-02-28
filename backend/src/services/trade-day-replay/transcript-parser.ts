@@ -55,6 +55,7 @@ const RETRYABLE_PARSER_ERROR_CODES = new Set<TranscriptParserErrorCode>([
   'OPENAI_EMPTY_RESPONSE',
   'OPENAI_JSON_PARSE_ERROR',
   'OPENAI_SCHEMA_MISMATCH',
+  'TRADE_VALIDATION_FAILED',
 ]);
 
 export class TranscriptParserError extends Error {
@@ -69,10 +70,45 @@ export class TranscriptParserError extends Error {
   }
 }
 
-function buildUserPrompt(params: ParseTranscriptParams): string {
+interface ValidationIssueLike {
+  path: string;
+  message: string;
+}
+
+function isValidationIssueLike(value: unknown): value is ValidationIssueLike {
+  return typeof value === 'object'
+    && value !== null
+    && typeof (value as ValidationIssueLike).path === 'string'
+    && typeof (value as ValidationIssueLike).message === 'string';
+}
+
+function buildValidationFeedback(details?: Record<string, unknown>): string | null {
+  const rawIssues = details?.issues;
+  if (!Array.isArray(rawIssues)) return null;
+
+  const issues = rawIssues.filter(isValidationIssueLike);
+  if (!issues.length) return null;
+
+  const previewLimit = 6;
+  const preview = issues
+    .slice(0, previewLimit)
+    .map((issue) => `- ${issue.path}: ${issue.message}`)
+    .join('\n');
+  const remainder = issues.length - previewLimit;
+  const remainderLine = remainder > 0 ? `\n- ... (+${remainder} more)` : '';
+
+  return [
+    'Validation feedback from the previous attempt:',
+    preview + remainderLine,
+    'Regenerate the JSON so all timestamps are valid and within regular market hours (09:30-16:00 ET).',
+  ].join('\n');
+}
+
+function buildUserPrompt(params: ParseTranscriptParams, validationFeedback?: string): string {
   const inputTimezone = (params.inputTimezone || DEFAULT_INPUT_TIMEZONE).trim();
   const dateHint = params.dateHint?.trim();
   const hintLine = dateHint ? `Date hint: ${dateHint}` : 'Date hint: not provided';
+  const feedbackLine = validationFeedback ? `\n\n${validationFeedback}` : '';
 
   return [
     `Input timezone: ${inputTimezone}`,
@@ -80,6 +116,7 @@ function buildUserPrompt(params: ParseTranscriptParams): string {
     hintLine,
     'Transcript:',
     params.transcript,
+    feedbackLine,
   ].join('\n\n');
 }
 
@@ -167,6 +204,7 @@ export async function parseTranscriptToTrades(params: ParseTranscriptParams): Pr
     throw new TranscriptParserError('INVALID_INPUT', 'Transcript is required.', { attempts: 1 });
   }
 
+  let retryValidationFeedback: string | undefined;
   const maxAttempts = PARSER_MAX_RETRIES + 1;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -177,7 +215,7 @@ export async function parseTranscriptToTrades(params: ParseTranscriptParams): Pr
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildUserPrompt({ ...params, transcript }) },
+          { role: 'user', content: buildUserPrompt({ ...params, transcript }, retryValidationFeedback) },
         ],
       }));
 
@@ -228,7 +266,10 @@ export async function parseTranscriptToTrades(params: ParseTranscriptParams): Pr
 
       const shouldRetry = RETRYABLE_PARSER_ERROR_CODES.has(parserError.code) && attempt <= PARSER_MAX_RETRIES;
       if (shouldRetry) {
-        logger.warn('Trade transcript parser retrying after malformed/empty structured output.', {
+        retryValidationFeedback = parserError.code === 'TRADE_VALIDATION_FAILED'
+          ? (buildValidationFeedback(parserError.details) || retryValidationFeedback)
+          : retryValidationFeedback;
+        logger.warn('Trade transcript parser retrying after parser/validation failure.', {
           code: parserError.code,
           attempt,
           nextAttempt: attempt + 1,
