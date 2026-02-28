@@ -180,6 +180,12 @@ const SPX_PUBLIC_CHANNEL_MAP: Record<string, string> = {
 const SPX_PUBLIC_CHANNEL_SET = new Set<string>(Object.values(SPX_PUBLIC_CHANNEL_MAP));
 const WS_CLOSE_UNAUTHORIZED = 4401;
 const WS_CLOSE_FORBIDDEN = 4403;
+const WS_CLOSE_CAPACITY = 4429;
+const WS_MAX_CLIENTS_DEFAULT = 200;
+function getWsMaxClients(): number {
+  const parsed = Number.parseInt(process.env.WS_MAX_CLIENTS || `${WS_MAX_CLIENTS_DEFAULT}`, 10);
+  return Number.isFinite(parsed) ? Math.max(parsed, 1) : WS_MAX_CLIENTS_DEFAULT;
+}
 const GEX_BROADCAST_INTERVAL_MS = 60_000;
 const REGIME_BROADCAST_INTERVAL_MS = 30_000;
 const BASIS_BROADCAST_INTERVAL_MS = 30_000;
@@ -1707,6 +1713,51 @@ function startHeartbeat(): void {
 // PUBLIC API
 // ============================================
 
+export function getWebSocketHealth() {
+  const nowMs = Date.now();
+  const maxClients = getWsMaxClients();
+  const subscriptionsBySymbol = new Map<string, number>();
+
+  for (const [, state] of clients) {
+    for (const subscription of state.subscriptions) {
+      let symbol: string | null = null;
+      if (isSymbolSubscription(subscription)) {
+        symbol = normalizeSymbol(subscription);
+      } else {
+        const priceChannel = normalizePriceChannel(subscription);
+        if (priceChannel) {
+          symbol = normalizeSymbol(priceChannel.split(':')[1] || '');
+        }
+      }
+
+      if (!symbol) continue;
+      subscriptionsBySymbol.set(symbol, (subscriptionsBySymbol.get(symbol) || 0) + 1);
+    }
+  }
+
+  return {
+    server: {
+      clientCount: clients.size,
+      maxClients,
+      utilizationPct: Math.round((clients.size / maxClients) * 100),
+      subscriptionsBySymbol: Object.fromEntries(subscriptionsBySymbol),
+    },
+    broadcast: {
+      lastTickBroadcast: Object.fromEntries(
+        Array.from(lastTickBroadcastAtBySymbol.entries()).map(([symbol, ts]) => [symbol, { ageMs: Math.max(0, nowMs - ts) }]),
+      ),
+      lastMicrobarBroadcast: Object.fromEntries(
+        Array.from(lastMicrobarBroadcastAtBySymbolInterval.entries()).map(([key, ts]) => [key, { ageMs: Math.max(0, nowMs - ts) }]),
+      ),
+      feedHealthBroadcastAgeMs: lastFeedHealthBroadcastAt > 0
+        ? Math.max(0, nowMs - lastFeedHealthBroadcastAt)
+        : null,
+    },
+    upstream: getMassiveTickStreamStatus(),
+    timestamp: new Date(nowMs).toISOString(),
+  };
+}
+
 /**
  * Initialize the WebSocket server on the existing HTTP server.
  * Called from server.ts after the HTTP server starts listening.
@@ -1717,6 +1768,17 @@ export function initWebSocket(server: HTTPServer): void {
 
   wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
     const remoteAddress = req.socket.remoteAddress || 'unknown';
+    const maxClients = getWsMaxClients();
+    if (clients.size >= maxClients) {
+      logger.warn('WebSocket connection rejected: at capacity', {
+        current: clients.size,
+        max: maxClients,
+        remoteAddress,
+      });
+      ws.close(WS_CLOSE_CAPACITY, 'Server at capacity');
+      return;
+    }
+
     const token = extractWsToken(req);
     if (!token) {
       logger.warn('WebSocket rejected: missing authentication token', {

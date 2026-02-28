@@ -18,6 +18,7 @@ const envSchema = z.object({
   // Server
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3001').transform(Number),
+  WS_MAX_CLIENTS: z.string().default('200').transform(Number),
 
   // OpenAI
   OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY is required').refine(
@@ -42,6 +43,7 @@ const envSchema = z.object({
     'MASSIVE_API_KEY is required in production'
   ),
   MASSIVE_TICK_WS_ENABLED: booleanFromEnv.default(false),
+  MASSIVE_TICK_LOCK_ENABLED: booleanFromEnv.default(false),
   MASSIVE_TICK_WS_URL: z.string().url().default('wss://socket.massive.com/indices'),
   MASSIVE_TICK_SYMBOLS: z.string().default('SPX,SPY,VIX,VIX9D,VVIX,SKEW'),
   MASSIVE_TICK_EVENT_PREFIX: z.string().default('V.'),

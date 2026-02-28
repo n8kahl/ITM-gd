@@ -77,8 +77,14 @@ export interface ChartBar {
   volume: number
 }
 
+export interface PriorDayBar {
+  high: number
+  low: number
+}
+
 export interface ReplayPayload {
   bars: ChartBar[]
   trades: EnrichedTrade[]
   stats: SessionStats
+  priorDayBar?: PriorDayBar
 }

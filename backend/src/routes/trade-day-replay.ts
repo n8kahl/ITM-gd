@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { getMinuteAggregates, getOptionsSnapshotAtDate, type MassiveAggregate, type OptionsSnapshot } from '../config/massive';
+import { getDailyAggregates, getMinuteAggregates, getOptionsSnapshotAtDate, type MassiveAggregate, type OptionsSnapshot } from '../config/massive';
 import { authenticateToken } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { logger } from '../lib/logger';
@@ -15,6 +15,7 @@ import type {
   EnrichedTrade,
   OptionsContext,
   ParsedTrade,
+  PriorDayBar,
   ReplayPayload,
   SessionStats,
 } from '../services/trade-day-replay/types';
@@ -102,6 +103,41 @@ function round(value: number, decimals: number = 2): number {
 function parseEpochMs(timestamp: string): number | null {
   const epochMs = Date.parse(timestamp);
   return Number.isFinite(epochMs) ? epochMs : null;
+}
+
+function getPriorTradingDay(dateStr: string): string {
+  const [yearStr, monthStr, dayStr] = dateStr.split('-');
+  const date = new Date(Date.UTC(Number(yearStr), Number(monthStr) - 1, Number(dayStr)));
+  // Go back one day, skip weekends
+  date.setUTCDate(date.getUTCDate() - 1);
+  while (date.getUTCDay() === 0 || date.getUTCDay() === 6) {
+    date.setUTCDate(date.getUTCDate() - 1);
+  }
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+async function fetchPriorDayBar(replayDate: string): Promise<PriorDayBar | undefined> {
+  try {
+    const priorDate = getPriorTradingDay(replayDate);
+    const dailyBars = await getDailyAggregates('I:SPX', priorDate, priorDate);
+    if (dailyBars.length > 0) {
+      const bar = dailyBars[0];
+      const high = typeof bar.h === 'number' && Number.isFinite(bar.h) ? bar.h : null;
+      const low = typeof bar.l === 'number' && Number.isFinite(bar.l) ? bar.l : null;
+      if (high != null && low != null) {
+        return { high, low };
+      }
+    }
+  } catch (error) {
+    logger.warn('Trade Day Replay prior day bar fetch failed', {
+      replayDate,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return undefined;
 }
 
 function mapAggregatesToChartBars(aggregates: MassiveAggregate[]): ChartBar[] {
@@ -318,10 +354,13 @@ router.post(
         }
       }
 
+      const priorDayBar = await fetchPriorDayBar(replayDate);
+
       const payload: ReplayPayload = {
         bars: replayBars,
         trades: enrichedTrades,
         stats: computeSessionStats(enrichedTrades, sessionWindow),
+        ...(priorDayBar ? { priorDayBar } : {}),
       };
 
       res.json(payload);
