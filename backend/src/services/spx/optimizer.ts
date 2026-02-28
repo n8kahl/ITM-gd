@@ -590,9 +590,9 @@ const DEFAULT_PROFILE: SPXOptimizationProfile = {
     breakEvenPlusR: 0.15,
   },
   walkForward: {
-    trainingDays: 20,
-    validationDays: 5,
-    minTrades: 30,
+    trainingDays: 60,
+    validationDays: 10,
+    minTrades: 20,
     objectiveWeights: {
       t1: 0.62,
       t2: 0.38,
@@ -623,6 +623,9 @@ const PROMOTION_MAX_FAILURE_DELTA_PCT = 1;
 const MAX_FALLBACK_SHARE_FOR_APPLY_PCT = 50;
 const WILSON_Z_95 = 1.96;
 const ADD_SETUP_MIN_T1_LOWER_BOUND_PCT = 52;
+const MIN_WALK_FORWARD_TRAINING_DAYS = 20;
+const MIN_WALK_FORWARD_VALIDATION_DAYS = 10;
+const MIN_WALK_FORWARD_TRADES = 20;
 
 function round(value: number, decimals = 2): number {
   return Number(value.toFixed(decimals));
@@ -858,6 +861,15 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
   }
 
   const candidate = raw as Partial<SPXOptimizationProfile>;
+  const rawTrainingDays = Math.floor(
+    toFiniteNumber(candidate.walkForward?.trainingDays) ?? DEFAULT_PROFILE.walkForward.trainingDays,
+  );
+  const rawValidationDays = Math.floor(
+    toFiniteNumber(candidate.walkForward?.validationDays) ?? DEFAULT_PROFILE.walkForward.validationDays,
+  );
+  const rawMinTrades = Math.floor(
+    toFiniteNumber(candidate.walkForward?.minTrades) ?? DEFAULT_PROFILE.walkForward.minTrades,
+  );
   const normalized: SPXOptimizationProfile = {
     source: candidate.source === 'scan' ? 'scan' : 'default',
     generatedAt: typeof candidate.generatedAt === 'string' ? candidate.generatedAt : new Date().toISOString(),
@@ -912,9 +924,18 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
       ),
     },
     walkForward: {
-      trainingDays: Math.max(5, Math.floor(toFiniteNumber(candidate.walkForward?.trainingDays) ?? DEFAULT_PROFILE.walkForward.trainingDays)),
-      validationDays: Math.max(3, Math.floor(toFiniteNumber(candidate.walkForward?.validationDays) ?? DEFAULT_PROFILE.walkForward.validationDays)),
-      minTrades: Math.max(5, Math.floor(toFiniteNumber(candidate.walkForward?.minTrades) ?? DEFAULT_PROFILE.walkForward.minTrades)),
+      trainingDays: Math.max(
+        MIN_WALK_FORWARD_TRAINING_DAYS,
+        rawTrainingDays,
+      ),
+      validationDays: Math.max(
+        MIN_WALK_FORWARD_VALIDATION_DAYS,
+        rawValidationDays,
+      ),
+      minTrades: Math.max(
+        MIN_WALK_FORWARD_TRADES,
+        rawMinTrades,
+      ),
       objectiveWeights: {
         t1: toFiniteNumber(candidate.walkForward?.objectiveWeights?.t1) ?? DEFAULT_PROFILE.walkForward.objectiveWeights.t1,
         t2: toFiniteNumber(candidate.walkForward?.objectiveWeights?.t2) ?? DEFAULT_PROFILE.walkForward.objectiveWeights.t2,
@@ -964,6 +985,16 @@ function normalizeProfile(raw: unknown): SPXOptimizationProfile {
   const legacyPartialShape = Math.abs(normalized.tradeManagement.partialAtT1Pct - 0.5) < 0.0001;
   if (legacyPartialShape) {
     normalized.tradeManagement.partialAtT1Pct = DEFAULT_PROFILE.tradeManagement.partialAtT1Pct;
+  }
+  const legacyWalkForwardShape = (
+    rawValidationDays <= 5
+    && rawMinTrades <= 12
+    && rawTrainingDays >= 80
+  );
+  if (legacyWalkForwardShape) {
+    normalized.walkForward.trainingDays = DEFAULT_PROFILE.walkForward.trainingDays;
+    normalized.walkForward.validationDays = DEFAULT_PROFILE.walkForward.validationDays;
+    normalized.walkForward.minTrades = DEFAULT_PROFILE.walkForward.minTrades;
   }
 
   return normalized;
@@ -2143,6 +2174,9 @@ export async function runSPXOptimizerScan(input?: {
     },
     geometryPolicy: (() => {
       const base = profileForScan.geometryPolicy;
+      if (!optimizationApplied) {
+        return base;
+      }
       const improved: Record<string, SPXGeometryPolicyEntry> = {};
       for (const family of ALL_SWEEP_FAMILIES) {
         const dirResult = geometrySweepResults[family];
@@ -2191,6 +2225,7 @@ export async function runSPXOptimizerScan(input?: {
         bySetupType: { ...base.bySetupType, ...improved },
         bySetupRegime: base.bySetupRegime,
         bySetupRegimeTimeBucket: base.bySetupRegimeTimeBucket,
+        ...(base.byTimeBucket ? { byTimeBucket: base.byTimeBucket } : {}),
       };
     })(),
     driftControl: {
