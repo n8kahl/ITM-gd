@@ -204,6 +204,44 @@ export function inferTargetOptionPrice(input: {
   return Number(Math.max(0.05, expected).toFixed(2));
 }
 
+function inferEntryProtectiveStopPrice(input: {
+  entryLimitPrice: number;
+  recommendation: { delta?: number; gamma?: number };
+  setup: SetupTransitionEvent['setup'];
+}): number {
+  const fallback = Number(Math.max(0.05, input.entryLimitPrice * 0.65).toFixed(2));
+  const entryMid = input.setup?.entryZone
+    ? (input.setup.entryZone.low + input.setup.entryZone.high) / 2
+    : null;
+  const setupStop = typeof input.setup?.stop === 'number' ? input.setup.stop : null;
+  const delta = typeof input.recommendation.delta === 'number'
+    ? Math.abs(input.recommendation.delta)
+    : null;
+  const gamma = typeof input.recommendation.gamma === 'number'
+    ? Math.abs(input.recommendation.gamma)
+    : 0;
+
+  if (
+    entryMid == null
+    || setupStop == null
+    || delta == null
+    || !Number.isFinite(entryMid)
+    || !Number.isFinite(setupStop)
+    || !Number.isFinite(delta)
+  ) {
+    return fallback;
+  }
+
+  const setupRiskDistance = Math.max(0.25, Math.abs(entryMid - setupStop));
+  const gammaContribution = gamma * ((setupRiskDistance ** 2) / 2);
+  const estimatedOptionRisk = (delta * setupRiskDistance) + gammaContribution;
+  const estimatedStop = input.entryLimitPrice - (estimatedOptionRisk / 100);
+
+  if (!Number.isFinite(estimatedStop)) return fallback;
+  const capped = Math.min(input.entryLimitPrice * 0.95, estimatedStop);
+  return Number(Math.max(0.05, capped).toFixed(2));
+}
+
 async function loadActiveExecutionCredentials(): Promise<TradierCredentialRow[]> {
   const now = Date.now();
   if (cachedCredentials && cachedCredentials.expiresAt > now) {
@@ -303,6 +341,11 @@ async function handleTriggeredTransition(
         sandbox: resolveSandboxMode(credential),
       });
       const entryLimitPrice = Number((recommendation.ask + ENTRY_LIMIT_OFFSET).toFixed(2));
+      const protectiveStopPrice = inferEntryProtectiveStopPrice({
+        entryLimitPrice,
+        recommendation,
+        setup: event.setup,
+      });
       const entryOrder = await tradier.placeOrder(buildTradierEntryOrder({
         symbol: optionSymbol,
         quantity: sizing.quantity,
@@ -349,6 +392,8 @@ async function handleTriggeredTransition(
         transitionEventId: event.id,
         direction: event.direction,
         referencePrice: event.price,
+        protectiveStopPrice,
+        symbol: optionSymbol,
       });
 
       publishCoachMessage({
@@ -446,6 +491,9 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
       const runnerStopPrice = Math.max(0.05, state.entryLimitPrice * 1.015);
 
       if (nextRemaining > 0) {
+        if (runnerStopOrderId) {
+          await tradier.cancelOrder(runnerStopOrderId).catch(() => false);
+        }
         const runnerOrder = await tradier.placeOrder(buildTradierRunnerStopOrder({
           symbol: state.symbol,
           quantity: nextRemaining,

@@ -215,4 +215,68 @@ describe('tradier/orderLifecycleManager', () => {
       }),
     );
   });
+
+  it('attaches and resizes entry protective stop as cumulative fills increase', async () => {
+    const getOrderStatus = jest.fn()
+      .mockResolvedValueOnce({
+        id: 'entry-003',
+        status: 'partially_filled',
+        filledQuantity: 1,
+        avgFillPrice: 3.5,
+        remainingQuantity: 2,
+        raw: {},
+      })
+      .mockResolvedValueOnce({
+        id: 'entry-003',
+        status: 'partially_filled',
+        filledQuantity: 3,
+        avgFillPrice: 3.55,
+        remainingQuantity: 0,
+        raw: {},
+      });
+    const placeOrder = jest.fn()
+      .mockResolvedValueOnce({ id: 'stop-order-1', status: 'pending', raw: {} })
+      .mockResolvedValueOnce({ id: 'stop-order-2', status: 'pending', raw: {} });
+    const cancelOrder = jest.fn().mockResolvedValue(true);
+
+    enqueueOrderForPolling({
+      orderId: 'entry-003',
+      userId: 'user-4',
+      setupId: 'setup-4',
+      sessionDate: '2026-03-01',
+      phase: 'entry',
+      tradier: { getOrderStatus, placeOrder, cancelOrder } as any,
+      totalQuantity: 3,
+      transitionEventId: 'evt-triggered-4',
+      direction: 'bullish',
+      symbol: 'SPXW260301C05870000',
+      protectiveStopPrice: 2.1,
+    });
+
+    await pollOrderLifecycleQueueOnceForTests();
+    await pollOrderLifecycleQueueOnceForTests();
+
+    expect(placeOrder).toHaveBeenCalledTimes(2);
+    expect(placeOrder.mock.calls[0][0]).toMatchObject({
+      side: 'sell_to_close',
+      type: 'stop',
+      quantity: 1,
+      stop: 2.1,
+      option_symbol: 'SPXW260301C05870000',
+    });
+    expect(cancelOrder).toHaveBeenCalledWith('stop-order-1');
+    expect(placeOrder.mock.calls[1][0]).toMatchObject({
+      side: 'sell_to_close',
+      type: 'stop',
+      quantity: 3,
+      stop: 2.1,
+      option_symbol: 'SPXW260301C05870000',
+    });
+    expect(mockUpdateExecutionState).toHaveBeenCalledWith(
+      'user-4',
+      'setup-4',
+      '2026-03-01',
+      expect.objectContaining({ runnerStopOrderId: 'stop-order-2' }),
+    );
+  });
 });

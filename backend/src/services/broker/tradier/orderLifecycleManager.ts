@@ -11,6 +11,7 @@ import {
 } from '../../spx/executionReconciliation';
 import type { Setup } from '../../spx/types';
 import { TradierClient } from './client';
+import { buildTradierRunnerStopOrder } from './orderRouter';
 
 interface PollEntry {
   orderId: string;
@@ -26,6 +27,10 @@ interface PollEntry {
   transitionEventId?: string;
   direction?: Setup['direction'];
   referencePrice?: number;
+  symbol?: string;
+  protectiveStopPrice?: number;
+  protectiveStopOrderId?: string | null;
+  protectedQuantity: number;
   fillSide?: ExecutionFillSide;
   fillPhase?: ExecutionTransitionPhase;
 }
@@ -51,6 +56,8 @@ export function enqueueOrderForPolling(entry: {
   transitionEventId?: string;
   direction?: Setup['direction'];
   referencePrice?: number;
+  symbol?: string;
+  protectiveStopPrice?: number;
   fillSide?: ExecutionFillSide;
   fillPhase?: ExecutionTransitionPhase;
 }): void {
@@ -63,6 +70,8 @@ export function enqueueOrderForPolling(entry: {
     placedAt: Date.now(),
     pollCount: 0,
     lastRecordedFillQty: 0,
+    protectiveStopOrderId: null,
+    protectedQuantity: 0,
   });
 
   ensurePollerRunning();
@@ -288,9 +297,12 @@ async function recordFillDelta(
       deltaQty,
       error: error instanceof Error ? error.message : String(error),
     });
-  } finally {
-    entry.lastRecordedFillQty = cumulativeFilledQty;
   }
+
+  if (entry.phase === 'entry') {
+    await ensureEntryProtectiveStopCoverage(entry, cumulativeFilledQty);
+  }
+  entry.lastRecordedFillQty = cumulativeFilledQty;
 }
 
 /**
@@ -307,6 +319,45 @@ export function resetOrderPollerState(): void {
 
 export async function pollOrderLifecycleQueueOnceForTests(): Promise<void> {
   await pollCycle();
+}
+
+async function ensureEntryProtectiveStopCoverage(
+  entry: PollEntry,
+  cumulativeFilledQty: number,
+): Promise<void> {
+  if (entry.phase !== 'entry') return;
+  if (!entry.symbol) return;
+  if (!Number.isFinite(entry.protectiveStopPrice) || (entry.protectiveStopPrice ?? 0) <= 0) return;
+  if (cumulativeFilledQty <= 0) return;
+  if (cumulativeFilledQty <= entry.protectedQuantity) return;
+
+  try {
+    if (entry.protectiveStopOrderId) {
+      await entry.tradier.cancelOrder(entry.protectiveStopOrderId).catch(() => false);
+    }
+
+    const stopOrder = await entry.tradier.placeOrder(buildTradierRunnerStopOrder({
+      symbol: entry.symbol,
+      quantity: cumulativeFilledQty,
+      stopPrice: entry.protectiveStopPrice!,
+      tag: `spx:${entry.setupId}:${entry.sessionDate}:entry_stop`,
+    }));
+
+    entry.protectiveStopOrderId = stopOrder.id;
+    entry.protectedQuantity = cumulativeFilledQty;
+
+    await updateExecutionState(entry.userId, entry.setupId, entry.sessionDate, {
+      runnerStopOrderId: stopOrder.id,
+    }).catch(() => undefined);
+  } catch (error) {
+    logger.warn('Order lifecycle: failed to attach/update entry protective stop', {
+      orderId: entry.orderId,
+      userId: entry.userId,
+      setupId: entry.setupId,
+      cumulativeFilledQty,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 function resolveFillMeta(
