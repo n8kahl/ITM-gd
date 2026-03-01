@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ImagePlus, Loader2, X } from 'lucide-react'
 import Image from 'next/image'
 import { uploadScreenshot, type UploadProgress } from '@/lib/uploads/supabaseStorage'
@@ -48,6 +48,13 @@ export function ScreenshotUploadZone({
   const [analyzing, setAnalyzing] = useState(false)
   const [analysis, setAnalysis] = useState<ScreenshotAnalysisResponse | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [previewLoaded, setPreviewLoaded] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setPreviewLoaded(false)
+    setPreviewError(null)
+  }, [currentScreenshotUrl])
 
   const openAICoach = useCallback((prompt: string) => {
     if (onOpenAICoach) {
@@ -211,13 +218,48 @@ export function ScreenshotUploadZone({
     setError(null)
     setAnalysis(null)
     setAnalysisError(null)
+    setPreviewLoaded(false)
+    setPreviewError(null)
   }, [onRemove])
 
   if (currentScreenshotUrl) {
     return (
       <div className="relative space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
-        <div className="relative aspect-video w-full overflow-hidden rounded-md">
-          <Image src={currentScreenshotUrl} alt="Trade screenshot" fill className="object-contain" />
+        <div className="relative h-52 w-full overflow-hidden rounded-md border border-white/10 bg-black/30 sm:h-64 lg:h-72">
+          {!previewError ? (
+            <>
+              {!previewLoaded ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/[0.04]">
+                  <span className="text-xs text-white/60">Loading screenshot preview...</span>
+                </div>
+              ) : null}
+              <Image
+                src={currentScreenshotUrl}
+                alt="Trade screenshot preview"
+                fill
+                unoptimized
+                className={`object-contain transition-opacity duration-200 ${previewLoaded ? 'opacity-100' : 'opacity-0'}`}
+                sizes="(max-width: 768px) 100vw, 768px"
+                onLoad={() => setPreviewLoaded(true)}
+                onError={() => {
+                  setPreviewLoaded(false)
+                  setPreviewError('Unable to render preview.')
+                }}
+              />
+            </>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+              <p className="text-xs text-amber-300">Preview unavailable for this screenshot.</p>
+              <a
+                href={currentScreenshotUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-white/20 px-2.5 py-1 text-xs text-ivory transition-colors hover:border-white/30 hover:bg-white/[0.06]"
+              >
+                Open screenshot in new tab
+              </a>
+            </div>
+          )}
         </div>
         <button
           type="button"
