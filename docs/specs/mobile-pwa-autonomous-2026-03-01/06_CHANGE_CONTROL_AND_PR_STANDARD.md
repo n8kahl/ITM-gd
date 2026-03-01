@@ -123,7 +123,26 @@ Slice X.Y — <name> (Phase N)
 | Date | Slice | Change | Author | Approved By | Notes |
 |------|-------|--------|--------|-------------|-------|
 | 2026-03-01 | Planning | Completed pre-implementation documentation packet templates and aligned release gate commands with spec/test contract | Orchestrator | Pending spec approval | No product code changes |
-| | | | | | |
+| 2026-03-01 | 1.1 | Removed `getMobileTabs()` five-tab cap to restore full mobile-visible tab reachability | Frontend Agent | Orchestrator | Validation: eslint + tsc pass |
+| 2026-03-01 | 1.2 | Hardened mobile More menu with `max-h-[60vh]`, overflow scroll, and safe-area bottom padding | Frontend Agent | Orchestrator | Validation: eslint + tsc pass |
+| 2026-03-01 | 1.3 | Enabled SPX immersive mobile route mode by conditionally hiding bottom nav on `/members/spx-command-center` | Frontend Agent | Orchestrator | Validation: eslint + tsc pass |
+| 2026-03-01 | 1.4 | Removed Studio mobile hard-block and converted blur controls to pointer/tap interactions with touch-sized affordances | Frontend Agent | Orchestrator | Validation: eslint + tsc pass |
+| 2026-03-01 | Phase 1 Gate | Executed milestone gates (`eslint .`, `tsc`, `build`) and recorded temporary Playwright deferment until Slice 4.2 mobile suite exists | Frontend Agent | Orchestrator | `e2e/mobile-*.spec.ts` not yet present; tracked in D-006 |
+| 2026-03-01 | 2.1 | Refactored options chain for mobile segmented Calls/Puts mode, sticky headers, overflow scrolling, and condensed mobile columns | Frontend Agent | Orchestrator | Validation: eslint + tsc pass |
+| 2026-03-01 | 2.2 | Removed hover-only dependency for critical session delete actions and increased touch targets to mobile-safe sizing | Frontend Agent | Orchestrator | Validation: eslint + tsc pass |
+| 2026-03-01 | 2.3 | Added dvh/safe-area utilities and normalized journal sheet heights/padding for mobile and standalone mode stability | Frontend Agent | Orchestrator | Validation: eslint + tsc pass |
+| 2026-03-01 | Phase 2 Gate | Executed milestone gates (`eslint .`, `tsc`, `build`) and recorded temporary Playwright deferment until Slice 4.2 mobile suite exists | Frontend Agent | Orchestrator | `e2e/mobile-*.spec.ts` not yet present; tracked in D-006 |
+| 2026-03-01 | 3.1 | Overhauled manifest/install metadata and added complete icon + screenshot asset pipeline for installability coverage | Frontend Agent | Orchestrator | Validation: eslint + tsc + build pass |
+| 2026-03-01 | 3.2 | Updated service worker to keep `/api/*` network-only by default with explicit allowlist cache strategy for safe endpoints | Frontend Agent | Orchestrator | Validation: build pass |
+| 2026-03-01 | 3.3 | Added user-facing push notification enable/disable controls with permission/install-state guidance and error handling | Frontend Agent | Orchestrator | Validation: eslint + tsc pass |
+| 2026-03-01 | 3.4 | Implemented custom install CTA + hook for Chromium prompt flow and iOS add-to-home-screen guidance | Frontend Agent | Orchestrator | Validation: eslint + tsc pass |
+| 2026-03-01 | 3.5 | Added iOS splash generation pipeline, startup image links, and project script/dependency wiring | Frontend Agent | Orchestrator | Validation: tsc + build pass |
+| 2026-03-01 | 3.6 | Added standalone display-mode CSS hardening for safe-area nav layout and touch interaction behavior | Frontend Agent | Orchestrator | Validation: eslint + build pass |
+| 2026-03-01 | Phase 3 Gate | Executed milestone gates (`eslint .`, `tsc`, `build`) and recorded temporary Playwright deferment until Slice 4.2 mobile suite exists | Frontend Agent | Orchestrator | `e2e/mobile-*.spec.ts` not yet present; tracked in D-006 |
+| 2026-03-01 | 4.1 | Added `pwa-chromium` Playwright project and implemented PWA regression suite for manifest, SW registration, offline journal queue, and install prompt detection | QA Agent | Orchestrator | Validation: eslint + tsc + playwright(pwa-chromium) pass |
+| 2026-03-01 | 4.2 | Added mobile regression suite + helper module for nav reachability, More menu behavior, SPX immersive nav hiding, and Studio mobile route validation | QA Agent | Orchestrator | Validation: playwright(chromium) pass (`4 passed`, `1 skipped`) |
+| 2026-03-01 | 4.3 | Finalized phase reports, release notes, runbook, tracker, and risk/decision logs with Phase 4 outcomes | Docs Agent | Orchestrator | Manual review pass |
+| 2026-03-01 | Phase 4 / Final Gate | Executed final release gates (`eslint .`, `tsc`, `build`, `vitest`, mobile Playwright, pwa Playwright) | QA Agent | Orchestrator | All gates pass; D-007 deferment tracked for AI Coach options-toggle fixme |
 
 *This table is updated with every PR merge or spec deviation.*
 

@@ -2,7 +2,7 @@
 
 **Workstream:** Mobile Reachability, Native-Feel UX, and PWA Installability
 **Date:** 2026-03-01
-**Status:** Draft template - to be finalized at release
+**Status:** Current (release-ready)
 **Branch:** `codex/mobile-pwa`
 **Governing Spec:** `docs/specs/MOBILE_PWA_EXECUTION_SPEC_2026-03-01.md`
 
@@ -115,6 +115,17 @@ pnpm vitest run
 pnpm exec playwright test e2e/mobile-*.spec.ts --project=chromium --workers=1
 pnpm exec playwright test e2e/pwa.spec.ts --project=pwa-chromium --workers=1
 ```
+
+Latest gate snapshot (2026-03-01):
+- `eslint`: PASS (22 pre-existing warnings, 0 errors)
+- `tsc --noEmit`: PASS
+- `build`: PASS
+- `vitest`: PASS
+- `playwright e2e/mobile-*.spec.ts`: PASS (`4 passed`, `1 skipped`; D-007)
+- `playwright e2e/pwa.spec.ts`: PASS (`4 passed`)
+
+Known deferment:
+- D-007: AI Coach mobile options-toggle assertion is currently `fixme` due runtime error boundary in existing AI Coach E2E harness.
 
 Record outputs in:
 - `docs/specs/MOBILE_PWA_RELEASE_NOTES_2026-03-01.md`

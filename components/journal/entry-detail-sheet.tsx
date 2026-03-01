@@ -177,7 +177,7 @@ export function EntryDetailSheet({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        className="relative z-10 flex h-[92vh] w-full max-w-2xl flex-col rounded-t-xl border border-white/10 bg-[var(--onyx)] p-4 animate-in slide-in-from-bottom-4 duration-300 sm:h-auto sm:max-h-[90vh] sm:rounded-xl sm:zoom-in-95"
+        className="relative z-10 flex mobile-sheet-h-92 w-full max-w-2xl flex-col rounded-t-xl border border-white/10 bg-[var(--onyx)] p-4 pb-safe-sheet animate-in slide-in-from-bottom-4 duration-300 sm:h-auto sm:max-h-[90vh] sm:rounded-xl sm:zoom-in-95 sm:pb-4"
       >
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -258,7 +258,7 @@ export function EntryDetailSheet({
           {displayEntry.ai_analysis ? <AIGradeDisplay analysis={displayEntry.ai_analysis} /> : null}
         </div>
 
-        <div className="mt-4 flex items-center justify-end gap-2 border-t border-white/10 pt-4">
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-white/10 pt-4 pb-safe-sheet sm:pb-0">
           {/* Share to Community button — only for closed trades with P&L */}
           {!displayEntry.is_open && displayEntry.pnl != null && (
             <Button
@@ -332,7 +332,7 @@ export function EntryDetailSheet({
             <X className="h-4 w-4" />
           </button>
           <div
-            className="relative z-10 h-[80vh] w-[92vw] max-w-5xl overflow-hidden rounded-xl border border-white/15 bg-black"
+            className="relative z-10 h-[min(80dvh,80vh)] w-[92vw] max-w-5xl overflow-hidden rounded-xl border border-white/15 bg-black"
             onClick={(event) => event.stopPropagation()}
           >
             <Image

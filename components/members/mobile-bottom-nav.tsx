@@ -91,7 +91,7 @@ export function MemberBottomNav() {
   }, [])
 
   return (
-    <div className="fixed bottom-6 left-4 right-4 z-40 lg:hidden">
+    <div data-mobile-bottom-nav className="fixed bottom-6 left-4 right-4 z-40 lg:hidden">
       <nav className="glass-card-heavy rounded-2xl border border-white/10 shadow-2xl px-2 pt-2 pb-safe">
         <div className="flex items-end justify-around gap-1">
           {primaryTabs.map((tab) => {
@@ -187,7 +187,7 @@ export function MemberBottomNav() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.98 }}
                     transition={{ duration: 0.16 }}
-                    className="absolute bottom-[calc(100%+0.6rem)] right-0 w-48 rounded-xl border border-white/[0.1] bg-[#0D0D0E]/98 backdrop-blur-xl p-1.5 shadow-[0_20px_45px_rgba(0,0,0,0.4)]"
+                    className="absolute bottom-[calc(100%+0.6rem)] right-0 w-48 max-h-[60vh] overflow-y-auto overscroll-contain rounded-xl border border-white/[0.1] bg-[#0D0D0E]/98 backdrop-blur-xl p-1.5 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_20px_45px_rgba(0,0,0,0.4)]"
                   >
                     {moreItems.map((item) => {
                       const ItemIcon = item.icon

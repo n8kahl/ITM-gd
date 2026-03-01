@@ -41,7 +41,10 @@ export function MobileTopBar() {
   }
 
   return (
-    <header className="sticky top-0 z-40 lg:hidden h-14 flex items-center justify-between px-3 bg-[#0A0A0B]/95 backdrop-blur-[20px] border-b border-white/[0.06]">
+    <header
+      data-mobile-top-bar
+      className="sticky top-0 z-40 lg:hidden h-14 flex items-center justify-between px-3 bg-[#0A0A0B]/95 backdrop-blur-[20px] border-b border-white/[0.06]"
+    >
       <div className="w-10 flex items-center justify-start">
         {showBackButton ? (
           <button

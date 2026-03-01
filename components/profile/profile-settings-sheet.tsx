@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { Loader2, Settings, CheckCircle2 } from 'lucide-react'
+import { Loader2, Settings, CheckCircle2, Bell } from 'lucide-react'
 import { PrivacyToggle } from '@/components/profile/privacy-toggle'
 import type {
   MemberProfile,
@@ -24,6 +24,14 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_AI_PREFERENCES,
 } from '@/lib/types/social'
+import {
+  checkPushSubscription,
+  getNotificationPermission,
+  isPushSupported,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from '@/lib/notifications'
+import { isIOS, isStandaloneMode } from '@/lib/pwa-utils'
 
 // ============================================
 // TYPES
@@ -54,6 +62,13 @@ export function ProfileSettingsSheet({
   const [aiPrefs, setAiPrefs] = useState<AIPreferences>(DEFAULT_AI_PREFERENCES)
   const [saving, setSaving] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>('default')
+  const [pushError, setPushError] = useState<string | null>(null)
+  const [isIOSDevice, setIsIOSDevice] = useState(false)
+  const [isStandalonePwa, setIsStandalonePwa] = useState(false)
 
   // Sync local state from profile when dialog opens
   useEffect(() => {
@@ -66,6 +81,28 @@ export function ProfileSettingsSheet({
       setShowSuccess(false)
     }
   }, [profile, open])
+
+  const syncPushState = useCallback(async () => {
+    if (typeof window === 'undefined') return
+
+    const [supported, permission, subscribed] = await Promise.all([
+      isPushSupported(),
+      getNotificationPermission(),
+      checkPushSubscription(),
+    ])
+
+    setPushSupported(supported)
+    setPushPermission(permission)
+    setPushSubscribed(supported ? subscribed : false)
+    setIsIOSDevice(isIOS())
+    setIsStandalonePwa(isStandaloneMode())
+    setPushError(null)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    void syncPushState()
+  }, [open, syncPushState])
 
   const handleSave = async () => {
     setSaving(true)
@@ -98,6 +135,37 @@ export function ProfileSettingsSheet({
     value: string | string[]
   ) => {
     setAiPrefs((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handlePushToggle = async (enabled: boolean) => {
+    if (pushBusy) return
+
+    setPushBusy(true)
+    setPushError(null)
+    try {
+      const success = enabled
+        ? await subscribeToPush()
+        : await unsubscribeFromPush()
+
+      if (!success) {
+        const permission = await getNotificationPermission()
+        setPushPermission(permission)
+
+        if (permission === 'denied') {
+          setPushError('Notifications are blocked in browser settings. Enable permissions and try again.')
+        } else if (isIOSDevice && !isStandalonePwa) {
+          setPushError('Install TradeITM to your Home Screen to enable iOS push notifications.')
+        } else {
+          setPushError(enabled
+            ? 'Could not enable push notifications. Please try again.'
+            : 'Could not disable push notifications. Please try again.')
+        }
+      }
+
+      await syncPushState()
+    } finally {
+      setPushBusy(false)
+    }
   }
 
   return (
@@ -197,6 +265,58 @@ export function ProfileSettingsSheet({
               Notifications
             </h3>
             <div className="space-y-2">
+              <div className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3" data-testid="push-notifications-toggle">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#F5F5F0] flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-emerald-400 shrink-0" />
+                      Push Notifications
+                    </p>
+                    <p className="text-xs text-[#9A9A9A] mt-0.5 leading-relaxed">
+                      Enable browser push alerts for journal updates and important account events.
+                    </p>
+                    <p className="text-[11px] text-white/50 mt-1">
+                      Status: {pushSubscribed ? 'Subscribed' : 'Not subscribed'}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pushSubscribed ? 'luxury-outline' : 'default'}
+                    disabled={pushBusy || !pushSupported || (isIOSDevice && !isStandalonePwa)}
+                    onClick={() => {
+                      void handlePushToggle(!pushSubscribed)
+                    }}
+                    className="h-9 min-w-[92px]"
+                  >
+                    {pushBusy ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : pushSubscribed ? (
+                      'Disable'
+                    ) : (
+                      'Enable'
+                    )}
+                  </Button>
+                </div>
+                {!pushSupported && (
+                  <p className="text-[11px] text-amber-300 mt-2">
+                    Push notifications are not supported in this browser.
+                  </p>
+                )}
+                {isIOSDevice && !isStandalonePwa && (
+                  <p className="text-[11px] text-amber-300 mt-2">
+                    iOS requires standalone mode for push. Install TradeITM to your Home Screen, then enable notifications.
+                  </p>
+                )}
+                {pushPermission === 'denied' && (
+                  <p className="text-[11px] text-red-300 mt-2">
+                    Notification permission is denied. Allow notifications in browser settings to continue.
+                  </p>
+                )}
+                {pushError && (
+                  <p className="text-[11px] text-red-300 mt-2">{pushError}</p>
+                )}
+              </div>
               <PrivacyToggle
                 label="Feed Likes"
                 description="Get notified when someone likes your posts"

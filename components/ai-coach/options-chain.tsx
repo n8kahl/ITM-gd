@@ -51,6 +51,7 @@ interface OptionsChainProps {
 type SortField = 'strike' | 'last' | 'volume' | 'openInterest' | 'iv' | 'delta'
 type SortDir = 'asc' | 'desc'
 type OptionsDataView = 'chain' | 'heatmap'
+type ChainSide = 'call' | 'put'
 
 function isExpiryAvailable(expiry: string | null | undefined, expirations: string[]): expiry is string {
   if (!expiry) return false
@@ -84,6 +85,7 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
   const [sortField, setSortField] = useState<SortField>('strike')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [activeDataView, setActiveDataView] = useState<OptionsDataView>('chain')
+  const [mobileChainSide, setMobileChainSide] = useState<ChainSide>('call')
   const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>('volume')
   const [matrixExpirations, setMatrixExpirations] = useState(5)
   const [matrixStrikes, setMatrixStrikes] = useState(50)
@@ -628,6 +630,37 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
+        {activeDataView === 'chain' && (
+          <div className="border-b border-white/5 px-3 py-2 lg:hidden">
+            <div className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5">
+              <button
+                type="button"
+                onClick={() => setMobileChainSide('call')}
+                className={cn(
+                  'rounded px-2.5 py-1 text-[11px] font-medium transition-colors',
+                  mobileChainSide === 'call'
+                    ? 'bg-emerald-500/15 text-emerald-300'
+                    : 'text-white/45 hover:text-white/70',
+                )}
+              >
+                Calls
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileChainSide('put')}
+                className={cn(
+                  'rounded px-2.5 py-1 text-[11px] font-medium transition-colors',
+                  mobileChainSide === 'put'
+                    ? 'bg-red-500/15 text-red-300'
+                    : 'text-white/45 hover:text-white/70',
+                )}
+              >
+                Puts
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeDataView === 'heatmap' && (
           <OptionsHeatmap
             matrix={optionsMatrix}
@@ -731,10 +764,10 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
               </div>
             )}
 
-            <div className="flex gap-0">
+            <div className="flex flex-col lg:flex-row gap-0">
               {/* CALLS */}
-              <div className="flex-1 min-w-0">
-                <div className="sticky top-0 bg-[#0F0F10] border-b border-white/5 px-3 py-2">
+              <div className={cn('flex-1 min-w-0', mobileChainSide === 'call' ? 'block' : 'hidden lg:block')}>
+                <div className="bg-[#0F0F10] border-b border-white/5 px-3 py-2">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
                     <TrendingUp className="w-3.5 h-3.5" />
                     CALLS
@@ -754,11 +787,11 @@ export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences
               </div>
 
               {/* Strike Column (shared center) */}
-              <div className="w-px bg-emerald-500/20" />
+              <div className="hidden lg:block w-px bg-emerald-500/20" />
 
               {/* PUTS */}
-              <div className="flex-1 min-w-0">
-                <div className="sticky top-0 bg-[#0F0F10] border-b border-white/5 px-3 py-2">
+              <div className={cn('flex-1 min-w-0', mobileChainSide === 'put' ? 'block' : 'hidden lg:block')}>
+                <div className="bg-[#0F0F10] border-b border-white/5 px-3 py-2">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-red-400">
                     <TrendingDown className="w-3.5 h-3.5" />
                     PUTS
@@ -818,95 +851,100 @@ function OptionsTable({
     { key: 'openInterest', label: 'OI', width: 'w-14' },
   ]
 
-  return (
-    <table className="w-full text-xs">
-      <thead>
-        <tr className="border-b border-white/5">
-          {columns.map(col => (
-            <th
-              key={col.key}
-              className={cn(
-                'px-2 py-2 text-left font-medium text-white/50 cursor-pointer hover:text-white/80 transition-colors',
-                col.width
-              )}
-              onClick={() => onSort(col.key)}
-            >
-              <span className="flex items-center gap-1">
-                {col.label}
-                {sortField === col.key && (
-                  <ArrowUpDown className="w-3 h-3 text-emerald-500" />
-                )}
-              </span>
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className={cn(isLoading && 'opacity-50')}>
-        {contracts.map((contract) => {
-          const isITM = contract.inTheMoney
-          const isATM = Math.abs(contract.strike - currentPrice) < (currentPrice * 0.002)
-          const isFocused = highlightStrike != null && Math.round(contract.strike) === Math.round(highlightStrike)
+  const hideOnMobile = (key: SortField) => key === 'iv' || key === 'openInterest'
 
-          return (
-            <tr
-              key={contract.strike}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelectContract(contract, side)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  onSelectContract(contract, side)
-                }
-              }}
-              className={cn(
-                'border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors cursor-pointer focus:outline-none focus:bg-white/[0.04]',
-                isITM && (side === 'call' ? 'bg-emerald-500/[0.04]' : 'bg-red-500/[0.04]'),
-                isATM && 'border-l-2 border-l-emerald-500',
-                isFocused && 'ring-1 ring-violet-500/35 bg-violet-500/[0.08]'
-              )}
-              title="Open position workflow with this contract"
-            >
-              <td className={cn(
-                'px-2 py-1.5 font-mono font-medium',
-                isATM ? 'text-emerald-400' : 'text-white/80'
-              )}>
-                {contract.strike.toLocaleString()}
-              </td>
-              <td className="px-2 py-1.5 font-mono text-white/70">
-                {contract.last.toFixed(2)}
-              </td>
-              <td className={cn(
-                'px-2 py-1.5 font-mono',
-                side === 'call'
-                  ? (contract.delta && contract.delta > 0 ? 'text-emerald-400' : 'text-white/50')
-                  : (contract.delta && contract.delta < 0 ? 'text-red-400' : 'text-white/50')
-              )}>
-                {contract.delta?.toFixed(2) || '-'}
-              </td>
-              <td className={cn(
-                'px-2 py-1.5 font-mono',
-                contract.impliedVolatility > 0.3 ? 'text-amber-400' : 'text-white/50'
-              )}>
-                {(contract.impliedVolatility * 100).toFixed(1)}%
-              </td>
-              <td className="px-2 py-1.5 font-mono text-white/50">
-                {contract.volume > 0 ? contract.volume.toLocaleString() : '-'}
-              </td>
-              <td className="px-2 py-1.5 font-mono text-white/50">
-                {contract.openInterest > 0 ? contract.openInterest.toLocaleString() : '-'}
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[26rem] text-xs">
+        <thead className="sticky top-0 z-10 bg-[#0F0F10]">
+          <tr className="border-b border-white/5">
+            {columns.map(col => (
+              <th
+                key={col.key}
+                className={cn(
+                  'px-2 py-2 text-left font-medium text-white/50 cursor-pointer hover:text-white/80 transition-colors',
+                  col.width,
+                  hideOnMobile(col.key) && 'hidden sm:table-cell',
+                )}
+                onClick={() => onSort(col.key)}
+              >
+                <span className="flex items-center gap-1">
+                  {col.label}
+                  {sortField === col.key && (
+                    <ArrowUpDown className="w-3 h-3 text-emerald-500" />
+                  )}
+                </span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className={cn(isLoading && 'opacity-50')}>
+          {contracts.map((contract) => {
+            const isITM = contract.inTheMoney
+            const isATM = Math.abs(contract.strike - currentPrice) < (currentPrice * 0.002)
+            const isFocused = highlightStrike != null && Math.round(contract.strike) === Math.round(highlightStrike)
+
+            return (
+              <tr
+                key={contract.strike}
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelectContract(contract, side)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    onSelectContract(contract, side)
+                  }
+                }}
+                className={cn(
+                  'border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors cursor-pointer focus:outline-none focus:bg-white/[0.04]',
+                  isITM && (side === 'call' ? 'bg-emerald-500/[0.04]' : 'bg-red-500/[0.04]'),
+                  isATM && 'border-l-2 border-l-emerald-500',
+                  isFocused && 'ring-1 ring-violet-500/35 bg-violet-500/[0.08]'
+                )}
+                title="Open position workflow with this contract"
+              >
+                <td className={cn(
+                  'px-2 py-1.5 font-mono font-medium',
+                  isATM ? 'text-emerald-400' : 'text-white/80'
+                )}>
+                  {contract.strike.toLocaleString()}
+                </td>
+                <td className="px-2 py-1.5 font-mono text-white/70">
+                  {contract.last.toFixed(2)}
+                </td>
+                <td className={cn(
+                  'px-2 py-1.5 font-mono',
+                  side === 'call'
+                    ? (contract.delta && contract.delta > 0 ? 'text-emerald-400' : 'text-white/50')
+                    : (contract.delta && contract.delta < 0 ? 'text-red-400' : 'text-white/50')
+                )}>
+                  {contract.delta?.toFixed(2) || '-'}
+                </td>
+                <td className={cn(
+                  'px-2 py-1.5 font-mono hidden sm:table-cell',
+                  contract.impliedVolatility > 0.3 ? 'text-amber-400' : 'text-white/50'
+                )}>
+                  {(contract.impliedVolatility * 100).toFixed(1)}%
+                </td>
+                <td className="px-2 py-1.5 font-mono text-white/50">
+                  {contract.volume > 0 ? contract.volume.toLocaleString() : '-'}
+                </td>
+                <td className="px-2 py-1.5 font-mono text-white/50 hidden sm:table-cell">
+                  {contract.openInterest > 0 ? contract.openInterest.toLocaleString() : '-'}
+                </td>
+              </tr>
+            )
+          })}
+          {contracts.length === 0 && (
+            <tr>
+              <td colSpan={6} className="px-2 py-8 text-center text-white/30">
+                No contracts available
               </td>
             </tr>
-          )
-        })}
-        {contracts.length === 0 && (
-          <tr>
-            <td colSpan={6} className="px-2 py-8 text-center text-white/30">
-              No contracts available
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }
