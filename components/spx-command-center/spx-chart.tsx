@@ -643,6 +643,9 @@ export function SPXChart({
       pixelCollisionGap: 0,
     }
   }, [focusMode, levelVisibilityBudget, showAllRelevantLevels])
+  const levelDedupeMode = useMemo<'semantic' | 'none'>(() => {
+    return showAllRelevantLevels && focusMode !== 'execution' ? 'none' : 'semantic'
+  }, [focusMode, showAllRelevantLevels])
 
   const marketDisplayedLevels = useMemo(() => {
     if (!renderLevelAnnotations) return []
@@ -789,6 +792,7 @@ export function SPXChart({
             futureOffsetBars={futureOffsetBars}
             isLoading={isLoading}
             levelVisibilityBudget={expandedBudget}
+            levelDedupeMode={levelDedupeMode}
             onChartReady={onChartReady}
             onCrosshairSnapshot={setCrosshairSnapshot}
             onLevelLayoutStats={handleLevelLayoutStats}

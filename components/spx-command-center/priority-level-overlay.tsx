@@ -302,6 +302,7 @@ export function PriorityLevelOverlay({
       nearLabelBudget: includeAllRelevant ? Math.max(candidateLevels.length, 32) : 8,
       maxTotalLabels: includeAllRelevant ? Math.max(candidateLevels.length, 64) : 18,
       minGapPoints: includeAllRelevant ? 0.01 : 1.1,
+      dedupeMode: includeAllRelevant ? 'none' : 'semantic',
     }).levels
   }, [candidateLevels, focusMode, showAllRelevantLevels, spxPrice])
 

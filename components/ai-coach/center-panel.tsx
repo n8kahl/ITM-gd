@@ -1739,6 +1739,13 @@ function ChartView({
     () => filterLevelsByVisibility(emphasizedLevels, levelVisibility),
     [emphasizedLevels, levelVisibility],
   )
+  const levelVisibilityBudget = useMemo(() => ({
+    nearWindowPoints: Number.MAX_SAFE_INTEGER,
+    nearLabelBudget: Math.max(filteredLevels.length + 12, 48),
+    maxTotalLabels: Math.max(filteredLevels.length + 24, 96),
+    minGapPoints: 0.01,
+    pixelCollisionGap: 0,
+  }), [filteredLevels.length])
 
   const levelCounts = useMemo(() => countLevelsByGroup(levels), [levels])
   const chartFreshness = formatBarFreshness(bars)
@@ -1896,6 +1903,8 @@ function ChartView({
                 symbol={symbol}
                 timeframe={timeframe}
                 isLoading={isLoading}
+                levelVisibilityBudget={levelVisibilityBudget}
+                levelDedupeMode="none"
                 onHoverPrice={setHoveredPrice}
               />
               <ChartLevelLabels

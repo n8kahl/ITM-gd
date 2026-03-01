@@ -67,6 +67,7 @@ interface TradingChartProps {
   futureOffsetBars?: number
   isLoading?: boolean
   levelVisibilityBudget?: SPXLevelVisibilityBudget
+  levelDedupeMode?: 'semantic' | 'none'
   onHoverPrice?: (price: number | null) => void
   onCrosshairSnapshot?: (snapshot: TradingChartCrosshairSnapshot | null) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
@@ -209,6 +210,7 @@ export function TradingChart({
   futureOffsetBars = 12,
   isLoading,
   levelVisibilityBudget,
+  levelDedupeMode = 'semantic',
   onHoverPrice,
   onCrosshairSnapshot,
   onChartReady,
@@ -1222,6 +1224,7 @@ export function TradingChart({
       nearLabelBudget: resolvedLevelVisibilityBudget.nearLabelBudget,
       maxTotalLabels: resolvedLevelVisibilityBudget.maxTotalLabels,
       minGapPoints: resolvedLevelVisibilityBudget.minGapPoints,
+      dedupeMode: levelDedupeMode,
     })
     const pixelCollisionGap = resolvedLevelVisibilityBudget.pixelCollisionGap
     const levelWithY = visibleLevelSelection.levels.map((level) => ({
@@ -1298,6 +1301,7 @@ export function TradingChart({
     resolvedLevelVisibilityBudget.nearLabelBudget,
     resolvedLevelVisibilityBudget.nearWindowPoints,
     resolvedLevelVisibilityBudget.pixelCollisionGap,
+    levelDedupeMode,
   ])
 
   const showRSIPane = indicators.rsi

@@ -281,6 +281,7 @@ interface ResolveVisibleChartLevelsOptions {
   nearLabelBudget?: number
   maxTotalLabels?: number
   minGapPoints?: number
+  dedupeMode?: 'semantic' | 'none'
 }
 
 export interface VisibleChartLevelsResult<T extends ChartAxisLevelInput> {
@@ -361,19 +362,24 @@ export function resolveVisibleChartLevels<T extends ChartAxisLevelInput>(
   const nearLabelBudget = options?.nearLabelBudget ?? 7
   const maxTotalLabels = options?.maxTotalLabels ?? 16
   const minGapPoints = options?.minGapPoints ?? 1.35
+  const dedupeMode = options?.dedupeMode ?? 'semantic'
   const livePrice = Number.isFinite(options?.livePrice) ? Number(options?.livePrice) : null
 
-  const dedupeMap = new Map<string, T>()
-  for (const level of levels) {
-    if (!Number.isFinite(level.price)) continue
-    const roundedPrice = Math.round(level.price * 4) / 4
-    const key = `${roundedPrice}|${canonicalizeLabel(level.label)}`
-    const existing = dedupeMap.get(key)
-    if (!existing || levelPriority(level) > levelPriority(existing)) {
-      dedupeMap.set(key, level)
-    }
-  }
-  const deduped = Array.from(dedupeMap.values())
+  const finiteLevels = levels.filter((level) => Number.isFinite(level.price))
+  const deduped = dedupeMode === 'none'
+    ? finiteLevels
+    : (() => {
+      const dedupeMap = new Map<string, T>()
+      for (const level of finiteLevels) {
+        const roundedPrice = Math.round(level.price * 4) / 4
+        const key = `${roundedPrice}|${canonicalizeLabel(level.label)}`
+        const existing = dedupeMap.get(key)
+        if (!existing || levelPriority(level) > levelPriority(existing)) {
+          dedupeMap.set(key, level)
+        }
+      }
+      return Array.from(dedupeMap.values())
+    })()
 
   const ranked = deduped
     .map((level) => {
@@ -420,7 +426,9 @@ export function resolveVisibleChartLevels<T extends ChartAxisLevelInput>(
     levels: [...accepted].sort((left, right) => right.price - left.price),
     stats: {
       inputCount: levels.length,
-      dedupedCount: Math.max(0, levels.length - deduped.length),
+      dedupedCount: dedupeMode === 'none'
+        ? 0
+        : Math.max(0, finiteLevels.length - deduped.length),
       budgetSuppressedCount,
       collisionSuppressedCount,
     },
