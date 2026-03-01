@@ -57,6 +57,8 @@ export interface TabConfig {
   sort_order: number
   is_required: boolean
   is_active: boolean
+  /** When non-empty, tab is only visible to users with at least one of these Discord role IDs (admins always bypass). */
+  required_discord_role_ids?: string[] | null
 }
 
 // Error codes from sync-discord-roles edge function
@@ -1362,8 +1364,19 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       return ensureAdminReplayTabConfig(fallbackTabs, isAdmin)
     }
 
+    const userDiscordRoles = state.profile?.discord_roles ?? []
+
     const visibleTabs = allTabConfigs.filter(tab => {
       if (!tab.is_active) return false
+
+      // Discord role gate: if the tab requires specific Discord roles, check them.
+      // Admins always bypass the Discord role gate.
+      const requiredRoles = tab.required_discord_role_ids
+      if (requiredRoles && requiredRoles.length > 0 && !isAdmin) {
+        const hasRequiredRole = requiredRoles.some(roleId => userDiscordRoles.includes(roleId))
+        if (!hasRequiredRole) return false
+      }
+
       if (tab.required_tier === 'admin') return isAdmin
       if (tab.is_required) return true
       const requiredLevel = tierHierarchy[tab.required_tier] || 0
@@ -1371,7 +1384,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     })
 
     return ensureAdminReplayTabConfig(visibleTabs, isAdmin)
-  }, [allTabConfigs, getAllowedTabsForTier, state.allowedTabs, state.profile?.membership_tier, state.profile?.role])
+  }, [allTabConfigs, getAllowedTabsForTier, state.allowedTabs, state.profile?.membership_tier, state.profile?.role, state.profile?.discord_roles])
 
   const getMobileTabs = useCallback((): TabConfig[] => {
     return getVisibleTabs().filter(tab => tab.mobile_visible)
