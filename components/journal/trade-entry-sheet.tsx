@@ -159,7 +159,7 @@ export function TradeEntrySheet({
   const dragPointerIdRef = useRef<number | null>(null)
   const dragOffsetRef = useRef(0)
   const [values, setValues] = useState<EntryFormValues>(EMPTY_VALUES)
-  const [mode, setMode] = useState<'quick' | 'full'>('quick')
+  const [mode, setMode] = useState<'quick' | 'full'>('full')
   const [saving, setSaving] = useState(false)
   const [symbolError, setSymbolError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -198,7 +198,7 @@ export function TradeEntrySheet({
     if (!open) return
 
     setValues(getInitialValues(editEntry))
-    setMode(editEntry ? 'full' : 'quick')
+    setMode('full')
     setSymbolError(null)
     setSaveError(null)
     initialScreenshotPathRef.current = editEntry?.screenshot_storage_path ?? ''

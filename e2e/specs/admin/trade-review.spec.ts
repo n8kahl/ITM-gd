@@ -30,6 +30,8 @@ test.describe('Admin: Trade Review', () => {
 
     await page.getByRole('button', { name: 'Generate AI Analysis' }).click()
     await expect.poll(() => state.aiGeneratedCount, { timeout: 10_000 }).toBe(1)
+    const saveDraftButton = page.getByRole('button', { name: 'Save Draft' })
+    await expect(saveDraftButton).toBeEnabled({ timeout: 10_000 })
 
     await page.getByRole('button', { name: 'Preview Member View' }).click()
     await expect(page.getByRole('dialog', { name: 'Preview Member View' })).toBeVisible()
@@ -39,7 +41,7 @@ test.describe('Admin: Trade Review', () => {
     const privateNotes = page.getByPlaceholder('Private coach notes. Never shown to members.')
     await privateNotes.fill('Coach-only follow-up: reinforce early scaling discipline.')
 
-    await page.getByRole('button', { name: 'Save Draft' }).click()
+    await saveDraftButton.click()
     await expect.poll(() => state.saveCount, { timeout: 10_000 }).toBeGreaterThan(0)
 
     await page.getByRole('button', { name: 'Publish to Member' }).click()

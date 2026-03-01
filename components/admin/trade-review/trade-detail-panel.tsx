@@ -30,8 +30,8 @@ export function TradeDetailPanel({
   }
 
   return (
-    <div className="glass-card-heavy space-y-4 rounded-xl border border-white/10 p-5">
-      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+    <div className="glass-card-heavy space-y-4 rounded-xl border border-white/5 p-5">
+      <div className="rounded-lg border border-white/5 bg-white/5 p-3">
         <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Member</p>
         <div className="flex items-center gap-3">
           <div className="relative h-10 w-10 overflow-hidden rounded-full border border-white/15 bg-black/30">
@@ -61,59 +61,82 @@ export function TradeDetailPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Metric label="Symbol" value={entry.symbol} />
-        <Metric label="Direction" value={entry.direction} />
-        <Metric label="Contract" value={entry.contract_type} />
-        <Metric label="Review Status" value={entry.coach_review_status ?? 'none'} />
-        <Metric
-          label="P&L"
-          value={entry.pnl == null
-            ? '—'
-            : `${entry.pnl >= 0 ? '+' : '-'}$${Math.abs(entry.pnl).toLocaleString('en-US', { maximumFractionDigits: 2 })}`}
-          valueClassName={entry.pnl != null ? (entry.pnl >= 0 ? 'text-emerald-300' : 'text-red-300') : undefined}
-        />
-        <Metric
-          label="P&L %"
-          value={entry.pnl_percentage == null
-            ? '—'
-            : `${entry.pnl_percentage >= 0 ? '+' : ''}${entry.pnl_percentage.toFixed(2)}%`}
-          valueClassName={entry.pnl_percentage != null ? (entry.pnl_percentage >= 0 ? 'text-emerald-300' : 'text-red-300') : undefined}
-        />
-        <Metric label="Entry Price" value={entry.entry_price == null ? '—' : `$${entry.entry_price}`} />
-        <Metric label="Exit Price" value={entry.exit_price == null ? '—' : `$${entry.exit_price}`} />
-        <Metric label="Position Size" value={entry.position_size == null ? '—' : String(entry.position_size)} />
-        <Metric label="Hold (min)" value={entry.hold_duration_min == null ? '—' : String(entry.hold_duration_min)} />
+      <div className="space-y-3">
+        <section className="rounded-lg border border-white/5 bg-white/5 p-3">
+          <h3 className="font-serif text-base text-ivory">Trade Parameters</h3>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <DetailRow label="Symbol" value={entry.symbol.toUpperCase()} />
+            <DetailRow label="Direction" value={entry.direction} />
+            <DetailRow label="Contract" value={entry.contract_type} />
+            <DetailRow label="Review Status" value={entry.coach_review_status ?? 'none'} />
+            <DetailRow label="Position Size" value={entry.position_size == null ? '—' : String(entry.position_size)} />
+            <DetailRow label="Hold (min)" value={entry.hold_duration_min == null ? '—' : String(entry.hold_duration_min)} />
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-white/5 bg-white/5 p-3">
+          <h3 className="font-serif text-base text-ivory">P&L</h3>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">P&L</p>
+              <p className={`mt-1 font-mono text-lg ${entry.pnl != null && entry.pnl < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
+                {entry.pnl == null
+                  ? '—'
+                  : `${entry.pnl >= 0 ? '+' : '-'}$${Math.abs(entry.pnl).toLocaleString('en-US', { maximumFractionDigits: 2 })}`}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">P&L %</p>
+              <p className={`mt-1 font-mono text-lg ${entry.pnl_percentage != null && entry.pnl_percentage < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
+                {entry.pnl_percentage == null
+                  ? '—'
+                  : `${entry.pnl_percentage >= 0 ? '+' : ''}${entry.pnl_percentage.toFixed(2)}%`}
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <DetailRow
+              label="Entry Price"
+              value={entry.entry_price == null ? '—' : `$${entry.entry_price}`}
+              valueClassName="font-mono"
+            />
+            <DetailRow
+              label="Exit Price"
+              value={entry.exit_price == null ? '—' : `$${entry.exit_price}`}
+              valueClassName="font-mono"
+            />
+          </div>
+        </section>
       </div>
 
       {(entry.contract_type === 'call' || entry.contract_type === 'put') ? (
-        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-          <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Options Data</p>
+        <div className="rounded-lg border border-white/5 bg-white/5 p-3">
+          <h3 className="mb-2 font-serif text-base text-ivory">Options Data</h3>
           <div className="grid grid-cols-2 gap-3">
-            <Metric label="Strike" value={entry.strike_price == null ? '—' : String(entry.strike_price)} />
-            <Metric label="Expiration" value={entry.expiration_date ?? '—'} />
-            <Metric label="DTE" value={entry.dte_at_entry == null ? '—' : String(entry.dte_at_entry)} />
-            <Metric label="IV" value={entry.iv_at_entry == null ? '—' : String(entry.iv_at_entry)} />
-            <Metric label="Delta" value={entry.delta_at_entry == null ? '—' : String(entry.delta_at_entry)} />
-            <Metric label="Gamma" value={entry.gamma_at_entry == null ? '—' : String(entry.gamma_at_entry)} />
-            <Metric label="Theta" value={entry.theta_at_entry == null ? '—' : String(entry.theta_at_entry)} />
-            <Metric label="Vega" value={entry.vega_at_entry == null ? '—' : String(entry.vega_at_entry)} />
+            <DetailMetric label="Strike" value={entry.strike_price == null ? '—' : String(entry.strike_price)} />
+            <DetailMetric label="Expiration" value={entry.expiration_date ?? '—'} />
+            <DetailMetric label="DTE" value={entry.dte_at_entry == null ? '—' : String(entry.dte_at_entry)} />
+            <DetailMetric label="IV" value={entry.iv_at_entry == null ? '—' : String(entry.iv_at_entry)} />
+            <DetailMetric label="Delta" value={entry.delta_at_entry == null ? '—' : String(entry.delta_at_entry)} />
+            <DetailMetric label="Gamma" value={entry.gamma_at_entry == null ? '—' : String(entry.gamma_at_entry)} />
+            <DetailMetric label="Theta" value={entry.theta_at_entry == null ? '—' : String(entry.theta_at_entry)} />
+            <DetailMetric label="Vega" value={entry.vega_at_entry == null ? '—' : String(entry.vega_at_entry)} />
           </div>
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-        <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Psychology</p>
+      <div className="rounded-lg border border-white/5 bg-white/5 p-3">
+        <h3 className="mb-2 font-serif text-base text-ivory">Psychology</h3>
         <div className="grid grid-cols-2 gap-3">
-          <Metric label="Mood Before" value={entry.mood_before ?? '—'} />
-          <Metric label="Mood After" value={entry.mood_after ?? '—'} />
-          <Metric label="Discipline" value={entry.discipline_score == null ? '—' : `${entry.discipline_score}/5`} />
-          <Metric label="Followed Plan" value={entry.followed_plan == null ? '—' : (entry.followed_plan ? 'Yes' : 'No')} />
-          <Metric label="Rating" value={entry.rating == null ? '—' : `${entry.rating}/5`} />
+          <DetailMetric label="Mood Before" value={entry.mood_before ?? '—'} />
+          <DetailMetric label="Mood After" value={entry.mood_after ?? '—'} />
+          <DetailMetric label="Discipline" value={entry.discipline_score == null ? '—' : `${entry.discipline_score}/5`} />
+          <DetailMetric label="Followed Plan" value={entry.followed_plan == null ? '—' : (entry.followed_plan ? 'Yes' : 'No')} />
+          <DetailMetric label="Rating" value={entry.rating == null ? '—' : `${entry.rating}/5`} />
         </div>
       </div>
 
-      <details className="rounded-lg border border-white/10 bg-white/5 p-3" open>
+      <details className="rounded-lg border border-white/5 bg-white/5 p-3" open>
         <summary className="cursor-pointer text-xs uppercase tracking-wider text-muted-foreground">
           Notes
         </summary>
@@ -139,12 +162,12 @@ export function TradeDetailPanel({
       ) : null}
 
       {entry.screenshot_url ? (
-        <div className="space-y-2 rounded-lg border border-white/10 bg-white/5 p-3">
+        <div className="space-y-2 rounded-lg border border-white/5 bg-white/5 p-3">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">Member Screenshot</p>
           <button
             type="button"
             onClick={() => setZoomOpen(true)}
-            className="relative h-56 w-full overflow-hidden rounded-lg border border-white/10 bg-black/30"
+            className="relative h-56 w-full overflow-hidden rounded-lg border border-white/5 bg-black/30"
           >
             <Image
               src={entry.screenshot_url}
@@ -180,7 +203,7 @@ export function TradeDetailPanel({
   )
 }
 
-function Metric({
+function DetailMetric({
   label,
   value,
   valueClassName,
@@ -190,9 +213,26 @@ function Metric({
   valueClassName?: string
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+    <div className="rounded-lg border border-white/5 bg-black/20 p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className={`mt-1 text-sm text-ivory ${valueClassName ?? ''}`}>{value}</p>
+    </div>
+  )
+}
+
+function DetailRow({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string
+  value: string
+  valueClassName?: string
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-white/5 bg-black/20 px-3 py-2">
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`text-sm text-ivory ${valueClassName ?? ''}`}>{value}</p>
     </div>
   )
 }
