@@ -17,8 +17,11 @@ import type {
   CoachMessage,
   PredictionState,
   RegimeState,
+  SPXLevelsDataQuality,
   SpyImpactState,
   SPXSnapshot,
+  SPXSnapshotDataQuality,
+  SPXSnapshotStageQuality,
   UnifiedGEXLandscape,
 } from './types';
 import { nowIso } from './utils';
@@ -188,24 +191,116 @@ function getFallbackCoachMessages(snapshot: SPXSnapshot | null): CoachMessage[] 
   return snapshot?.coachMessages || [];
 }
 
+type SnapshotStage = keyof typeof SNAPSHOT_STAGE_TIMEOUTS_MS;
+
+interface StageFallbackResult<T> {
+  value: T;
+  quality: SPXSnapshotStageQuality;
+}
+
+function parseDateMs(value: unknown): number | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
+function extractQualityTimestamp(value: unknown, depth = 0): string | null {
+  if (depth > 2) return null;
+  if (typeof value === 'string' && parseDateMs(value) != null) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const candidate = extractQualityTimestamp(item, depth + 1);
+      if (candidate) return candidate;
+    }
+    return null;
+  }
+  if (!value || typeof value !== 'object') return null;
+
+  const candidate = value as Record<string, unknown>;
+  const directTimestampKeys = ['generatedAt', 'timestamp', 'latestEventAt', 'calculatedAt', 'updatedAt'];
+  for (const key of directTimestampKeys) {
+    const raw = candidate[key];
+    if (typeof raw !== 'string') continue;
+    if (parseDateMs(raw) != null) return raw;
+  }
+
+  const nestedKeys = ['spx', 'spy', 'combined', 'messages'];
+  for (const key of nestedKeys) {
+    if (!(key in candidate)) continue;
+    const nested = extractQualityTimestamp(candidate[key], depth + 1);
+    if (nested) return nested;
+  }
+
+  return null;
+}
+
+function extractQualitySource(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = (value as { source?: unknown }).source;
+  if (typeof candidate !== 'string' || candidate.trim().length === 0) return null;
+  return candidate.trim();
+}
+
+function buildStageQuality(input: {
+  ok: boolean;
+  value: unknown;
+  degradedReason: string | null;
+  completedAtMs: number;
+}): SPXSnapshotStageQuality {
+  const timestamp = extractQualityTimestamp(input.value);
+  const timestampMs = parseDateMs(timestamp);
+  const freshnessMs = timestampMs == null
+    ? 0
+    : Math.max(0, input.completedAtMs - timestampMs);
+
+  return {
+    ok: input.ok,
+    source: extractQualitySource(input.value) || (input.ok ? 'primary' : 'fallback'),
+    freshnessMs,
+    degradedReason: input.degradedReason,
+  };
+}
+
 async function withStageFallback<T>(input: {
-  stage: keyof typeof SNAPSHOT_STAGE_TIMEOUTS_MS;
+  stage: SnapshotStage;
   run: () => Promise<T>;
   fallback: () => T;
   forceRefresh: boolean;
-}): Promise<T> {
+}): Promise<StageFallbackResult<T>> {
   const timeoutMs = SNAPSHOT_STAGE_TIMEOUTS_MS[input.stage];
 
   try {
-    return await withTimeout(input.run(), timeoutMs);
+    const value = await withTimeout(input.run(), timeoutMs);
+    return {
+      value,
+      quality: buildStageQuality({
+        ok: true,
+        value,
+        degradedReason: null,
+        completedAtMs: Date.now(),
+      }),
+    };
   } catch (error) {
+    const degradedReason = error instanceof Error ? error.message : String(error);
     logger.warn('SPX snapshot stage failed; using fallback', {
       stage: input.stage,
       timeoutMs,
       forceRefresh: input.forceRefresh,
-      error: error instanceof Error ? error.message : String(error),
+      error: degradedReason,
     });
-    return input.fallback();
+    const value = input.fallback();
+    return {
+      value,
+      quality: buildStageQuality({
+        ok: false,
+        value,
+        degradedReason,
+        completedAtMs: Date.now(),
+      }),
+    };
   }
 }
 
@@ -229,7 +324,9 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     });
   }
 
-  const [gex, flow] = await Promise.all([
+  const stageQuality: SPXSnapshotDataQuality['stages'] = {};
+
+  const [gexResult, flowResult] = await Promise.all([
     withStageFallback({
       stage: 'gex',
       forceRefresh,
@@ -243,7 +340,12 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
       fallback: () => fallbackSnapshot?.flow || [],
     }),
   ]);
-  const flowAggregation = await withStageFallback({
+  stageQuality.gex = gexResult.quality;
+  stageQuality.flow = flowResult.quality;
+  const gex = gexResult.value;
+  const flow = flowResult.value;
+
+  const flowAggregationResult = await withStageFallback({
     stage: 'flowAggregation',
     forceRefresh,
     run: () => getFlowWindowAggregation({
@@ -252,29 +354,37 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     }),
     fallback: () => fallbackSnapshot?.flowAggregation || createNeutralFlowWindowAggregation(),
   });
+  stageQuality.flowAggregation = flowAggregationResult.quality;
+  const flowAggregation = flowAggregationResult.value;
 
-  const basis = await withStageFallback({
+  const basisResult = await withStageFallback({
     stage: 'basis',
     forceRefresh,
     run: () => getBasisState({ forceRefresh, gexLandscape: gex }),
     fallback: () => createNeutralBasisState(gex, fallbackSnapshot),
   });
+  stageQuality.basis = basisResult.quality;
+  const basis = basisResult.value;
 
-  const spyImpact = await withStageFallback({
+  const spyImpactResult = await withStageFallback({
     stage: 'spyImpact',
     forceRefresh,
     run: () => getSpyImpactState({ forceRefresh, basisState: basis, gexLandscape: gex }),
     fallback: () => createNeutralSpyImpactState(basis, fallbackSnapshot),
   });
+  stageQuality.spyImpact = spyImpactResult.quality;
+  const spyImpact = spyImpactResult.value;
 
-  const fibLevels = await withStageFallback({
+  const fibLevelsResult = await withStageFallback({
     stage: 'fib',
     forceRefresh,
     run: () => getFibLevels({ forceRefresh, basisState: basis }),
     fallback: () => fallbackSnapshot?.fibLevels || [],
   });
+  stageQuality.fib = fibLevelsResult.quality;
+  const fibLevels = fibLevelsResult.value;
 
-  const levelData = await withStageFallback({
+  const levelDataResult = await withStageFallback({
     stage: 'levels',
     forceRefresh,
     run: async () => {
@@ -308,15 +418,19 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
       generatedAt: nowIso(),
     }),
   });
+  stageQuality.levels = levelDataResult.quality;
+  const levelData = levelDataResult.value;
 
-  const regime = await withStageFallback({
+  const regimeResult = await withStageFallback({
     stage: 'regime',
     forceRefresh,
     run: () => classifyCurrentRegime({ forceRefresh, gexLandscape: gex, levelData }),
     fallback: () => createNeutralRegimeState(fallbackSnapshot),
   });
+  stageQuality.regime = regimeResult.quality;
+  const regime = regimeResult.value;
 
-  const setupsRaw = await withStageFallback({
+  const setupsRawResult = await withStageFallback({
     stage: 'setups',
     forceRefresh,
     run: () => detectActiveSetups({
@@ -329,6 +443,8 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     }),
     fallback: () => fallbackSnapshot?.setups || [],
   });
+  stageQuality.setups = setupsRawResult.quality;
+  const setupsRaw = setupsRawResult.value;
   syncTickEvaluatorSetups(setupsRaw);
   const latestSpxTick = getLatestTick('SPX');
   if (latestSpxTick) {
@@ -340,7 +456,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   }
   const setupsTickAdjusted = applyTickStateToSetups(setupsRaw);
 
-  const prediction = await withStageFallback({
+  const predictionResult = await withStageFallback({
     stage: 'prediction',
     forceRefresh,
     run: () => getPredictionState({
@@ -351,8 +467,10 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     }),
     fallback: () => createNeutralPredictionState(fallbackSnapshot, gex.spx.spotPrice),
   });
+  stageQuality.prediction = predictionResult.quality;
+  const prediction = predictionResult.value;
 
-  const coachState = await withStageFallback({
+  const coachStateResult = await withStageFallback({
     stage: 'coach',
     forceRefresh,
     run: () => getCoachState({ forceRefresh, setups: setupsTickAdjusted, prediction }),
@@ -361,6 +479,8 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
       generatedAt: nowIso(),
     }),
   });
+  stageQuality.coach = coachStateResult.quality;
+  const coachState = coachStateResult.value;
 
   const deadline = Date.now() + SNAPSHOT_CONTRACT_ENRICHMENT_BUDGET_MS;
   let inlineRecommendations = 0;
@@ -392,6 +512,22 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     }),
   );
   const setupEnvironmentState = await getLatestSetupEnvironmentState();
+  const degradedReasons = (Object.entries(stageQuality) as Array<[SnapshotStage, SPXSnapshotStageQuality | undefined]>)
+    .filter(([, quality]) => Boolean(quality && quality.ok === false))
+    .map(([stage, quality]) => `${stage}:${quality?.degradedReason || 'fallback'}`);
+  if (!tickHealth.healthy) {
+    degradedReasons.push(`tick_stream:${tickHealth.reason || 'stale'}`);
+  }
+  const dataQuality: SPXSnapshotDataQuality = {
+    generatedAt: nowIso(),
+    degraded: degradedReasons.length > 0,
+    degradedReasons,
+    stages: stageQuality,
+  };
+  const levelsDataQuality: SPXLevelsDataQuality = {
+    integrity: dataQuality.degraded ? 'degraded' : 'full',
+    warnings: Array.from(new Set(degradedReasons)),
+  };
 
   return {
     levels: levelData.levels,
@@ -406,6 +542,8 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     flow,
     flowAggregation,
     coachMessages: coachState.messages,
+    dataQuality,
+    levelsDataQuality,
     environmentGate: setupEnvironmentState?.gate || null,
     standbyGuidance: setupEnvironmentState?.standbyGuidance || null,
     generatedAt: nowIso(),

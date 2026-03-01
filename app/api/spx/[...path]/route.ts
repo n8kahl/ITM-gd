@@ -159,11 +159,43 @@ function getStaleCache(cacheKey: string | null): StaleCacheEntry | null {
 }
 
 function degradedSnapshotResponse(message: string, timeoutMs: number, upstream?: string): NextResponse {
+  const generatedAt = new Date().toISOString()
+  const stageReason = `proxy_degraded_fallback:${message}`
+  const degradedStage = {
+    ok: false,
+    source: 'proxy_degraded_fallback',
+    freshnessMs: 0,
+    degradedReason: message,
+  } as const
+
   return NextResponse.json(
     {
       degraded: true,
       message,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
+      levelsDataQuality: {
+        integrity: 'degraded',
+        warnings: [stageReason],
+      },
+      dataQuality: {
+        generatedAt,
+        degraded: true,
+        degradedReasons: [stageReason],
+        stages: {
+          gex: degradedStage,
+          flow: degradedStage,
+          flowAggregation: degradedStage,
+          basis: degradedStage,
+          spyImpact: degradedStage,
+          fib: degradedStage,
+          levels: degradedStage,
+          multiTF: degradedStage,
+          regime: degradedStage,
+          setups: degradedStage,
+          prediction: degradedStage,
+          coach: degradedStage,
+        },
+      },
       levels: [],
       clusters: [],
       fibLevels: [],
@@ -187,7 +219,7 @@ function degradedSnapshotResponse(message: string, timeoutMs: number, upstream?:
           spy: 0,
         },
         levels: [],
-        timestamp: new Date().toISOString(),
+        timestamp: generatedAt,
       },
       regime: {
         regime: 'compression',
@@ -195,7 +227,7 @@ function degradedSnapshotResponse(message: string, timeoutMs: number, upstream?:
         probability: 0,
         magnitude: 'small',
         confidence: 0,
-        timestamp: new Date().toISOString(),
+        timestamp: generatedAt,
       },
       prediction: {
         regime: 'compression',
@@ -219,7 +251,7 @@ function degradedSnapshotResponse(message: string, timeoutMs: number, upstream?:
           gexByStrike: [],
           keyLevels: [],
           expirationBreakdown: {},
-          timestamp: new Date().toISOString(),
+          timestamp: generatedAt,
         },
         spy: {
           netGex: 0,
@@ -230,7 +262,7 @@ function degradedSnapshotResponse(message: string, timeoutMs: number, upstream?:
           gexByStrike: [],
           keyLevels: [],
           expirationBreakdown: {},
-          timestamp: new Date().toISOString(),
+          timestamp: generatedAt,
         },
         combined: {
           netGex: 0,
@@ -241,7 +273,7 @@ function degradedSnapshotResponse(message: string, timeoutMs: number, upstream?:
           gexByStrike: [],
           keyLevels: [],
           expirationBreakdown: {},
-          timestamp: new Date().toISOString(),
+          timestamp: generatedAt,
         },
       },
     },
