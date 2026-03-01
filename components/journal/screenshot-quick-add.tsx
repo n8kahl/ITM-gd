@@ -14,6 +14,7 @@ import {
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 
 const ALLOWED_SCREENSHOT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
+const SCREENSHOT_ANALYSIS_TIMEOUT_MS = 20_000
 const AMBIGUOUS_SCREENSHOT_SYMBOLS = new Set([
   'MULTIPLE',
   'MULTI',
@@ -159,8 +160,15 @@ function ScreenshotQuickAddDialog({
         return
       }
 
-      const base64 = await fileToBase64(selectedFile)
-      const result = await analyzeScreenshot(base64, selectedFile.type, session.access_token)
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), SCREENSHOT_ANALYSIS_TIMEOUT_MS)
+      let result: ScreenshotAnalysisResponse
+      try {
+        const base64 = await fileToBase64(selectedFile)
+        result = await analyzeScreenshot(base64, selectedFile.type, session.access_token, { signal: controller.signal })
+      } finally {
+        clearTimeout(timeout)
+      }
       setAnalysis(result)
 
       // Auto-fill symbol only for single non-ambiguous position
@@ -169,6 +177,14 @@ function ScreenshotQuickAddDialog({
         setSymbol(normalizeSymbol(top.symbol))
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setAnalysisError('AI analysis timed out. You can still enter a symbol and create a manual entry.')
+        return
+      }
+      if (err instanceof Error && err.name === 'AbortError') {
+        setAnalysisError('AI analysis timed out. You can still enter a symbol and create a manual entry.')
+        return
+      }
       setAnalysisError(err instanceof Error ? err.message : 'Failed to analyze screenshot')
     } finally {
       setAnalyzing(false)
@@ -317,8 +333,8 @@ function ScreenshotQuickAddDialog({
       }
       // Use a synthetic position with the user's symbol override
       positionsToSave.push({ ...analysis.positions[0], symbol: normalizedSymbol })
-    } else if (!analysis && normalizeSymbol(symbol)) {
-      // No analysis but user typed a symbol — create a bare entry
+    } else if ((!analysis || analysis.positionCount === 0) && normalizeSymbol(symbol)) {
+      // No extracted positions but user typed a symbol — create a bare entry
       positionsToSave.push({
         symbol: normalizeSymbol(symbol),
         type: 'stock',
@@ -536,6 +552,12 @@ function ScreenshotQuickAddDialog({
                       </button>
                     )}
                   </div>
+
+                  {analysis.positionCount === 0 && (
+                    <p className="text-xs text-white/65">
+                      No positions detected. Enter a symbol manually to create an entry, or ask AI Coach for context.
+                    </p>
+                  )}
 
                   {/* Position list */}
                   <div className="max-h-48 space-y-1.5 overflow-y-auto">

@@ -1353,7 +1353,8 @@ export interface ScreenshotAnalysisResponse {
 export async function analyzeScreenshot(
   imageBase64: string,
   mimeType: string,
-  token: string
+  token: string,
+  options?: { signal?: AbortSignal }
 ): Promise<ScreenshotAnalysisResponse> {
   const response = await fetch(`${API_BASE}/api/screenshot/analyze`, {
     method: 'POST',
@@ -1362,6 +1363,7 @@ export async function analyzeScreenshot(
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({ image: imageBase64, mimeType }),
+    signal: options?.signal,
   })
 
   if (!response.ok) {

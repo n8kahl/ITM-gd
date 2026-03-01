@@ -12,6 +12,28 @@ import {
   type ScreenshotAnalysisResponse,
 } from '@/lib/api/ai-coach'
 
+const SCREENSHOT_ANALYSIS_TIMEOUT_MS = 20_000
+const AMBIGUOUS_SCREENSHOT_SYMBOLS = new Set([
+  'MULTIPLE',
+  'MULTI',
+  'PORTFOLIO',
+  'VARIOUS',
+  'MIXED',
+  'ACCOUNT',
+  'POSITIONS',
+  'POSITION',
+  'HOLDINGS',
+  'TOTAL',
+])
+
+function normalizeSymbol(value: string): string {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9./]/g, '')
+}
+
+function isAmbiguousSymbol(value: string): boolean {
+  return AMBIGUOUS_SCREENSHOT_SYMBOLS.has(normalizeSymbol(value))
+}
+
 async function resolveCurrentUserId(supabase: ReturnType<typeof createBrowserSupabase>): Promise<string | null> {
   const {
     data: { session },
@@ -50,11 +72,39 @@ export function ScreenshotUploadZone({
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [previewLoaded, setPreviewLoaded] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [lastUploadedFile, setLastUploadedFile] = useState<File | null>(null)
+  const [selectedPositionIndex, setSelectedPositionIndex] = useState(0)
+
+  const hasMultiplePositions = (analysis?.positionCount ?? 0) > 1
+  const hasNoPositions = (analysis?.positionCount ?? 0) === 0
 
   useEffect(() => {
     setPreviewLoaded(false)
     setPreviewError(null)
   }, [currentScreenshotUrl])
+
+  const runAnalysisWithTimeout = useCallback(async (
+    file: File,
+    token: string,
+  ): Promise<ScreenshotAnalysisResponse> => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), SCREENSHOT_ANALYSIS_TIMEOUT_MS)
+
+    try {
+      const base64 = await fileToBase64(file)
+      return await analyzeScreenshot(base64, file.type, token, { signal: controller.signal })
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error('AI analysis timed out. You can still save the screenshot and fill fields manually.')
+      }
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('AI analysis timed out. You can still save the screenshot and fill fields manually.')
+      }
+      throw error
+    } finally {
+      clearTimeout(timeout)
+    }
+  }, [])
 
   const openAICoach = useCallback((prompt: string) => {
     if (onOpenAICoach) {
@@ -79,12 +129,12 @@ export function ScreenshotUploadZone({
   }, [])
 
   const runSuggestedAction = useCallback((actionId: ScreenshotActionId | 'set_alert') => {
-    const topPosition = analysis?.positions?.[0]
+    const selectedPosition = analysis?.positions?.[selectedPositionIndex] ?? analysis?.positions?.[0]
     const summary = summarizePositions(analysis?.positions || [])
 
     switch (actionId) {
       case 'log_trade':
-        if (topPosition) onApplyExtractedPosition?.(topPosition)
+        if (selectedPosition) onApplyExtractedPosition?.(selectedPosition)
         return
       case 'analyze_next_steps':
         openAICoach(
@@ -113,7 +163,7 @@ export function ScreenshotUploadZone({
       default:
         return
     }
-  }, [analysis?.positions, onApplyExtractedPosition, openAICoach, summarizePositions])
+  }, [analysis?.positions, onApplyExtractedPosition, openAICoach, selectedPositionIndex, summarizePositions])
 
   const handleUpload = useCallback(
     async (file: File) => {
@@ -122,6 +172,8 @@ export function ScreenshotUploadZone({
       setProgress(0)
       setAnalysis(null)
       setAnalysisError(null)
+      setSelectedPositionIndex(0)
+      setLastUploadedFile(file)
 
       try {
         const supabase = createBrowserSupabase()
@@ -159,9 +211,9 @@ export function ScreenshotUploadZone({
 
           setAnalyzing(true)
           try {
-            const base64 = await fileToBase64(file)
-            const extracted = await analyzeScreenshot(base64, file.type, session.access_token)
+            const extracted = await runAnalysisWithTimeout(file, session.access_token)
             setAnalysis(extracted)
+            setSelectedPositionIndex(0)
           } catch (analysisErr) {
             setAnalysisError(analysisErr instanceof Error ? analysisErr.message : 'Screenshot uploaded, but AI extraction failed.')
           } finally {
@@ -176,7 +228,7 @@ export function ScreenshotUploadZone({
         setProgress(0)
       }
     },
-    [onUploadComplete],
+    [onUploadComplete, runAnalysisWithTimeout],
   )
 
   const handleFileSelect = useCallback(
@@ -220,7 +272,40 @@ export function ScreenshotUploadZone({
     setAnalysisError(null)
     setPreviewLoaded(false)
     setPreviewError(null)
+    setLastUploadedFile(null)
+    setSelectedPositionIndex(0)
   }, [onRemove])
+
+  const handleRetryAnalysis = useCallback(async () => {
+    if (!lastUploadedFile || uploading || analyzing) return
+
+    try {
+      const supabase = createBrowserSupabase()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        setAnalysisError('Screenshot uploaded. Sign in again to run AI extraction.')
+        return
+      }
+
+      setAnalysisError(null)
+      setAnalyzing(true)
+      const extracted = await runAnalysisWithTimeout(lastUploadedFile, session.access_token)
+      setAnalysis(extracted)
+      setSelectedPositionIndex(0)
+    } catch (analysisErr) {
+      setAnalysisError(analysisErr instanceof Error ? analysisErr.message : 'Screenshot uploaded, but AI extraction failed.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }, [analyzing, lastUploadedFile, runAnalysisWithTimeout, uploading])
+
+  const applyPositionToForm = useCallback((position: ExtractedPosition, index: number) => {
+    setSelectedPositionIndex(index)
+    onApplyExtractedPosition?.(position)
+  }, [onApplyExtractedPosition])
 
   if (currentScreenshotUrl) {
     return (
@@ -285,15 +370,67 @@ export function ScreenshotUploadZone({
               {' '}({analysis.intent.replace('_', ' ')})
             </p>
 
-            {analysis.positions[0] && onApplyExtractedPosition && (
+            {hasMultiplePositions ? (
+              <div className="space-y-2">
+                <p className="text-[11px] text-white/65">
+                  Multiple positions detected. Choose one position to apply to this trade entry.
+                </p>
+                <div className="max-h-36 space-y-1.5 overflow-y-auto">
+                  {analysis.positions.map((position, index) => {
+                    const normalized = normalizeSymbol(position.symbol)
+                    const symbolReady = normalized.length > 0 && !isAmbiguousSymbol(normalized)
+                    const selected = selectedPositionIndex === index
+                    return (
+                      <div
+                        key={`${position.symbol}-${index}`}
+                        className="flex items-center justify-between gap-2 rounded border border-white/10 bg-white/[0.03] px-2 py-1.5"
+                        data-testid={`screenshot-position-${index}`}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-mono text-xs text-ivory">
+                            {normalized || position.symbol || 'Unknown symbol'}
+                          </p>
+                          <p className="text-[10px] text-white/55">
+                            {position.type.toUpperCase()} x{Math.abs(position.quantity)}
+                            {position.strike ? ` • ${position.strike}` : ''}
+                            {position.expiry ? ` • ${position.expiry}` : ''}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => applyPositionToForm(position, index)}
+                          disabled={disabled || !symbolReady}
+                          className={`rounded border px-2 py-1 text-[11px] transition-colors ${
+                            selected
+                              ? 'border-emerald-500/45 bg-emerald-500/15 text-emerald-100'
+                              : 'border-white/20 text-white/80 hover:border-white/30 hover:bg-white/[0.06]'
+                          } disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          {selected ? 'Applied' : `Use ${normalized || 'Position'}`}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-[10px] text-white/45">
+                  Need to log all positions? Use Quick Screenshot Entry from the Journal header.
+                </p>
+              </div>
+            ) : analysis.positions[0] && onApplyExtractedPosition ? (
               <button
                 type="button"
-                onClick={() => onApplyExtractedPosition(analysis.positions[0])}
+                onClick={() => applyPositionToForm(analysis.positions[0], 0)}
                 className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-200 hover:bg-emerald-500/15"
               >
                 Apply Top Position To Form
               </button>
-            )}
+            ) : null}
+
+            {hasNoPositions ? (
+              <p className="text-xs text-white/65">
+                No trade positions detected. Keep the screenshot and complete fields manually, or ask AI Coach for context.
+              </p>
+            ) : null}
 
             {analysis.suggestedActions.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -310,10 +447,34 @@ export function ScreenshotUploadZone({
                 ))}
               </div>
             )}
+
+            {analysis.warnings.length > 0 ? (
+              <div className="space-y-1 border-t border-white/10 pt-2">
+                {analysis.warnings.slice(0, 3).map((warning, index) => (
+                  <p key={`screenshot-warning-${index}`} className="text-[11px] text-amber-300/90">
+                    {warning}
+                  </p>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
 
-        {analysisError && <p className="text-xs text-amber-300">{analysisError}</p>}
+        {analysisError ? (
+          <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5">
+            <p className="text-xs text-amber-200">{analysisError}</p>
+            {lastUploadedFile ? (
+              <button
+                type="button"
+                onClick={() => void handleRetryAnalysis()}
+                disabled={analyzing || uploading || disabled}
+                className="rounded border border-white/20 px-2.5 py-1 text-xs text-ivory transition-colors hover:border-white/30 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry Analysis
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     )
   }
