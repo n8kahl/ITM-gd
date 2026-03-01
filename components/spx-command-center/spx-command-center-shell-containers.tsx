@@ -76,7 +76,7 @@ export function SPXDesktopSurfaceContainer({
         {desktopViewPolicy.isClassicView ? (
           <div className="absolute inset-0">
             <SPXDesktopSurfaceOrchestrator {...classicDesktopOrchestratorProps} />
-            <div className="h-full pb-16 pt-16">
+            <div className="h-full pb-16 pt-24">
               {classicDesktopLayoutPolicy.showSkeleton ? (
                 <SPXPanelSkeleton />
               ) : (

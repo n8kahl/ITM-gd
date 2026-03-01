@@ -22,6 +22,7 @@ function titleFromLayoutMode(layoutMode: SPXLayoutMode): string {
 
 export function SidebarPanel({ width, open, layoutMode, onClose, children }: SidebarPanelProps) {
   const isOverlay = layoutMode === 'evaluate' || layoutMode === 'in_trade'
+  const desktopTopSafeAreaPx = 96
 
   return (
     <AnimatePresence>
@@ -32,8 +33,9 @@ export function SidebarPanel({ width, open, layoutMode, onClose, children }: Sid
           exit={{ width: 0, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           data-testid="spx-sidebar-panel"
+          style={{ top: `${desktopTopSafeAreaPx}px` }}
           className={cn(
-            'absolute bottom-[66px] right-0 top-[62px] z-30 flex flex-col overflow-hidden',
+            'absolute bottom-[66px] right-0 z-30 flex flex-col overflow-hidden',
             isOverlay
               ? 'border-l border-white/8 bg-[#0A0A0B]/95 backdrop-blur-xl shadow-[-8px_0_32px_rgba(0,0,0,0.5)]'
               : 'border-l border-white/8 bg-[#0A0A0B]',

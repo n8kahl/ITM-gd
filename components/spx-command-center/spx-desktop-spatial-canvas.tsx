@@ -42,7 +42,7 @@ export type SPXDesktopSpatialCanvasProps = {
 }
 
 const OVERLAY_POLICY_REFRESH_INTERVAL_MS = 180
-const DESKTOP_TOP_SAFE_AREA_PX = 64
+const DESKTOP_TOP_SAFE_AREA_PX = 96
 
 export function SPXDesktopSpatialCanvas({
   sidebarOpen,
