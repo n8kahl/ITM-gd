@@ -19,7 +19,7 @@ import { ReplayChart } from '@/components/trade-day-replay/replay-chart'
 import { SessionAnalysis } from '@/components/trade-day-replay/session-analysis'
 import type { ReplayPayload } from '@/lib/trade-day-replay/types'
 
-const DEFAULT_TIMEZONE = 'America/Chicago'
+const DEFAULT_TIMEZONE_FALLBACK = 'America/New_York'
 const FALLBACK_MAX_TRANSCRIPT_CHARS = 120_000
 const BUILD_REQUEST_TIMEOUT_MS = 95_000
 const TIMEZONE_OPTIONS = [
@@ -29,6 +29,19 @@ const TIMEZONE_OPTIONS = [
   'America/Los_Angeles',
   'UTC',
 ]
+
+function resolveDefaultTimezone(): string {
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (typeof timezone === 'string' && timezone.trim().length > 0) {
+      return timezone
+    }
+  } catch {
+    // Ignore and use fallback.
+  }
+
+  return DEFAULT_TIMEZONE_FALLBACK
+}
 
 type HealthStatus = 'checking' | 'ready' | 'forbidden' | 'error'
 
@@ -101,7 +114,7 @@ async function extractErrorMessage(response: Response, fallback: string): Promis
 
 export function TradeDayReplayShell() {
   const [transcript, setTranscript] = useState('')
-  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE)
+  const [timezone, setTimezone] = useState(resolveDefaultTimezone)
 
   const [healthStatus, setHealthStatus] = useState<HealthStatus>('checking')
   const [healthError, setHealthError] = useState<string | null>(null)
@@ -122,6 +135,11 @@ export function TradeDayReplayShell() {
       stats: payload.stats,
     }
   }, [payload])
+
+  const timezoneOptions = useMemo(
+    () => Array.from(new Set([timezone, ...TIMEZONE_OPTIONS])),
+    [timezone],
+  )
 
   const runHealthPreflight = useCallback(async () => {
     setHealthStatus('checking')
@@ -315,7 +333,7 @@ export function TradeDayReplayShell() {
                     <SelectValue placeholder="Select timezone" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TIMEZONE_OPTIONS.map((option) => (
+                    {timezoneOptions.map((option) => (
                       <SelectItem key={option} value={option}>
                         {option}
                       </SelectItem>
