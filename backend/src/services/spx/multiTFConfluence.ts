@@ -38,6 +38,7 @@ export interface SPXMultiTFConfluenceScore {
 }
 
 const MULTI_TF_CACHE_TTL_SECONDS = 45;
+const MULTI_TF_ONE_HOUR_LOOKBACK_DAYS = 7;
 
 function clamp(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, value));
@@ -156,7 +157,12 @@ function isValidContext(value: unknown): value is SPXMultiTFConfluenceContext {
 
 function cacheKeyForDate(dateIso: string): string {
   const dateStr = toEasternTime(new Date(dateIso)).dateStr;
-  return `spx_command_center:multi_tf:v1:${dateStr}`;
+  return `spx_command_center:multi_tf:v2:${dateStr}`;
+}
+
+function dateDaysAgo(date: Date, days: number): string {
+  const shifted = new Date(date.getTime() - (days * 24 * 60 * 60 * 1000));
+  return toEasternTime(shifted).dateStr;
 }
 
 export async function getMultiTFConfluenceContext(options?: {
@@ -179,11 +185,12 @@ export async function getMultiTFConfluenceContext(options?: {
 
   try {
     const dateStr = toEasternTime(evaluationDate).dateStr;
+    const oneHourFromDateStr = dateDaysAgo(evaluationDate, MULTI_TF_ONE_HOUR_LOOKBACK_DAYS);
     const [m1, m5, m15, h1] = await Promise.all([
       getAggregates('I:SPX', 1, 'minute', dateStr, dateStr),
       getAggregates('I:SPX', 5, 'minute', dateStr, dateStr),
       getAggregates('I:SPX', 15, 'minute', dateStr, dateStr),
-      getAggregates('I:SPX', 60, 'minute', dateStr, dateStr),
+      getAggregates('I:SPX', 60, 'minute', oneHourFromDateStr, dateStr),
     ]);
 
     const context = {
