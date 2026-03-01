@@ -187,6 +187,7 @@ export type PermissionName =
   | 'access_course_library'
   | 'access_live_alerts'
   | 'access_community_chat'
+  | 'flag_for_coach_review'
   // Premium features
   | 'access_premium_tools'
   | 'access_position_builder'

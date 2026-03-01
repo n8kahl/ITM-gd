@@ -4,48 +4,140 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import {
-  LayoutDashboard, Users, MessageSquare, GraduationCap,
-  BookOpen, Notebook, Shield, ShieldAlert, Tag, Sliders, Activity, PanelTop,
+  LayoutDashboard, Users, MessageSquare, GraduationCap, BookOpen,
+  ClipboardCheck, Shield, ShieldAlert, Tag, Sliders, Activity, PanelTop,
   ChevronRight, LogOut, Wand2, Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
 
-const navigation = [
-  { name: 'Command Center', href: '/admin', icon: LayoutDashboard },
-  {
-    group: 'Growth & Sales',
-    items: [
-      { name: 'Leads Pipeline', href: '/admin/leads', icon: Users },
-      { name: 'Notifications', href: '/admin/notifications', icon: Bell },
-      { name: 'Live Chat', href: '/admin/chat', icon: MessageSquare },
-      { name: 'Packages', href: '/admin/packages', icon: Tag },
-    ]
-  },
-  {
-    group: 'Product & Content',
-    items: [
-      { name: 'Course Library', href: '/admin/courses', icon: GraduationCap },
-      { name: 'Knowledge Base', href: '/admin/knowledge-base', icon: BookOpen },
-      { name: 'Journal Config', href: '/admin/journal', icon: Notebook },
-      { name: 'Studio Hub', href: '/admin/studio', icon: Wand2 },
-    ]
-  },
-      {
-        group: 'System',
-        items: [
-          { name: 'Analytics', href: '/admin/analytics', icon: Activity },
-          { name: 'Member Access', href: '/admin/members-access', icon: ShieldAlert },
-          { name: 'Role Permissions', href: '/admin/roles', icon: Shield },
-          { name: 'Member Tabs', href: '/admin/tabs', icon: PanelTop },
-          { name: 'Settings', href: '/admin/settings', icon: Sliders },
-        ]
-      },
-]
+interface NavItemModel {
+  name: string
+  href: string
+  icon: LucideIcon
+  badge?: number
+}
+
+interface NavGroupModel {
+  group: string
+  items: NavItemModel[]
+}
+
+function isMissingCoachReviewTable(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  const code = String(error.code ?? '').toUpperCase()
+  if (code === '42P01' || code === 'PGRST205') return true
+  const message = String(error.message ?? '').toLowerCase()
+  return message.includes('coach_review_requests') && message.includes('does not exist')
+}
+
+function usePendingCoachReviewCount(): number | null {
+  const [count, setCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    const supabase = createBrowserSupabase()
+
+    const refreshCount = async () => {
+      const { count: nextCount, error } = await supabase
+        .from('coach_review_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+
+      if (!mounted) return
+
+      if (error) {
+        if (isMissingCoachReviewTable(error)) {
+          setCount(null)
+          return
+        }
+        console.error('[AdminSidebar] Failed to load coach review pending count:', error.message)
+        return
+      }
+
+      setCount(nextCount ?? 0)
+    }
+
+    void refreshCount()
+
+    const channel = supabase
+      .channel('admin-trade-review-pending-count')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'coach_review_requests' },
+        () => { void refreshCount() },
+      )
+      .subscribe()
+
+    const pollId = window.setInterval(() => { void refreshCount() }, 60_000)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshCount()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      mounted = false
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.clearInterval(pollId)
+      void supabase.removeChannel(channel)
+    }
+  }, [])
+
+  return count
+}
 
 export function AdminSidebar() {
   const pathname = usePathname()
+  const pendingCount = usePendingCoachReviewCount()
+
+  const navigation = useMemo(() => {
+    const productAndContent: NavGroupModel = {
+      group: 'Product & Content',
+      items: [
+        { name: 'Course Library', href: '/admin/courses', icon: GraduationCap },
+        { name: 'Knowledge Base', href: '/admin/knowledge-base', icon: BookOpen },
+        {
+          name: 'Trade Review',
+          href: '/admin/trade-review',
+          icon: ClipboardCheck,
+          badge: pendingCount != null && pendingCount > 0 ? pendingCount : undefined,
+        },
+        { name: 'Studio Hub', href: '/admin/studio', icon: Wand2 },
+      ],
+    }
+
+    return {
+      topItem: { name: 'Command Center', href: '/admin', icon: LayoutDashboard } as NavItemModel,
+      groups: [
+        {
+          group: 'Growth & Sales',
+          items: [
+            { name: 'Leads Pipeline', href: '/admin/leads', icon: Users },
+            { name: 'Notifications', href: '/admin/notifications', icon: Bell },
+            { name: 'Live Chat', href: '/admin/chat', icon: MessageSquare },
+            { name: 'Packages', href: '/admin/packages', icon: Tag },
+          ],
+        },
+        productAndContent,
+        {
+          group: 'System',
+          items: [
+            { name: 'Analytics', href: '/admin/analytics', icon: Activity },
+            { name: 'Member Access', href: '/admin/members-access', icon: ShieldAlert },
+            { name: 'Role Permissions', href: '/admin/roles', icon: Shield },
+            { name: 'Member Tabs', href: '/admin/tabs', icon: PanelTop },
+            { name: 'Settings', href: '/admin/settings', icon: Sliders },
+          ],
+        },
+      ] as NavGroupModel[],
+    }
+  }, [pendingCount])
 
   return (
     <div className="flex flex-col h-full">
@@ -72,17 +164,17 @@ export function AdminSidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-4 space-y-6">
         <NavItem
-          item={navigation[0]}
-          isActive={pathname === navigation[0].href}
+          item={navigation.topItem}
+          isActive={pathname === navigation.topItem.href}
         />
 
-        {navigation.slice(1).map((group: any) => (
+        {navigation.groups.map((group) => (
           <div key={group.group}>
             <h3 className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest text-white/20">
               {group.group}
             </h3>
             <div className="space-y-1">
-              {group.items.map((item: any) => (
+              {group.items.map((item) => (
                 <NavItem
                   key={item.href}
                   item={item}
@@ -113,7 +205,7 @@ export function AdminSidebar() {
   )
 }
 
-function NavItem({ item, isActive }: { item: any, isActive: boolean }) {
+function NavItem({ item, isActive }: { item: NavItemModel, isActive: boolean }) {
   const Icon = item.icon
   return (
     <Link
@@ -137,6 +229,11 @@ function NavItem({ item, isActive }: { item: any, isActive: boolean }) {
       )} />
 
       <span className="flex-1">{item.name}</span>
+      {typeof item.badge === 'number' && item.badge > 0 ? (
+        <span className="rounded-full border border-emerald-400/50 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+          {item.badge > 99 ? '99+' : item.badge}
+        </span>
+      ) : null}
 
       {isActive && <ChevronRight className="w-3 h-3 text-white/20" />}
     </Link>

@@ -136,6 +136,10 @@ export interface JournalEntry {
   draft_status: 'pending' | 'confirmed' | 'dismissed' | null
   draft_expires_at: string | null
 
+  /** Denormalized coach review state for member/admin surfaces */
+  coach_review_status: 'pending' | 'in_review' | 'completed' | null
+  coach_review_requested_at: string | null
+
   created_at: string
   updated_at: string
 }
