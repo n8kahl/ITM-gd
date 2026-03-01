@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowLeft, Loader2, AlertCircle, CheckCircle, ExternalLink, Smartphone } from 'lucide-react'
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle, Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { getSafeRedirect } from '@/lib/safe-redirect'
@@ -82,14 +82,27 @@ function LoginContent() {
   // Handle OAuth callback errors
   useEffect(() => {
     const errorDescription = searchParams.get('error_description')
+    const message = searchParams.get('message')
+    const authError = searchParams.get('error')
     if (errorDescription) {
       setError(decodeURIComponent(errorDescription))
+      return
+    }
+    if (message) {
+      setError(decodeURIComponent(message))
+      return
+    }
+    if (authError === 'oauth') {
+      setError('Discord authentication failed. Please try again.')
     }
   }, [searchParams])
 
   const handleDiscordLogin = async () => {
     setIsLoading(true)
     setError(null)
+    if (isStandalone) {
+      setShowIOSInfo(true)
+    }
 
     try {
       const supabase = createBrowserSupabase()
@@ -98,44 +111,22 @@ function LoginContent() {
       try {
         window.sessionStorage.setItem('post_auth_redirect', redirectTo)
       } catch {}
+      try {
+        window.localStorage.setItem('post_auth_redirect', redirectTo)
+      } catch {}
 
-      // For iOS standalone mode, we need to open in Safari
-      if (isStandalone) {
-        const { data, error: signInError } = await supabase.auth.signInWithOAuth({
-          provider: 'discord',
-          options: {
-            redirectTo: `${window.location.origin}/auth/callback`,
-            scopes: 'identify email guilds guilds.members.read',
-            skipBrowserRedirect: true, // Get the URL instead of auto-redirecting
-          },
-        })
+      // Use Supabase's standard redirect handling for all clients.
+      // This avoids edge cases with skipBrowserRedirect/state handling on mobile browsers.
+      const { error: signInError } = await supabase.auth.signInWithOAuth({
+        provider: 'discord',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: 'identify email guilds guilds.members.read',
+        },
+      })
 
-        if (signInError) {
-          throw signInError
-        }
-
-        if (data?.url) {
-          // Open in Safari explicitly (opens in default browser, not standalone app)
-          window.location.href = data.url
-
-          // Show info message to user
-          setShowIOSInfo(true)
-        }
-      } else {
-        // Normal flow for browser
-        const { data, error: signInError } = await supabase.auth.signInWithOAuth({
-          provider: 'discord',
-          options: {
-            redirectTo: `${window.location.origin}/auth/callback`,
-            scopes: 'identify email guilds guilds.members.read',
-          },
-        })
-
-        if (signInError) {
-          throw signInError
-        }
-
-        // User will be redirected to Discord
+      if (signInError) {
+        throw signInError
       }
     } catch (err) {
       console.error('Discord login error:', err)
@@ -195,8 +186,8 @@ function LoginContent() {
                   <div>
                     <p className="text-sm text-blue-400 font-medium">Opening in Safari</p>
                     <p className="text-sm text-blue-400/70 mt-1">
-                      After authorizing Discord, you&apos;ll see a notification to return to TradeITM.
-                      Tap it, or manually switch back to the app.
+                      Discord authorization may open outside the app. If that happens,
+                      complete login and then return to TradeITM.
                     </p>
                   </div>
                 </div>
@@ -222,7 +213,7 @@ function LoginContent() {
                 <div className="flex items-start gap-2">
                   <Smartphone className="w-4 h-4 text-blue-400/60 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-blue-400/60">
-                    Login will open in Safari. Return here after authorizing.
+                    Discord login may open outside this app shell.
                   </p>
                 </div>
               </div>
