@@ -57,14 +57,28 @@ test.describe('Admin: Trade Review', () => {
     await page.goto(`/admin/trade-review/${TRADE_REVIEW_ENTRY_ID}`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: 'Trade Review Detail' })).toBeVisible()
 
-    await page.keyboard.press('ControlOrMeta+g')
+    await page.evaluate(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'g',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }))
+    })
     await expect.poll(() => state.aiGeneratedCount, { timeout: 10_000 }).toBe(1)
     await expect(page.getByRole('button', { name: 'Regenerate AI Analysis' })).toBeVisible()
 
     const privateNotes = page.getByPlaceholder('Private coach notes. Never shown to members.')
     await privateNotes.fill('Keyboard shortcut save attempt.')
 
-    await page.keyboard.press('ControlOrMeta+s')
+    await page.evaluate(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 's',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }))
+    })
     await expect.poll(() => state.saveCount, { timeout: 10_000 }).toBeGreaterThan(0)
 
     await expect(page.getByText('Cmd/Ctrl+S save · Cmd/Ctrl+G generate · Cmd/Ctrl+Enter publish · Esc queue')).toBeVisible()

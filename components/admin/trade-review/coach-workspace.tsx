@@ -447,7 +447,6 @@ export function CoachWorkspace({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return
       const metaOrCtrl = event.metaKey || event.ctrlKey
       const key = event.key.toLowerCase()
 
@@ -495,9 +494,9 @@ export function CoachWorkspace({
       }
     }
 
-    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => {
-      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keydown', onKeyDown, { capture: true })
     }
   }, [
     autoSaving,
