@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, Pencil, Share2, Star, Trash2, X } from 'lucide-react'
+import Image from 'next/image'
 import type { AITradeAnalysis, JournalEntry } from '@/lib/types/journal'
 import { Button } from '@/components/ui/button'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
@@ -51,6 +52,7 @@ export function EntryDetailSheet({
   const [localEntry, setLocalEntry] = useState<JournalEntry | null>(entry)
   const [shareOpen, setShareOpen] = useState(false)
   const [alreadyShared, setAlreadyShared] = useState(false)
+  const [screenshotZoomOpen, setScreenshotZoomOpen] = useState(false)
 
   const handleCoachReviewStatusChange = (nextStatus: JournalEntry['coach_review_status']) => {
     setLocalEntry((prev) => {
@@ -67,6 +69,7 @@ export function EntryDetailSheet({
 
   useEffect(() => {
     setLocalEntry(entry)
+    setScreenshotZoomOpen(false)
   }, [entry])
 
   useEffect(() => {
@@ -232,6 +235,25 @@ export function EntryDetailSheet({
               </div>
             </div>
           ) : null}
+
+          {displayEntry.screenshot_url ? (
+            <div className="space-y-2 rounded-lg border border-white/10 bg-white/5 p-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Trade Screenshot</p>
+              <button
+                type="button"
+                onClick={() => setScreenshotZoomOpen(true)}
+                className="relative block aspect-video w-full overflow-hidden rounded-md border border-white/10 bg-black/20"
+              >
+                <Image
+                  src={displayEntry.screenshot_url}
+                  alt={`${displayEntry.symbol} trade screenshot`}
+                  fill
+                  className="object-contain"
+                  unoptimized
+                />
+              </button>
+            </div>
+          ) : null}
           <CoachFeedbackSection entryId={displayEntry.id} />
           {displayEntry.ai_analysis ? <AIGradeDisplay analysis={displayEntry.ai_analysis} /> : null}
         </div>
@@ -295,6 +317,34 @@ export function EntryDetailSheet({
           </Button>
         </div>
       </div>
+
+      {screenshotZoomOpen && displayEntry.screenshot_url ? (
+        <div
+          className="absolute inset-0 z-20 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setScreenshotZoomOpen(false)}
+        >
+          <button
+            type="button"
+            className="absolute right-4 top-4 z-20 rounded-md border border-white/20 bg-black/70 p-2 text-white hover:bg-black"
+            aria-label="Close screenshot zoom"
+            onClick={() => setScreenshotZoomOpen(false)}
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div
+            className="relative z-10 h-[80vh] w-[92vw] max-w-5xl overflow-hidden rounded-xl border border-white/15 bg-black"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Image
+              src={displayEntry.screenshot_url}
+              alt={`${displayEntry.symbol} trade screenshot full size`}
+              fill
+              className="object-contain"
+              unoptimized
+            />
+          </div>
+        </div>
+      ) : null}
 
       {shareOpen && entry && (
         <ShareTradeSheet
