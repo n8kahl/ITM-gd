@@ -77,12 +77,18 @@ export function classifyRegimeFromSignals(input: {
   breakoutStrength: number;
   zoneContainment: number;
   trendStrength?: number;
+  thresholds?: {
+    breakout?: number;
+    compression?: number;
+  };
 }): Regime {
   const trendStrength = Math.max(0, Math.min(1, input.trendStrength ?? 0));
   const momentumTape = input.volumeTrend === 'rising' || trendStrength >= 0.45;
+  const breakoutThreshold = Math.max(0, Math.min(1, input.thresholds?.breakout ?? 0.62));
+  const compressionThreshold = Math.max(0, Math.min(1, input.thresholds?.compression ?? 0.7));
 
   if (
-    input.breakoutStrength >= 0.62
+    input.breakoutStrength >= breakoutThreshold
     && momentumTape
     && input.volumeTrend !== 'falling'
   ) {
@@ -90,7 +96,7 @@ export function classifyRegimeFromSignals(input: {
   }
 
   if (
-    input.rangeCompression >= 0.7
+    input.rangeCompression >= compressionThreshold
     && input.volumeTrend !== 'rising'
     && trendStrength < 0.4
   ) {

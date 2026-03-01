@@ -40,6 +40,45 @@ function toFiniteNumber(value: unknown): number | null {
   return null
 }
 
+function parseEpochSeconds(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) return null
+  return Math.floor(parsed / 1000)
+}
+
+function resolveSnapshotCapturedAt(snapshot: ReplayAnalyticalSnapshot): string | null {
+  if (typeof snapshot.capturedAt === 'string' && snapshot.capturedAt.trim().length > 0) {
+    return snapshot.capturedAt
+  }
+  const legacyCapturedAt = (snapshot as ReplayAnalyticalSnapshot & { captured_at?: unknown }).captured_at
+  if (typeof legacyCapturedAt === 'string' && legacyCapturedAt.trim().length > 0) {
+    return legacyCapturedAt
+  }
+  return null
+}
+
+type ReplaySnapshotWithTime = {
+  snapshot: ReplayAnalyticalSnapshot
+  capturedAtSec: number
+  order: number
+}
+
+function normalizeReplaySnapshots(snapshots: ReplayAnalyticalSnapshot[] | undefined): ReplaySnapshotWithTime[] {
+  if (!Array.isArray(snapshots) || snapshots.length === 0) return []
+  return snapshots
+    .map((snapshot, order) => {
+      const capturedAtSec = parseEpochSeconds(resolveSnapshotCapturedAt(snapshot))
+      if (capturedAtSec == null) return null
+      return { snapshot, capturedAtSec, order }
+    })
+    .filter((row): row is ReplaySnapshotWithTime => row != null)
+    .sort((left, right) => {
+      if (left.capturedAtSec !== right.capturedAtSec) return left.capturedAtSec - right.capturedAtSec
+      return left.order - right.order
+    })
+}
+
 function sanitizeBars(bars: ChartBar[]): ChartBar[] {
   return bars
     .map((bar) => ({
@@ -120,7 +159,10 @@ export function getSPXReplayIntervalMs(speed: SPXReplaySpeed): number {
 
 export function createSPXReplayEngine(
   bars: ChartBar[],
-  options?: { windowMinutes?: SPXReplayWindowMinutes },
+  options?: {
+    windowMinutes?: SPXReplayWindowMinutes
+    snapshots?: ReplayAnalyticalSnapshot[]
+  },
 ): SPXReplayEngine {
   const normalizedBars = sanitizeBars(bars)
   const windowMinutes = options?.windowMinutes ?? 60
@@ -128,6 +170,28 @@ export function createSPXReplayEngine(
   const firstCursorIndex = Math.max(windowBars - 1, 0)
   const lastCursorIndex = Math.max(normalizedBars.length - 1, 0)
   const checksum = checksumSPXReplayJournal(normalizedBars)
+  const replaySnapshots = normalizeReplaySnapshots(options?.snapshots)
+
+  const resolveSnapshotForCursorTime = (cursorBarTimeSec: number): ReplayAnalyticalSnapshot | null => {
+    if (replaySnapshots.length === 0) return null
+    let left = 0
+    let right = replaySnapshots.length - 1
+    let matchIndex = -1
+
+    while (left <= right) {
+      const midpoint = Math.floor((left + right) / 2)
+      const candidate = replaySnapshots[midpoint]
+      if (!candidate) break
+      if (candidate.capturedAtSec <= cursorBarTimeSec) {
+        matchIndex = midpoint
+        left = midpoint + 1
+      } else {
+        right = midpoint - 1
+      }
+    }
+
+    return matchIndex >= 0 ? replaySnapshots[matchIndex]?.snapshot ?? null : null
+  }
 
   const getFrame = (cursorIndex: number): SPXReplayFrame => {
     if (normalizedBars.length === 0) {
@@ -144,15 +208,16 @@ export function createSPXReplayEngine(
     const clampedCursor = Math.min(Math.max(cursorIndex, firstCursorIndex), lastCursorIndex)
     const startIndex = Math.max(0, clampedCursor - windowBars + 1)
     const visibleBars = normalizedBars.slice(startIndex, clampedCursor + 1)
+    const currentBar = normalizedBars[clampedCursor] ?? null
     const progress = normalizedBars.length <= 1
       ? 1
       : Number((clampedCursor / (normalizedBars.length - 1)).toFixed(4))
     return {
       cursorIndex: clampedCursor,
       progress,
-      currentBar: normalizedBars[clampedCursor] ?? null,
+      currentBar,
       visibleBars,
-      snapshot: null,
+      snapshot: currentBar ? resolveSnapshotForCursorTime(currentBar.time) : null,
       visibleDiscordMessages: null,
       activeDiscordTrade: null,
     }

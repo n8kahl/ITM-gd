@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Loader2, Settings2, Sparkles, X } from 'lucide-react'
 import { useSPXOptimizer } from '@/hooks/use-spx-optimizer'
+import { useSPXSymbolProfiles } from '@/hooks/use-spx-symbol-profiles'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import { cn } from '@/lib/utils'
 import { BrokerTab } from './broker-tab'
@@ -96,7 +97,7 @@ function formatBucketLabel(value: string): string {
 }
 
 export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) {
-  const [activeTab, setActiveTab] = useState<'optimizer' | 'broker' | 'health'>('optimizer')
+  const [activeTab, setActiveTab] = useState<'optimizer' | 'profiles' | 'broker' | 'health'>('optimizer')
   const [activeRevertId, setActiveRevertId] = useState<number | null>(null)
   const {
     scorecard,
@@ -123,10 +124,26 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
     refreshHistory,
     refreshBacktest,
   } = useSPXOptimizer()
+  const {
+    profiles,
+    selectedSymbol,
+    setSelectedSymbol,
+    selectedProfile,
+    isLoadingList: isProfilesLoading,
+    isLoadingDetail: isProfileDetailLoading,
+    listError: profilesError,
+    detailError: profileDetailError,
+    refreshList: refreshProfiles,
+    refreshDetail: refreshProfileDetail,
+  } = useSPXSymbolProfiles()
 
   const loadError = useMemo(
     () => summarizeError(error) || summarizeError(scheduleError) || summarizeError(historyError) || summarizeError(backtestError),
     [error, scheduleError, historyError, backtestError],
+  )
+  const profileLoadError = useMemo(
+    () => summarizeError(profilesError) || summarizeError(profileDetailError),
+    [profileDetailError, profilesError],
   )
 
   const strategyRows = useMemo(() => {
@@ -212,8 +229,8 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
   }, [runScan])
 
   const handleRefresh = useCallback(async () => {
-    await Promise.all([refresh(), refreshSchedule(), refreshHistory(), refreshBacktest()])
-  }, [refresh, refreshBacktest, refreshHistory, refreshSchedule])
+    await Promise.all([refresh(), refreshSchedule(), refreshHistory(), refreshBacktest(), refreshProfiles(), refreshProfileDetail()])
+  }, [refresh, refreshBacktest, refreshHistory, refreshProfileDetail, refreshProfiles, refreshSchedule])
 
   const handleRevert = useCallback(async (historyId: number) => {
     const approved = window.confirm(`Revert optimizer profile using audit entry #${historyId}?`)
@@ -285,6 +302,19 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
             )}
           >
             Optimizer
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('profiles')}
+            data-testid="spx-settings-tab-profiles"
+            className={cn(
+              'rounded-md px-3 py-1.5 text-[10px] uppercase tracking-[0.08em] transition-colors',
+              activeTab === 'profiles'
+                ? 'border border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+                : 'border border-white/10 bg-white/[0.03] text-white/55 hover:text-white/80',
+            )}
+          >
+            Profiles
           </button>
           <button
             type="button"
@@ -756,6 +786,150 @@ export function SPXSettingsSheet({ open, onOpenChange }: SPXSettingsSheetProps) 
           </button>
         </div>
         </>)}
+
+        {activeTab === 'profiles' && (
+          <div className="grid gap-3 p-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <aside className="max-h-[calc(100vh-260px)] overflow-y-auto pr-1">
+              <section className="rounded-xl border border-white/12 bg-black/30 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-[0.1em] text-white/58">Symbol Profiles</p>
+                  <p className="text-[10px] text-white/45">{isProfilesLoading ? 'Loading…' : `${profiles.length} rows`}</p>
+                </div>
+                {profiles.length === 0 ? (
+                  <p className="text-[11px] text-white/55">No symbol profiles found.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {profiles.map((profile) => {
+                      const active = selectedSymbol === profile.symbol
+                      return (
+                        <button
+                          key={profile.symbol}
+                          type="button"
+                          onClick={() => setSelectedSymbol(profile.symbol)}
+                          className={cn(
+                            'w-full rounded border px-2 py-1.5 text-left text-[10px] transition-colors',
+                            active
+                              ? 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100'
+                              : 'border-white/10 bg-black/25 text-white/70 hover:text-white',
+                          )}
+                        >
+                          <p className="font-mono text-[11px]">{profile.symbol}</p>
+                          <p className="truncate text-[10px] text-white/60">{profile.displayName}</p>
+                          <p className="mt-0.5 text-[9px] text-white/50">
+                            {profile.isActive ? 'active' : 'inactive'} · {profile.massiveTicker}
+                          </p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </section>
+            </aside>
+
+            <main className="max-h-[calc(100vh-260px)] overflow-y-auto pr-1">
+              {profileLoadError && (
+                <p className="mb-2 rounded border border-rose-300/35 bg-rose-500/10 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-rose-100">
+                  {profileLoadError}
+                </p>
+              )}
+
+              {(isProfileDetailLoading && !selectedProfile) ? (
+                <section className="rounded-xl border border-white/12 bg-black/30 p-3">
+                  <p className="text-[11px] text-white/62">Loading profile detail…</p>
+                </section>
+              ) : selectedProfile ? (
+                <section className="rounded-xl border border-white/12 bg-black/30 p-3 text-[10px] text-white/78">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-mono text-white/92">{selectedProfile.symbol}</p>
+                      <p className="text-[10px] text-white/58">{selectedProfile.displayName}</p>
+                    </div>
+                    <span className={cn(
+                      'rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em]',
+                      selectedProfile.isActive
+                        ? 'border-emerald-300/45 bg-emerald-500/15 text-emerald-100'
+                        : 'border-amber-300/45 bg-amber-500/15 text-amber-100',
+                    )}
+                    >
+                      {selectedProfile.isActive ? 'active' : 'inactive'}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-2 xl:grid-cols-2">
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Level</p>
+                      <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5">
+                        <p>Round interval</p>
+                        <p className="font-mono">{formatPoints(selectedProfile.level.roundNumberInterval, 2)}</p>
+                        <p>Opening range (min)</p>
+                        <p className="font-mono">{selectedProfile.level.openingRangeMinutes}</p>
+                        <p>Cluster radius</p>
+                        <p className="font-mono">{formatPoints(selectedProfile.level.clusterRadiusPoints, 2)}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">GEX</p>
+                      <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5">
+                        <p>Scale factor</p>
+                        <p className="font-mono">{formatPoints(selectedProfile.gex.scalingFactor, 4)}</p>
+                        <p>Cross symbol</p>
+                        <p className="font-mono">{selectedProfile.gex.crossSymbol}</p>
+                        <p>Strike window</p>
+                        <p className="font-mono">{formatPoints(selectedProfile.gex.strikeWindowPoints, 2)}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Flow</p>
+                      <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5">
+                        <p>Min premium</p>
+                        <p className="font-mono">{formatPoints(selectedProfile.flow.minPremium, 0)}</p>
+                        <p>Min volume</p>
+                        <p className="font-mono">{selectedProfile.flow.minVolume}</p>
+                        <p>Directional min</p>
+                        <p className="font-mono">{formatPoints(selectedProfile.flow.directionalMinPremium, 0)}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-white/10 bg-black/25 px-2 py-1.5">
+                      <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">MTF + Regime</p>
+                      <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5">
+                        <p>EMA fast / slow</p>
+                        <p className="font-mono">{selectedProfile.multiTF.emaFast} / {selectedProfile.multiTF.emaSlow}</p>
+                        <p>Weights (1h/15m/5m/1m)</p>
+                        <p className="font-mono">
+                          {formatPoints(selectedProfile.multiTF.weight1h * 100, 1)} / {formatPoints(selectedProfile.multiTF.weight15m * 100, 1)} / {formatPoints(selectedProfile.multiTF.weight5m * 100, 1)} / {formatPoints(selectedProfile.multiTF.weight1m * 100, 1)}
+                        </p>
+                        <p>Breakout / Compression</p>
+                        <p className="font-mono">
+                          {formatPoints(selectedProfile.regime.breakoutThreshold, 3)} / {formatPoints(selectedProfile.regime.compressionThreshold, 3)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 rounded border border-white/10 bg-black/25 px-2 py-1.5 text-[10px]">
+                    <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5">
+                      <p>Massive ticker</p>
+                      <p className="font-mono">{selectedProfile.tickers.massiveTicker}</p>
+                      <p>Massive options ticker</p>
+                      <p className="font-mono">{selectedProfile.tickers.massiveOptionsTicker || '--'}</p>
+                      <p>Created</p>
+                      <p className="font-mono">{formatEtIso(selectedProfile.createdAt)} ET</p>
+                      <p>Updated</p>
+                      <p className="font-mono">{formatEtIso(selectedProfile.updatedAt)} ET</p>
+                    </div>
+                  </div>
+                </section>
+              ) : (
+                <section className="rounded-xl border border-white/12 bg-black/30 p-3">
+                  <p className="text-[11px] text-white/55">Select a symbol profile to inspect details.</p>
+                </section>
+              )}
+            </main>
+          </div>
+        )}
 
         {activeTab === 'broker' && <BrokerTab />}
 

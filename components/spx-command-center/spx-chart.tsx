@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { mergeRealtimeMicrobarIntoBars, mergeRealtimePriceIntoBars } from '@/components/ai-coach/chart-realtime'
-import { TradingChart, type LevelAnnotation, type TradingChartCrosshairSnapshot } from '@/components/ai-coach/trading-chart'
+import {
+  TradingChart,
+  type ChartEventMarker,
+  type LevelAnnotation,
+  type TradingChartCrosshairSnapshot,
+} from '@/components/ai-coach/trading-chart'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
@@ -18,6 +23,15 @@ import {
 import { buildSPXScenarioLanes } from '@/lib/spx/scenario-lanes'
 import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry'
 import type { SPXLevelVisibilityBudget } from '@/lib/spx/overlay-priority'
+import type { ReplayAnalyticalSnapshot } from '@/lib/trade-day-replay/types'
+import {
+  publishReplayCursorTime,
+  publishReplayTranscriptJump,
+  subscribeReplaySessionSync,
+  type ReplaySessionSyncMessage,
+  type ReplaySessionSyncPayload,
+  type ReplaySessionSyncTrade,
+} from '@/lib/spx/replay-session-sync'
 import type { SPXLevel } from '@/lib/types/spx-command-center'
 import { cn } from '@/lib/utils'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
@@ -75,6 +89,69 @@ function chartLevelLabel(level: SPXLevel, compact = false): string {
   return base
 }
 
+type ReplayMarkerKind = 'entry' | 'exit' | 'trim' | 'stop_adjust' | 'trail' | 'breakeven' | 'thesis'
+
+function toEpochSeconds(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) return null
+  return Math.floor(parsed / 1000)
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function normalizeLifecycleMarkerKind(value: string | null | undefined): ReplayMarkerKind | null {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, '_')
+  if (normalized.includes('trim')) return 'trim'
+  if (
+    normalized === 'stop'
+    || normalized === 'stops'
+    || normalized.includes('stop_adjust')
+  ) {
+    return 'stop_adjust'
+  }
+  if (normalized.includes('trail')) return 'trail'
+  if (normalized.includes('breakeven') || normalized === 'b/e') return 'breakeven'
+  if (normalized.includes('exit') || normalized.includes('fully_out') || normalized.includes('fully_sold')) return 'exit'
+  return null
+}
+
+function lifecycleMarkerLabel(kind: ReplayMarkerKind, tradeIndex: number, value: number | null): string {
+  if (kind === 'trim') {
+    const pct = value != null ? `${Math.round(value)}%` : '--'
+    return `Trim #${tradeIndex} ${pct}`
+  }
+  if (kind === 'stop_adjust') return `Stop Adj #${tradeIndex}`
+  if (kind === 'trail') return `Trail #${tradeIndex}`
+  if (kind === 'breakeven') return `B/E #${tradeIndex}`
+  if (kind === 'exit') return `Exit #${tradeIndex}`
+  return `Thesis #${tradeIndex}`
+}
+
+function isReplayThesisMessage(message: ReplaySessionSyncMessage): boolean {
+  const signal = String(message.signalType || '').trim().toLowerCase()
+  if (signal.includes('thesis')) return true
+  const content = String(message.content || '').trim()
+  if (content.length < 20) return false
+  return /\b(thesis|plan|reason|because|looking for|entry condition|if .* then)\b/i.test(content)
+}
+
+function markerImpactForKind(kind: ReplayMarkerKind): ChartEventMarker['impact'] {
+  if (kind === 'entry') return 'low'
+  if (kind === 'trim') return 'medium'
+  if (kind === 'stop_adjust' || kind === 'trail' || kind === 'breakeven') return 'medium'
+  if (kind === 'exit') return 'high'
+  return 'info'
+}
+
 interface SPXChartProps {
   showAllRelevantLevels: boolean
   renderLevelAnnotations?: boolean
@@ -87,6 +164,7 @@ interface SPXChartProps {
   replayPlaying?: boolean
   replayWindowMinutes?: SPXReplayWindowMinutes
   replaySpeed?: SPXReplaySpeed
+  replaySnapshots?: ReplayAnalyticalSnapshot[]
   levelVisibilityBudget?: SPXLevelVisibilityBudget
   onDisplayedLevelsChange?: (displayed: number, total: number) => void
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void
@@ -105,6 +183,7 @@ export function SPXChart({
   replayPlaying = false,
   replayWindowMinutes = 60,
   replaySpeed = 1,
+  replaySnapshots,
   levelVisibilityBudget,
   onDisplayedLevelsChange,
   onChartReady,
@@ -128,6 +207,7 @@ export function SPXChart({
   const [crosshairSnapshot, setCrosshairSnapshot] = useState<TradingChartCrosshairSnapshot | null>(null)
   const [touchHoldActive, setTouchHoldActive] = useState(false)
   const [replayCursorIndex, setReplayCursorIndex] = useState<number | null>(null)
+  const [selectedReplaySession, setSelectedReplaySession] = useState<ReplaySessionSyncPayload | null>(null)
   const [stableFocusedLevelKeys, setStableFocusedLevelKeys] = useState<string[]>([])
   const pendingPriceUpdateRef = useRef<{
     price: number
@@ -154,6 +234,16 @@ export function SPXChart({
     // Always reset to 1m on page entry for command-center first-action consistency.
     setChartTimeframe('1m')
   }, [setChartTimeframe])
+
+  useEffect(() => {
+    return subscribeReplaySessionSync((payload) => {
+      if (!payload || !payload.sessionId) {
+        setSelectedReplaySession(null)
+        return
+      }
+      setSelectedReplaySession(payload)
+    })
+  }, [])
 
   useEffect(() => {
     let isCancelled = false
@@ -305,10 +395,41 @@ export function SPXChart({
     }
   }, [flushPendingPriceUpdate, flushPriceCommitStats])
 
+  const replaySessionBars = useMemo<ChartBar[]>(() => {
+    const sourceBars = selectedReplaySession?.bars
+    if (!Array.isArray(sourceBars) || sourceBars.length === 0) return []
+    return sourceBars
+      .filter((bar) => (
+        Number.isFinite(bar.time)
+        && Number.isFinite(bar.open)
+        && Number.isFinite(bar.high)
+        && Number.isFinite(bar.low)
+        && Number.isFinite(bar.close)
+      ))
+      .sort((left, right) => left.time - right.time)
+  }, [selectedReplaySession?.bars])
+
+  const replaySnapshotSource = useMemo<ReplayAnalyticalSnapshot[] | undefined>(() => {
+    if (Array.isArray(selectedReplaySession?.snapshots) && selectedReplaySession.snapshots.length > 0) {
+      return selectedReplaySession.snapshots as unknown as ReplayAnalyticalSnapshot[]
+    }
+    return replaySnapshots
+  }, [replaySnapshots, selectedReplaySession?.snapshots])
+
+  const replayBarsSource = useMemo<ChartBar[]>(() => {
+    if (replayEnabled && replaySessionBars.length > 0) {
+      return replaySessionBars
+    }
+    return bars
+  }, [bars, replayEnabled, replaySessionBars])
+
   const replayEngine = useMemo(() => {
     if (!replayEnabled) return null
-    return createSPXReplayEngine(bars, { windowMinutes: replayWindowMinutes })
-  }, [bars, replayEnabled, replayWindowMinutes])
+    return createSPXReplayEngine(replayBarsSource, {
+      windowMinutes: replayWindowMinutes,
+      snapshots: replaySnapshotSource,
+    })
+  }, [replayBarsSource, replayEnabled, replaySnapshotSource, replayWindowMinutes])
 
   useEffect(() => {
     if (!replayEnabled || !replayEngine) {
@@ -344,6 +465,21 @@ export function SPXChart({
   }, [replayCursorIndex, replayEnabled, replayEngine])
 
   useEffect(() => {
+    const sessionId = selectedReplaySession?.sessionId
+    if (!sessionId || !replayEnabled) {
+      publishReplayCursorTime(null)
+      return
+    }
+
+    const cursorTimeSec = replayFrame?.currentBar?.time
+    publishReplayCursorTime({
+      sessionId,
+      cursorTimeIso: cursorTimeSec != null ? new Date(cursorTimeSec * 1000).toISOString() : null,
+      cursorTimeSec: cursorTimeSec ?? null,
+    })
+  }, [replayEnabled, replayFrame?.currentBar?.time, selectedReplaySession?.sessionId])
+
+  useEffect(() => {
     if (!replayEnabled || !replayFrame) return
     const bucket = Math.floor(replayFrame.progress * 10)
     if (bucket === lastReplayProgressBucketRef.current) return
@@ -357,7 +493,137 @@ export function SPXChart({
     })
   }, [replayEnabled, replayFrame, replaySpeed, replayWindowMinutes])
 
-  const renderedBars = replayFrame?.visibleBars || bars
+  const renderedBars = replayEnabled
+    ? (replayFrame?.visibleBars || replayBarsSource)
+    : bars
+
+  const replayTimelineMarkers = useMemo<ChartEventMarker[]>(() => {
+    if (!replayEnabled) return []
+    const sessionId = selectedReplaySession?.sessionId
+    if (!sessionId) return []
+
+    const messages = Array.isArray(selectedReplaySession.messages)
+      ? selectedReplaySession.messages
+      : []
+    const trades = Array.isArray(selectedReplaySession.trades)
+      ? selectedReplaySession.trades
+      : []
+
+    const messageTimestampByRef = new Map<string, string>()
+    for (const message of messages) {
+      if (!message.sentAt) continue
+      if (message.id) messageTimestampByRef.set(message.id, message.sentAt)
+      if (message.discordMessageId) messageTimestampByRef.set(message.discordMessageId, message.sentAt)
+    }
+
+    const dedupe = new Set<string>()
+    const markers: ChartEventMarker[] = []
+
+    const pushMarker = (marker: {
+      id: string
+      kind: ReplayMarkerKind
+      label: string
+      timeIso: string | null
+      source: string
+    }) => {
+      if (!marker.timeIso) return
+      const timeSec = toEpochSeconds(marker.timeIso)
+      if (timeSec == null) return
+      const dedupeKey = `${marker.kind}|${marker.timeIso}|${marker.label}`
+      if (dedupe.has(dedupeKey)) return
+      dedupe.add(dedupeKey)
+      markers.push({
+        id: marker.id,
+        kind: marker.kind,
+        sessionId,
+        label: marker.label,
+        date: marker.timeIso,
+        markerTimeSec: timeSec,
+        impact: markerImpactForKind(marker.kind),
+        source: marker.source,
+      })
+    }
+
+    for (const trade of trades) {
+      const tradeIndex = Number.isFinite(trade.tradeIndex) ? trade.tradeIndex : 0
+      const tradeToken = trade.id || `trade-${tradeIndex}`
+      pushMarker({
+        id: `entry-${tradeToken}`,
+        kind: 'entry',
+        label: `Entry #${tradeIndex}`,
+        timeIso: trade.entryTimestamp,
+        source: 'Replay entry',
+      })
+      pushMarker({
+        id: `exit-${tradeToken}`,
+        kind: 'exit',
+        label: `Exit #${tradeIndex}`,
+        timeIso: trade.exitTimestamp,
+        source: 'Replay exit',
+      })
+
+      const lifecycleEvents = Array.isArray(trade.lifecycleEvents) ? trade.lifecycleEvents : []
+      for (const [index, event] of lifecycleEvents.entries()) {
+        const kind = normalizeLifecycleMarkerKind(event.type)
+        if (!kind) continue
+        const timeIso = event.timestamp || (event.messageRef ? (messageTimestampByRef.get(event.messageRef) || null) : null)
+        pushMarker({
+          id: `${kind}-${tradeToken}-${index}`,
+          kind,
+          label: lifecycleMarkerLabel(kind, tradeIndex, event.value),
+          timeIso,
+          source: `Replay ${kind}`,
+        })
+      }
+
+      if (trade.thesisText) {
+        const thesisTime = (
+          (trade.thesisMessageRef ? (messageTimestampByRef.get(trade.thesisMessageRef) || null) : null)
+          || trade.entryTimestamp
+          || trade.exitTimestamp
+        )
+        pushMarker({
+          id: `thesis-trade-${tradeToken}`,
+          kind: 'thesis',
+          label: `Thesis #${tradeIndex}`,
+          timeIso: thesisTime,
+          source: 'Trade thesis',
+        })
+      }
+    }
+
+    for (const [index, message] of messages.entries()) {
+      if (!isReplayThesisMessage(message)) continue
+      pushMarker({
+        id: `thesis-message-${message.id || index}`,
+        kind: 'thesis',
+        label: 'Caller Thesis',
+        timeIso: message.sentAt,
+        source: 'Transcript thesis',
+      })
+    }
+
+    return markers.sort((left, right) => {
+      const leftSec = toEpochSeconds(left.date) ?? 0
+      const rightSec = toEpochSeconds(right.date) ?? 0
+      if (leftSec !== rightSec) return leftSec - rightSec
+      return String(left.id || '').localeCompare(String(right.id || ''))
+    })
+  }, [replayEnabled, selectedReplaySession])
+
+  const handleReplayMarkerClick = useCallback((marker: ChartEventMarker) => {
+    const sessionId = selectedReplaySession?.sessionId
+    if (!sessionId) return
+    const jumpTimeIso = marker.date || null
+    if (!jumpTimeIso) return
+    publishReplayTranscriptJump({
+      sessionId,
+      jumpTimeIso,
+      source: marker.kind === 'entry' || marker.kind === 'exit'
+        ? 'chart_marker'
+        : 'lifecycle_marker',
+    })
+  }, [selectedReplaySession?.sessionId])
 
   const actionableSetupVisible = useMemo(() => {
     if (!selectedSetup) return false
@@ -386,9 +652,16 @@ export function SPXChart({
     })
   }, [focusMode, replayEnabled, scenarioLanes, selectedSetup?.id])
 
+  const resolvedLevels = useMemo(() => {
+    const replaySnapshotLevels = replayFrame?.snapshot?.levels
+    if (!replayEnabled) return levels
+    if (!Array.isArray(replaySnapshotLevels) || replaySnapshotLevels.length === 0) return levels
+    return replaySnapshotLevels
+  }, [levels, replayEnabled, replayFrame?.snapshot?.levels])
+
   const levelAnnotations = useMemo<LevelAnnotation[]>(() => {
     const compact = typeof window !== 'undefined' && window.innerWidth < 768
-    return levels.map((level) => ({
+    return resolvedLevels.map((level) => ({
       ...(isVWAPLevel(level)
         ? {
           label: 'VWAP',
@@ -415,7 +688,7 @@ export function SPXChart({
       holdRate: typeof level.metadata.holdRate === 'number' ? level.metadata.holdRate : null,
       displayContext: typeof level.metadata.displayContext === 'string' ? level.metadata.displayContext : undefined,
     }))
-  }, [levels])
+  }, [resolvedLevels])
 
   const targetFocusedLevelCount = selectedSetup ? 8 : 6
 
@@ -789,6 +1062,8 @@ export function SPXChart({
             timeframe={selectedTimeframe}
             bars={renderedBars}
             levels={renderLevelAnnotations ? [...marketDisplayedLevels, ...setupAnnotations, ...scenarioLaneAnnotations] : []}
+            eventMarkers={replayTimelineMarkers}
+            onEventMarkerClick={handleReplayMarkerClick}
             futureOffsetBars={futureOffsetBars}
             isLoading={isLoading}
             levelVisibilityBudget={expandedBudget}

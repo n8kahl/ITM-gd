@@ -34,6 +34,18 @@ function round(value: number, decimals = 2): number {
   return Math.round(value * factor) / factor
 }
 
+function isRenderableImageUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  return (
+    /^https?:\/\//i.test(trimmed)
+    || trimmed.startsWith('data:image/')
+    || trimmed.startsWith('blob:')
+    || trimmed.startsWith('/')
+  )
+}
+
 function deriveRecentStreak(pnls: number[]): 'winning' | 'losing' | 'mixed' {
   if (pnls.length === 0) return 'mixed'
   const sample = pnls.slice(0, 5)
@@ -204,8 +216,37 @@ export async function GET(
         : null,
     }
 
+    let resolvedMemberScreenshotUrl: string | null = isRenderableImageUrl(entry.screenshot_url)
+      ? entry.screenshot_url
+      : null
+
+    const screenshotCandidates = [
+      entry.screenshot_storage_path,
+      typeof entry.screenshot_url === 'string' ? entry.screenshot_url : null,
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+
+    if (!resolvedMemberScreenshotUrl && screenshotCandidates.length > 0) {
+      for (const candidatePath of screenshotCandidates) {
+        const { data: signedImage, error: signedImageError } = await supabase
+          .storage
+          .from('journal-screenshots')
+          .createSignedUrl(candidatePath, SIGNED_URL_TTL_SECONDS)
+
+        if (!signedImageError && signedImage?.signedUrl) {
+          resolvedMemberScreenshotUrl = signedImage.signedUrl
+          break
+        }
+      }
+    }
+
+    const entryWithResolvedScreenshot = {
+      ...entry,
+      screenshot_url: resolvedMemberScreenshotUrl,
+    }
+
     return successResponse({
-      entry,
+      entry: entryWithResolvedScreenshot,
       member: {
         display_name: memberProfile?.display_name
           || discordProfile?.discord_username

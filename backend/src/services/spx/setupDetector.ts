@@ -31,6 +31,7 @@ import { buildTriggerContext as buildTriggerContextFromPriceAction } from './pri
 import { getWorkingMicrobar } from './microbarAggregator';
 import { persistSetupInstancesForWinRate } from './outcomeTracker';
 import { classifyCurrentRegime } from './regimeClassifier';
+import type { SymbolProfile } from './symbolProfile';
 import { calculateAdaptiveStop, deriveNearestGEXDistanceBp } from './stopEngine';
 import {
   minZoneQualityThreshold,
@@ -2631,6 +2632,7 @@ export async function detectActiveSetups(options?: {
   forceRefresh?: boolean;
   asOfTimestamp?: string;
   persistForWinRate?: boolean;
+  profile?: SymbolProfile | null;
   levelData?: LevelData;
   gexLandscape?: UnifiedGEXLandscape;
   fibLevels?: FibLevel[];
@@ -2642,6 +2644,7 @@ export async function detectActiveSetups(options?: {
   previousSetups?: Setup[];
   environmentGateOverride?: SPXEnvironmentGateDecision | null;
 }): Promise<Setup[]> {
+  const profile = options?.profile ?? null;
   const levelData = options?.levelData;
   const gexLandscape = options?.gexLandscape;
   const fibLevelsProvided = options?.fibLevels;
@@ -2702,19 +2705,19 @@ export async function detectActiveSetups(options?: {
   const [levels, gex, fibLevels, regimeState, flowEvents, indicatorContext] = await Promise.all([
     levelData
       ? Promise.resolve(levelData)
-      : getMergedLevels({ forceRefresh }),
+      : getMergedLevels({ forceRefresh, profile }),
     gexLandscape
       ? Promise.resolve(gexLandscape)
-      : computeUnifiedGEXLandscape({ forceRefresh }),
+      : computeUnifiedGEXLandscape({ forceRefresh, profile }),
     fibLevelsProvided
       ? Promise.resolve(fibLevelsProvided)
       : getFibLevels({ forceRefresh }),
     regimeStateProvided
       ? Promise.resolve(regimeStateProvided)
-      : classifyCurrentRegime({ forceRefresh }),
+      : classifyCurrentRegime({ forceRefresh, profile }),
     flowEventsProvided
       ? Promise.resolve(flowEventsProvided)
-      : getFlowEvents({ forceRefresh }),
+      : getFlowEvents({ forceRefresh, profile }),
     indicatorContextProvided !== undefined
       ? Promise.resolve(indicatorContextProvided)
       : loadIndicatorContext({
@@ -2778,6 +2781,7 @@ export async function detectActiveSetups(options?: {
       || await getMultiTFConfluenceContext({
         forceRefresh,
         evaluationDate,
+        profile,
       })
     )
     : null;
@@ -2919,6 +2923,7 @@ export async function detectActiveSetups(options?: {
         context: multiTFConfluenceContext,
         direction,
         currentPrice,
+        profile,
       })
       : null;
 

@@ -2,6 +2,8 @@ import { getAggregates, type MassiveAggregate } from '../../config/massive';
 import { cacheGet, cacheSet } from '../../config/redis';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
+import type { SymbolProfile } from './symbolProfile';
+import { resolveSymbolProfile } from './symbolProfile';
 import { ema, round } from './utils';
 
 export type MultiTFTrend = 'up' | 'down' | 'flat';
@@ -39,6 +41,24 @@ export interface SPXMultiTFConfluenceScore {
 
 const MULTI_TF_CACHE_TTL_SECONDS = 45;
 const MULTI_TF_ONE_HOUR_LOOKBACK_DAYS = 7;
+const MULTI_TF_BASE_WEIGHTS = {
+  weight1h: 0.55,
+  weight15m: 0.2,
+  weight5m: 0.15,
+  weight1m: 0.1,
+} as const;
+const MULTI_TF_COMPONENT_CAPS = {
+  tf1hStructureAligned: 25,
+  tf15mSwingProximity: 20,
+  tf5mMomentumAlignment: 15,
+  tf1mMicrostructure: 16,
+} as const;
+
+interface MultiTFComputationConfig {
+  ticker: string;
+  emaFast: number;
+  emaSlow: number;
+}
 
 function clamp(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, value));
@@ -71,14 +91,17 @@ function frameTrend(input: {
 function buildFrameSnapshot(input: {
   timeframe: MultiTFFrameSnapshot['timeframe'];
   bars: MultiTFFrameSnapshot['bars'];
+  emaFast: number;
+  emaSlow: number;
 }): MultiTFFrameSnapshot {
   const closes = input.bars.map((bar) => bar.c);
-  const emaPeriod = 21;
-  const emaReliable = closes.length >= emaPeriod;
-  const ema21 = closes.length > 0 ? ema(closes, Math.min(emaPeriod, closes.length)) : 0;
-  const ema55 = closes.length > 0 ? ema(closes, Math.min(55, closes.length)) : 0;
+  const emaFast = Math.max(1, Math.round(input.emaFast));
+  const emaSlow = Math.max(1, Math.round(input.emaSlow));
+  const emaReliable = closes.length >= emaFast;
+  const ema21 = closes.length > 0 ? ema(closes, Math.min(emaFast, closes.length)) : 0;
+  const ema55 = closes.length > 0 ? ema(closes, Math.min(emaSlow, closes.length)) : 0;
   const priorCloses = closes.slice(0, -1);
-  const ema21Prior = priorCloses.length > 0 ? ema(priorCloses, Math.min(emaPeriod, priorCloses.length)) : ema21;
+  const ema21Prior = priorCloses.length > 0 ? ema(priorCloses, Math.min(emaFast, priorCloses.length)) : ema21;
   const slope21 = ema21 - ema21Prior;
   const latestClose = closes.length > 0 ? closes[closes.length - 1] : 0;
   const swingLookback = input.timeframe === '1h' ? 4 : input.timeframe === '15m' ? 8 : 12;
@@ -160,6 +183,14 @@ function cacheKeyForDate(dateIso: string): string {
   return `spx_command_center:multi_tf:v2:${dateStr}`;
 }
 
+function cacheKeyForSymbolDate(dateIso: string, symbol: string): string {
+  const dateStr = toEasternTime(new Date(dateIso)).dateStr;
+  const normalized = symbol.trim().toUpperCase();
+  return normalized === 'SPX'
+    ? cacheKeyForDate(dateIso)
+    : `spx_command_center:multi_tf:v2:${normalized}:${dateStr}`;
+}
+
 function dateDaysAgo(date: Date, days: number): string {
   const shifted = new Date(date.getTime() - (days * 24 * 60 * 60 * 1000));
   return toEasternTime(shifted).dateStr;
@@ -168,10 +199,21 @@ function dateDaysAgo(date: Date, days: number): string {
 export async function getMultiTFConfluenceContext(options?: {
   forceRefresh?: boolean;
   evaluationDate?: Date;
+  symbol?: string;
+  profile?: SymbolProfile | null;
 }): Promise<SPXMultiTFConfluenceContext> {
+  const profile = await resolveSymbolProfile({
+    symbol: options?.symbol,
+    profile: options?.profile ?? null,
+  });
+  const computationConfig: MultiTFComputationConfig = {
+    ticker: profile.tickers.massiveTicker,
+    emaFast: Math.max(1, Math.round(profile.multiTF.emaFast)),
+    emaSlow: Math.max(1, Math.round(profile.multiTF.emaSlow)),
+  };
   const evaluationDate = options?.evaluationDate || new Date();
   const asOf = evaluationDate.toISOString();
-  const key = cacheKeyForDate(asOf);
+  const key = cacheKeyForSymbolDate(asOf, profile.symbol);
 
   if (!options?.forceRefresh) {
     const cached = await cacheGet(key);
@@ -187,18 +229,38 @@ export async function getMultiTFConfluenceContext(options?: {
     const dateStr = toEasternTime(evaluationDate).dateStr;
     const oneHourFromDateStr = dateDaysAgo(evaluationDate, MULTI_TF_ONE_HOUR_LOOKBACK_DAYS);
     const [m1, m5, m15, h1] = await Promise.all([
-      getAggregates('I:SPX', 1, 'minute', dateStr, dateStr),
-      getAggregates('I:SPX', 5, 'minute', dateStr, dateStr),
-      getAggregates('I:SPX', 15, 'minute', dateStr, dateStr),
-      getAggregates('I:SPX', 60, 'minute', oneHourFromDateStr, dateStr),
+      getAggregates(computationConfig.ticker, 1, 'minute', dateStr, dateStr),
+      getAggregates(computationConfig.ticker, 5, 'minute', dateStr, dateStr),
+      getAggregates(computationConfig.ticker, 15, 'minute', dateStr, dateStr),
+      getAggregates(computationConfig.ticker, 60, 'minute', oneHourFromDateStr, dateStr),
     ]);
 
     const context = {
       asOf,
-      tf1m: buildFrameSnapshot({ timeframe: '1m', bars: toFrameBars(m1.results || []) }),
-      tf5m: buildFrameSnapshot({ timeframe: '5m', bars: toFrameBars(m5.results || []) }),
-      tf15m: buildFrameSnapshot({ timeframe: '15m', bars: toFrameBars(m15.results || []) }),
-      tf1h: buildFrameSnapshot({ timeframe: '1h', bars: toFrameBars(h1.results || []) }),
+      tf1m: buildFrameSnapshot({
+        timeframe: '1m',
+        bars: toFrameBars(m1.results || []),
+        emaFast: computationConfig.emaFast,
+        emaSlow: computationConfig.emaSlow,
+      }),
+      tf5m: buildFrameSnapshot({
+        timeframe: '5m',
+        bars: toFrameBars(m5.results || []),
+        emaFast: computationConfig.emaFast,
+        emaSlow: computationConfig.emaSlow,
+      }),
+      tf15m: buildFrameSnapshot({
+        timeframe: '15m',
+        bars: toFrameBars(m15.results || []),
+        emaFast: computationConfig.emaFast,
+        emaSlow: computationConfig.emaSlow,
+      }),
+      tf1h: buildFrameSnapshot({
+        timeframe: '1h',
+        bars: toFrameBars(h1.results || []),
+        emaFast: computationConfig.emaFast,
+        emaSlow: computationConfig.emaSlow,
+      }),
       source: 'computed',
     } satisfies SPXMultiTFConfluenceContext;
 
@@ -216,6 +278,7 @@ export function scoreMultiTFConfluence(input: {
   context: SPXMultiTFConfluenceContext | null | undefined;
   direction: 'bullish' | 'bearish';
   currentPrice: number;
+  profile?: SymbolProfile | null;
 }): SPXMultiTFConfluenceScore {
   const context = input.context;
   if (!context) {
@@ -255,8 +318,31 @@ export function scoreMultiTFConfluence(input: {
     : context.tf1m.latestClose <= context.tf1m.ema21 && context.tf1m.slope21 <= 0;
   const tf1mMicrostructure = microAligned ? 16 : 6;
 
-  const raw = tf1hStructureAligned + tf15mSwingProximity + tf5mMomentumAlignment + tf1mMicrostructure;
-  let composite = round(clamp((raw / 76) * 100), 2);
+  const weight1h = Math.max(0, input.profile?.multiTF.weight1h ?? MULTI_TF_BASE_WEIGHTS.weight1h);
+  const weight15m = Math.max(0, input.profile?.multiTF.weight15m ?? MULTI_TF_BASE_WEIGHTS.weight15m);
+  const weight5m = Math.max(0, input.profile?.multiTF.weight5m ?? MULTI_TF_BASE_WEIGHTS.weight5m);
+  const weight1m = Math.max(0, input.profile?.multiTF.weight1m ?? MULTI_TF_BASE_WEIGHTS.weight1m);
+
+  const weightScale1h = weight1h / MULTI_TF_BASE_WEIGHTS.weight1h;
+  const weightScale15m = weight15m / MULTI_TF_BASE_WEIGHTS.weight15m;
+  const weightScale5m = weight5m / MULTI_TF_BASE_WEIGHTS.weight5m;
+  const weightScale1m = weight1m / MULTI_TF_BASE_WEIGHTS.weight1m;
+
+  const weightedRaw = (
+    (tf1hStructureAligned * weightScale1h)
+    + (tf15mSwingProximity * weightScale15m)
+    + (tf5mMomentumAlignment * weightScale5m)
+    + (tf1mMicrostructure * weightScale1m)
+  );
+  const weightedCap = (
+    (MULTI_TF_COMPONENT_CAPS.tf1hStructureAligned * weightScale1h)
+    + (MULTI_TF_COMPONENT_CAPS.tf15mSwingProximity * weightScale15m)
+    + (MULTI_TF_COMPONENT_CAPS.tf5mMomentumAlignment * weightScale5m)
+    + (MULTI_TF_COMPONENT_CAPS.tf1mMicrostructure * weightScale1m)
+  );
+  const normalizationCap = weightedCap > 0 ? weightedCap : 76;
+
+  let composite = round(clamp((weightedRaw / normalizationCap) * 100), 2);
   if ([context.tf1m, context.tf5m, context.tf15m, context.tf1h].some((frame) => !frame.emaReliable)) {
     composite = round(composite * 0.6, 2);
   }

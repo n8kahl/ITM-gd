@@ -2,13 +2,15 @@ import { cacheGet, cacheSet } from '../../config/redis';
 import { getAggregates, getOptionsSnapshot, type OptionsSnapshot } from '../../config/massive';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
+import type { SymbolProfile } from './symbolProfile';
+import { resolveSymbolProfile } from './symbolProfile';
 import type { SPXFlowEvent } from './types';
 import { nowIso, round, stableId } from './utils';
 
 const FLOW_CACHE_KEY = 'spx_command_center:flow';
 const FLOW_CACHE_TTL_SECONDS = 20;
 const FLOW_FETCH_TIMEOUT_MS = 15000;
-let flowInFlight: Promise<SPXFlowEvent[]> | null = null;
+const flowInFlightBySymbol = new Map<string, Promise<SPXFlowEvent[]>>();
 const MIN_FLOW_VOLUME = 10;
 const MIN_FLOW_PREMIUM = 10000;
 const MAX_FLOW_EVENTS = 80;
@@ -19,6 +21,56 @@ const FLOW_INTERVAL_SWEEP_VOLUME = 28;
 const FLOW_CONTRACT_SCAN_LIMIT = 24;
 const FLOW_BARS_BATCH_SIZE = 6;
 const FLOW_EXPIRY_WINDOW_DAYS = 7;
+const SEEDED_FLOW_DIRECTIONAL_MIN_PREMIUM = 50_000;
+const LEGACY_FLOW_DIRECTIONAL_MIN_PREMIUM = FLOW_INTERVAL_MIN_PREMIUM;
+
+interface FlowEngineConfig {
+  minFlowVolume: number;
+  minFlowPremium: number;
+  directionalMinPremium: number;
+  maxFlowEvents: number;
+  intervalLookbackMinutes: number;
+  intervalMinVolume: number;
+  intervalSweepVolume: number;
+  contractScanLimit: number;
+  barsBatchSize: number;
+  expiryWindowDays: number;
+  primarySymbol: string;
+  crossSymbol: string;
+}
+
+function mapDirectionalMinPremium(rawValue: number, floor: number): number {
+  // Preserve legacy behavior for seeded SPX profile values while still allowing
+  // profile-driven adjustment when operators move this field.
+  const offset = rawValue - SEEDED_FLOW_DIRECTIONAL_MIN_PREMIUM;
+  const mapped = LEGACY_FLOW_DIRECTIONAL_MIN_PREMIUM + offset;
+  return Math.max(floor, Math.round(mapped));
+}
+
+function resolveFlowEngineConfig(profile: SymbolProfile): FlowEngineConfig {
+  const minFlowPremium = Math.max(MIN_FLOW_PREMIUM, Math.round(profile.flow.minPremium));
+  const directionalMinPremium = mapDirectionalMinPremium(profile.flow.directionalMinPremium, minFlowPremium);
+
+  return {
+    minFlowVolume: Math.max(MIN_FLOW_VOLUME, Math.round(profile.flow.minVolume)),
+    minFlowPremium,
+    directionalMinPremium,
+    maxFlowEvents: MAX_FLOW_EVENTS,
+    intervalLookbackMinutes: FLOW_INTERVAL_LOOKBACK_MINUTES,
+    intervalMinVolume: FLOW_INTERVAL_MIN_VOLUME,
+    intervalSweepVolume: FLOW_INTERVAL_SWEEP_VOLUME,
+    contractScanLimit: FLOW_CONTRACT_SCAN_LIMIT,
+    barsBatchSize: FLOW_BARS_BATCH_SIZE,
+    expiryWindowDays: FLOW_EXPIRY_WINDOW_DAYS,
+    primarySymbol: profile.symbol,
+    crossSymbol: profile.gex.crossSymbol,
+  };
+}
+
+function cacheKeyForSymbol(baseKey: string, symbol: string): string {
+  const normalized = symbol.trim().toUpperCase();
+  return normalized === 'SPX' ? baseKey : `${baseKey}:${normalized}`;
+}
 
 function toIsoFromTimestamp(rawTimestamp: number | undefined): string {
   if (!rawTimestamp || !Number.isFinite(rawTimestamp) || rawTimestamp <= 0) {
@@ -57,6 +109,7 @@ function toMidPrice(snapshot: OptionsSnapshot): number {
 function toFlowEvent(
   symbol: 'SPX' | 'SPY',
   snapshot: OptionsSnapshot,
+  config: FlowEngineConfig,
 ): SPXFlowEvent | null {
   const details = snapshot.details;
   const strike = details?.strike_price;
@@ -72,14 +125,14 @@ function toFlowEvent(
   }
 
   const volume = Math.max(0, snapshot.day?.volume || 0);
-  if (volume < MIN_FLOW_VOLUME) {
+  if (volume < config.minFlowVolume) {
     return null;
   }
 
   const openInterest = Math.max(0, snapshot.open_interest || 0);
   const mid = toMidPrice(snapshot);
   const premium = round(mid * volume * 100, 2);
-  if (premium < MIN_FLOW_PREMIUM) {
+  if (premium < config.minFlowPremium) {
     return null;
   }
 
@@ -125,15 +178,16 @@ function addDays(date: string, days: number): string {
   return base.toISOString().slice(0, 10);
 }
 
-function isExpiryInWindow(expiry: string, sessionDate: string): boolean {
+function isExpiryInWindow(expiry: string, sessionDate: string, config: FlowEngineConfig): boolean {
   if (expiry < sessionDate) return false;
-  return expiry <= addDays(sessionDate, FLOW_EXPIRY_WINDOW_DAYS);
+  return expiry <= addDays(sessionDate, config.expiryWindowDays);
 }
 
 function toFlowContractCandidates(input: {
   symbol: 'SPX' | 'SPY';
   sessionDate: string;
   snapshots: OptionsSnapshot[];
+  config: FlowEngineConfig;
 }): FlowContractCandidate[] {
   return input.snapshots
     .map((snapshot) => {
@@ -145,12 +199,12 @@ function toFlowContractCandidates(input: {
       if (!ticker || typeof strike !== 'number' || typeof expiry !== 'string' || (contractType !== 'call' && contractType !== 'put')) {
         return null;
       }
-      if (!isExpiryInWindow(expiry, input.sessionDate)) return null;
+      if (!isExpiryInWindow(expiry, input.sessionDate, input.config)) return null;
 
       const dayVolume = Math.max(0, snapshot.day?.volume || 0);
-      if (dayVolume < MIN_FLOW_VOLUME) return null;
+      if (dayVolume < input.config.minFlowVolume) return null;
       const premiumEstimate = round(toMidPrice(snapshot) * dayVolume * 100, 2);
-      if (premiumEstimate < MIN_FLOW_PREMIUM) return null;
+      if (premiumEstimate < input.config.minFlowPremium) return null;
 
       return {
         ticker,
@@ -172,6 +226,7 @@ function toFlowContractCandidates(input: {
 async function loadContractMinuteBars(input: {
   ticker: string;
   sessionDate: string;
+  config: FlowEngineConfig;
 }): Promise<Array<{ t: number; c: number; v: number }>> {
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`Flow interval bars timeout for ${input.ticker}`)), FLOW_FETCH_TIMEOUT_MS),
@@ -182,12 +237,18 @@ async function loadContractMinuteBars(input: {
       timeout,
     ]);
     const rawBars = (response.results || [])
-      .filter((bar) => Number.isFinite(bar.t) && Number.isFinite(bar.c) && Number.isFinite(bar.v) && bar.c > 0 && bar.v >= FLOW_INTERVAL_MIN_VOLUME)
+      .filter((bar) => (
+        Number.isFinite(bar.t)
+        && Number.isFinite(bar.c)
+        && Number.isFinite(bar.v)
+        && bar.c > 0
+        && bar.v >= input.config.intervalMinVolume
+      ))
       .map((bar) => ({ t: bar.t, c: bar.c, v: bar.v }));
     if (rawBars.length === 0) return [];
 
     const latestMs = rawBars[rawBars.length - 1].t;
-    const minMs = latestMs - (FLOW_INTERVAL_LOOKBACK_MINUTES * 60_000);
+    const minMs = latestMs - (input.config.intervalLookbackMinutes * 60_000);
     return rawBars.filter((bar) => bar.t >= minMs);
   } catch (error) {
     logger.warn('Flow interval contract bars unavailable', {
@@ -202,18 +263,22 @@ async function loadContractMinuteBars(input: {
 function flowEventsFromIntervalBars(input: {
   candidate: FlowContractCandidate;
   bars: Array<{ t: number; c: number; v: number }>;
+  config: FlowEngineConfig;
 }): SPXFlowEvent[] {
   if (input.bars.length === 0) return [];
 
   const premiums = input.bars.map((bar) => bar.c * bar.v * 100);
   const avgPremium = premiums.reduce((sum, value) => sum + value, 0) / premiums.length;
-  const threshold = Math.max(FLOW_INTERVAL_MIN_PREMIUM, avgPremium * 1.35);
+  const threshold = Math.max(input.config.directionalMinPremium, avgPremium * 1.35);
 
   return input.bars
     .map((bar) => {
       const premium = round(bar.c * bar.v * 100, 2);
       if (premium < threshold) return null;
-      const isSweep = bar.v >= FLOW_INTERVAL_SWEEP_VOLUME || premium >= Math.max(FLOW_INTERVAL_MIN_PREMIUM * 2, avgPremium * 2.1);
+      const isSweep = (
+        bar.v >= input.config.intervalSweepVolume
+        || premium >= Math.max(input.config.directionalMinPremium * 2, avgPremium * 2.1)
+      );
       return {
         id: stableId('spx_flow_interval', `${input.candidate.symbol}|${input.candidate.ticker}|${bar.t}|${bar.v}|${premium}`),
         type: isSweep ? 'sweep' : 'block',
@@ -233,38 +298,43 @@ async function fetchFlowFromIntervalizedSnapshots(input: {
   sessionDate: string;
   spxSnapshots: OptionsSnapshot[];
   spySnapshots: OptionsSnapshot[];
+  config: FlowEngineConfig;
 }): Promise<SPXFlowEvent[]> {
   const candidates = [
     ...toFlowContractCandidates({
       symbol: 'SPX',
       sessionDate: input.sessionDate,
       snapshots: input.spxSnapshots,
+      config: input.config,
     }),
     ...toFlowContractCandidates({
       symbol: 'SPY',
       sessionDate: input.sessionDate,
       snapshots: input.spySnapshots,
+      config: input.config,
     }),
   ]
     .sort((a, b) => b.premiumEstimate - a.premiumEstimate)
-    .slice(0, FLOW_CONTRACT_SCAN_LIMIT);
+    .slice(0, input.config.contractScanLimit);
 
   if (candidates.length === 0) return [];
 
   const events: SPXFlowEvent[] = [];
-  for (let index = 0; index < candidates.length; index += FLOW_BARS_BATCH_SIZE) {
-    const batch = candidates.slice(index, index + FLOW_BARS_BATCH_SIZE);
+  for (let index = 0; index < candidates.length; index += input.config.barsBatchSize) {
+    const batch = candidates.slice(index, index + input.config.barsBatchSize);
     const rows = await Promise.all(batch.map(async (candidate) => ({
       candidate,
       bars: await loadContractMinuteBars({
         ticker: candidate.ticker,
         sessionDate: input.sessionDate,
+        config: input.config,
       }),
     })));
     for (const row of rows) {
       events.push(...flowEventsFromIntervalBars({
         candidate: row.candidate,
         bars: row.bars,
+        config: input.config,
       }));
     }
   }
@@ -275,10 +345,13 @@ async function fetchFlowFromIntervalizedSnapshots(input: {
       if (b.premium !== a.premium) return b.premium - a.premium;
       return b.size - a.size;
     })
-    .slice(0, MAX_FLOW_EVENTS);
+    .slice(0, input.config.maxFlowEvents);
 }
 
-async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEvent[]> {
+async function fetchFlowFromSnapshots(input: {
+  forceRefresh: boolean;
+  config: FlowEngineConfig;
+}): Promise<SPXFlowEvent[]> {
   const fetchWithTimeout = async (symbol: string): Promise<OptionsSnapshot[]> => {
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`Flow snapshot timeout for ${symbol}`)), FLOW_FETCH_TIMEOUT_MS),
@@ -295,8 +368,8 @@ async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEve
   };
 
   const [spxSnapshots, spySnapshots] = await Promise.all([
-    fetchWithTimeout('SPX'),
-    fetchWithTimeout('SPY'),
+    fetchWithTimeout(input.config.primarySymbol),
+    fetchWithTimeout(input.config.crossSymbol),
   ]);
 
   const sessionDate = toEasternTime(new Date()).dateStr;
@@ -304,6 +377,7 @@ async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEve
     sessionDate,
     spxSnapshots,
     spySnapshots,
+    config: input.config,
   });
   if (intervalized.length > 0) {
     return intervalized;
@@ -311,12 +385,12 @@ async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEve
 
   const events: SPXFlowEvent[] = [];
   for (const snapshot of spxSnapshots) {
-    const event = toFlowEvent('SPX', snapshot);
+    const event = toFlowEvent('SPX', snapshot, input.config);
     if (event) events.push(event);
   }
 
   for (const snapshot of spySnapshots) {
-    const event = toFlowEvent('SPY', snapshot);
+    const event = toFlowEvent('SPY', snapshot, input.config);
     if (event) events.push(event);
   }
 
@@ -326,9 +400,9 @@ async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEve
       if (b.size !== a.size) return b.size - a.size;
       return b.timestamp.localeCompare(a.timestamp);
     })
-    .slice(0, MAX_FLOW_EVENTS);
+    .slice(0, input.config.maxFlowEvents);
 
-  if (sorted.length > 0 || forceRefresh) {
+  if (sorted.length > 0 || input.forceRefresh) {
     return sorted;
   }
 
@@ -337,15 +411,26 @@ async function fetchFlowFromSnapshots(forceRefresh: boolean): Promise<SPXFlowEve
 
 export async function getFlowEvents(options?: {
   forceRefresh?: boolean;
+  symbol?: string;
+  profile?: SymbolProfile | null;
 }): Promise<SPXFlowEvent[]> {
+  const profile = await resolveSymbolProfile({
+    symbol: options?.symbol,
+    profile: options?.profile ?? null,
+  });
+  const symbol = profile.symbol;
+  const cacheKey = cacheKeyForSymbol(FLOW_CACHE_KEY, symbol);
+  const config = resolveFlowEngineConfig(profile);
+
   const forceRefresh = options?.forceRefresh === true;
-  if (!forceRefresh && flowInFlight) {
-    return flowInFlight;
+  const inFlight = flowInFlightBySymbol.get(symbol);
+  if (!forceRefresh && inFlight) {
+    return inFlight;
   }
 
   const run = async (): Promise<SPXFlowEvent[]> => {
     if (!forceRefresh) {
-      const cached = await cacheGet<SPXFlowEvent[]>(FLOW_CACHE_KEY);
+      const cached = await cacheGet<SPXFlowEvent[]>(cacheKey);
       if (cached) {
         return cached;
       }
@@ -354,7 +439,10 @@ export async function getFlowEvents(options?: {
     let events: SPXFlowEvent[] = [];
 
     try {
-      events = await fetchFlowFromSnapshots(forceRefresh);
+      events = await fetchFlowFromSnapshots({
+        forceRefresh,
+        config,
+      });
     } catch {
       events = [];
     }
@@ -365,7 +453,7 @@ export async function getFlowEvents(options?: {
       events = [];
     }
 
-    await cacheSet(FLOW_CACHE_KEY, events, FLOW_CACHE_TTL_SECONDS);
+    await cacheSet(cacheKey, events, FLOW_CACHE_TTL_SECONDS);
     return events;
   };
 
@@ -373,10 +461,11 @@ export async function getFlowEvents(options?: {
     return run();
   }
 
-  flowInFlight = run();
+  const promise = run();
+  flowInFlightBySymbol.set(symbol, promise);
   try {
-    return await flowInFlight;
+    return await promise;
   } finally {
-    flowInFlight = null;
+    flowInFlightBySymbol.delete(symbol);
   }
 }

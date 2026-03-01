@@ -30,6 +30,11 @@
 | CC-S17 | Session 17 | Phase 4.5a Discord persistence foundation (session upsert + raw message persistence wired into live bot pipeline, fail-open) | `backend/src/services/discord/discordPersistence.ts`, `backend/src/services/discord/__tests__/discordPersistence.test.ts`, `backend/src/server.ts`, autonomous packet docs | PASS (eslint + tsc + jest) | pending |
 | CC-S18 | Session 18 | Phase 4.5b parsed trade lifecycle persistence (`discord_parsed_trades`) + `discord_messages.parsed_trade_id` linking with V1 single-stream channel assumption | `backend/src/services/discord/discordPersistence.ts`, `backend/src/services/discord/__tests__/discordPersistence.test.ts`, autonomous packet docs | PASS (eslint + tsc + jest) | pending |
 | CC-S19 | Session 19 | Phase 4.5c session rollup maintenance in `discord_trade_sessions` (`session_start/session_end/trade_count/net_pnl_pct`) with replay list regression coverage | `backend/src/services/discord/discordPersistence.ts`, `backend/src/services/discord/__tests__/discordPersistence.test.ts`, `backend/src/__tests__/integration/spx-replay-sessions-api.test.ts`, autonomous packet docs | PASS (eslint + tsc + jest) | pending |
+| CC-S20 | Session 20 | Macro Slice A (Phase 3 + 5.3 + 5.4): replay level fidelity + replay-snapshot confluence sync in admin browser detail flow | `lib/spx/replay-engine.ts`, `lib/spx/__tests__/replay-engine.test.ts`, `components/spx-command-center/spx-chart.tsx`, `components/spx-command-center/replay-confluence-panel.tsx`, `components/spx-command-center/replay-session-browser.tsx`, `components/spx-command-center/__tests__/replay-session-browser.test.tsx`, autonomous packet docs | PASS (eslint + tsc + vitest) | pending |
+| CC-S21 | Session 21 | Macro Slice B (Phase 6.1-6.3): transcript sidebar sync + lifecycle marker rendering/jump wiring | `components/spx-command-center/replay-transcript-sidebar.tsx`, `components/spx-command-center/replay-session-browser.tsx`, `components/spx-command-center/spx-chart.tsx`, `components/ai-coach/trading-chart.tsx`, `lib/spx/replay-session-sync.ts`, `components/spx-command-center/__tests__/replay-transcript-sidebar.test.tsx`, `components/spx-command-center/__tests__/replay-session-browser.test.tsx`, `vitest.config.ts`, autonomous packet docs | PASS (eslint + tsc + vitest) | pending |
+| CC-S22 | Session 22 | Macro Slice C (Phase 8.1-8.3): interactive drill mode UI + deterministic scoring + persisted drill history APIs | `components/spx-command-center/replay-drill-mode.tsx`, `components/spx-command-center/replay-session-browser.tsx`, `components/spx-command-center/__tests__/replay-drill-mode.test.tsx`, `components/spx-command-center/__tests__/replay-session-browser.test.tsx`, `backend/src/routes/spx.ts`, `backend/src/services/spx/drillScoring.ts`, `backend/src/services/spx/__tests__/drillScoring.test.ts`, `backend/src/__tests__/integration/spx-drill-results-api.test.ts`, autonomous packet docs | PASS (eslint + tsc + vitest + jest) | pending |
+| CC-S23 | Session 23 | Macro Slice D (Phase 7.1-7.3): SymbolProfile abstraction end-to-end across engines + admin SymbolProfile visibility surfaces | `backend/src/services/spx/symbolProfile.ts`, `backend/src/services/spx/gexEngine.ts`, `backend/src/services/spx/flowEngine.ts`, `backend/src/services/spx/levelEngine.ts`, `backend/src/services/spx/multiTFConfluence.ts`, `backend/src/services/spx/regimeClassifier.ts`, `backend/src/services/spx/setupDetector.ts`, `backend/src/services/spx/index.ts`, `backend/src/services/spx/utils.ts`, `backend/src/routes/spx.ts`, `backend/src/services/spx/__tests__/symbolProfile.test.ts`, `backend/src/services/spx/__tests__/gexEngine.test.ts`, `backend/src/services/spx/__tests__/flowEngine.test.ts`, `backend/src/services/spx/__tests__/multiTFConfluence.test.ts`, `backend/src/services/spx/__tests__/regimeClassifierProfile.test.ts`, `backend/src/services/spx/__tests__/levelEngineProfile.test.ts`, `backend/src/__tests__/integration/spx-symbol-profiles-api.test.ts`, `hooks/use-spx-symbol-profiles.ts`, `components/spx-command-center/spx-settings-sheet.tsx`, autonomous packet docs | PASS (eslint + tsc + jest) | pending |
+| CC-S24 | Session 24 | Macro Slice E (Phase 9.1-9.2 + 10.1): replay journal auto-generation transformer + replay UI save wiring + replay journal API hardening tests | `backend/src/services/journal/replayJournalBuilder.ts`, `backend/src/services/journal/__tests__/replayJournalBuilder.test.ts`, `backend/src/routes/spx.ts`, `backend/src/__tests__/integration/spx-replay-journal-api.test.ts`, `components/spx-command-center/replay-session-browser.tsx`, `components/spx-command-center/__tests__/replay-session-browser.test.tsx`, autonomous packet docs | PASS (eslint + tsc + vitest + jest) | pending |
 
 ### Session 1 Evidence
 - Migration: `supabase/migrations/20260328020000_same_day_replay_session1_data_foundation.sql`
@@ -213,6 +218,79 @@
   - `pnpm --dir backend exec jest src/services/discord/__tests__/messageParser.test.ts --runInBand` (pass regression)
   - `pnpm --dir backend exec jest src/services/discord/__tests__/discordBroadcaster.test.ts --runInBand` (pass regression)
   - `pnpm --dir backend exec jest src/services/discord/__tests__/discordBot.test.ts --runInBand` (pass regression)
+
+### Session 20 Evidence
+- Replay engine cursor-time snapshot resolution: `lib/spx/replay-engine.ts`
+- Replay engine test coverage expansion: `lib/spx/__tests__/replay-engine.test.ts`
+- Replay chart snapshot-level sourcing with live fallback: `components/spx-command-center/spx-chart.tsx`
+- Replay confluence panel controlled-selection + partial-context copy update: `components/spx-command-center/replay-confluence-panel.tsx`
+- Replay browser synchronized snapshot/cursor selection state: `components/spx-command-center/replay-session-browser.tsx`
+- Replay browser component test coverage update: `components/spx-command-center/__tests__/replay-session-browser.test.tsx`
+- Lint validation: `pnpm exec eslint lib/spx/replay-engine.ts lib/spx/__tests__/replay-engine.test.ts components/spx-command-center/spx-chart.tsx components/spx-command-center/replay-confluence-panel.tsx components/spx-command-center/replay-session-browser.tsx components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+- Compile validation: `pnpm exec tsc --noEmit` (pass)
+- Targeted test validation:
+  - `pnpm vitest run lib/spx/__tests__/replay-engine.test.ts` (pass)
+  - `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+  - Replay chart targeted test discovery: `rg --files components lib | rg "(spx-chart|replay-chart).*(test|spec)"` (no existing replay chart test; gap logged in tracker)
+
+### Session 21 Evidence
+- Replay transcript sidebar component (new): `components/spx-command-center/replay-transcript-sidebar.tsx`
+- Replay browser transcript sync/jump wiring: `components/spx-command-center/replay-session-browser.tsx`
+- Replay lifecycle marker rendering + cursor/jump publish wiring: `components/spx-command-center/spx-chart.tsx`
+- Trading chart marker click support extension: `components/ai-coach/trading-chart.tsx`
+- Replay cross-surface sync contract (new): `lib/spx/replay-session-sync.ts`
+- Replay browser/transcript test coverage: `components/spx-command-center/__tests__/replay-transcript-sidebar.test.tsx`, `components/spx-command-center/__tests__/replay-session-browser.test.tsx`
+- Lint validation: `pnpm exec eslint components/spx-command-center/replay-transcript-sidebar.tsx components/spx-command-center/replay-session-browser.tsx components/spx-command-center/spx-chart.tsx components/ai-coach/trading-chart.tsx components/spx-command-center/__tests__/replay-transcript-sidebar.test.tsx components/spx-command-center/__tests__/replay-session-browser.test.tsx lib/spx/replay-session-sync.ts vitest.config.ts` (pass)
+- Compile validation: `pnpm exec tsc --noEmit` (pass)
+- Targeted test validation:
+  - `pnpm vitest run components/spx-command-center/__tests__/replay-transcript-sidebar.test.tsx` (pass)
+  - `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+  - Replay chart targeted test discovery: `rg --files components lib | rg "(spx-chart|replay-chart).*(test|spec)"` (no dedicated `spx-chart` harness; lifecycle marker behavior covered indirectly via browser/transcript integration in Session 21)
+
+### Session 22 Evidence
+- Interactive drill mode UI (new): `components/spx-command-center/replay-drill-mode.tsx`
+- Replay browser drill integration + authenticated submit/history wiring: `components/spx-command-center/replay-session-browser.tsx`
+- Frontend drill coverage (new + extended): `components/spx-command-center/__tests__/replay-drill-mode.test.tsx`, `components/spx-command-center/__tests__/replay-session-browser.test.tsx`
+- Deterministic drill scoring utility (new): `backend/src/services/spx/drillScoring.ts`
+- Scoring unit coverage (new): `backend/src/services/spx/__tests__/drillScoring.test.ts`
+- Drill persistence/history endpoints + validation/enrichment wiring: `backend/src/routes/spx.ts`
+- Drill API integration coverage (new): `backend/src/__tests__/integration/spx-drill-results-api.test.ts`
+- Lint validation: `pnpm exec eslint backend/src/routes/spx.ts backend/src/services/spx/drillScoring.ts backend/src/services/spx/__tests__/drillScoring.test.ts backend/src/__tests__/integration/spx-drill-results-api.test.ts components/spx-command-center/replay-drill-mode.tsx components/spx-command-center/replay-session-browser.tsx components/spx-command-center/__tests__/replay-drill-mode.test.tsx components/spx-command-center/__tests__/replay-session-browser.test.tsx --no-warn-ignored` (pass)
+- Compile validation: `pnpm exec tsc --noEmit` (pass)
+- Targeted test validation:
+  - `pnpm vitest run components/spx-command-center/__tests__/replay-drill-mode.test.tsx` (pass)
+  - `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+  - `pnpm --dir backend exec jest src/__tests__/integration/spx-drill-results-api.test.ts --runInBand` (pass)
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/drillScoring.test.ts --runInBand` (pass)
+
+### Session 23 Evidence
+- SymbolProfile domain loader/service (new): `backend/src/services/spx/symbolProfile.ts`
+- Engine profile threading updates: `backend/src/services/spx/gexEngine.ts`, `backend/src/services/spx/flowEngine.ts`, `backend/src/services/spx/levelEngine.ts`, `backend/src/services/spx/multiTFConfluence.ts`, `backend/src/services/spx/regimeClassifier.ts`, `backend/src/services/spx/setupDetector.ts`, `backend/src/services/spx/index.ts`, `backend/src/services/spx/utils.ts`
+- Admin-only SymbolProfile API routes: `backend/src/routes/spx.ts`
+- SymbolProfile settings visibility surface: `hooks/use-spx-symbol-profiles.ts`, `components/spx-command-center/spx-settings-sheet.tsx`
+- Backend unit/integration coverage (new/updated): `backend/src/services/spx/__tests__/symbolProfile.test.ts`, `backend/src/services/spx/__tests__/gexEngine.test.ts`, `backend/src/services/spx/__tests__/flowEngine.test.ts`, `backend/src/services/spx/__tests__/multiTFConfluence.test.ts`, `backend/src/services/spx/__tests__/regimeClassifierProfile.test.ts`, `backend/src/services/spx/__tests__/levelEngineProfile.test.ts`, `backend/src/__tests__/integration/spx-symbol-profiles-api.test.ts`
+- Lint validation:
+  - `pnpm exec eslint --no-ignore --no-warn-ignored backend/src/services/spx/symbolProfile.ts backend/src/services/spx/gexEngine.ts backend/src/services/spx/flowEngine.ts backend/src/services/spx/levelEngine.ts backend/src/services/spx/multiTFConfluence.ts backend/src/services/spx/regimeClassifier.ts backend/src/services/spx/setupDetector.ts backend/src/services/spx/index.ts backend/src/services/spx/utils.ts backend/src/routes/spx.ts backend/src/services/spx/__tests__/symbolProfile.test.ts backend/src/services/spx/__tests__/gexEngine.test.ts backend/src/services/spx/__tests__/flowEngine.test.ts backend/src/services/spx/__tests__/multiTFConfluence.test.ts backend/src/services/spx/__tests__/regimeClassifierProfile.test.ts backend/src/services/spx/__tests__/levelEngineProfile.test.ts backend/src/__tests__/integration/spx-symbol-profiles-api.test.ts` (pass)
+  - `pnpm exec eslint hooks/use-spx-symbol-profiles.ts components/spx-command-center/spx-settings-sheet.tsx` (pass)
+- Compile validation: `pnpm exec tsc --noEmit` (pass)
+- Targeted test validation:
+  - `pnpm --dir backend exec jest src/services/spx/__tests__/symbolProfile.test.ts src/services/spx/__tests__/flowEngine.test.ts src/services/spx/__tests__/levelEngineProfile.test.ts src/services/spx/__tests__/regimeClassifierProfile.test.ts src/services/spx/__tests__/gexEngine.test.ts src/services/spx/__tests__/multiTFConfluence.test.ts --runInBand` (pass)
+  - `pnpm --dir backend exec jest src/__tests__/integration/spx-symbol-profiles-api.test.ts --runInBand` (pass)
+
+### Session 24 Evidence
+- Replay journal transformer domain service (new): `backend/src/services/journal/replayJournalBuilder.ts`
+- Replay journal transformer unit coverage (new): `backend/src/services/journal/__tests__/replayJournalBuilder.test.ts`
+- Replay journal create API route (new): `backend/src/routes/spx.ts` (`POST /api/spx/replay-sessions/:sessionId/journal`)
+- Replay journal API integration coverage (new): `backend/src/__tests__/integration/spx-replay-journal-api.test.ts`
+- Replay UI save-to-journal wiring + UX guardrails: `components/spx-command-center/replay-session-browser.tsx`
+- Replay UI journal-action coverage extension: `components/spx-command-center/__tests__/replay-session-browser.test.tsx`
+- Lint validation:
+  - `pnpm exec eslint --no-ignore --no-warn-ignored backend/src/services/journal/replayJournalBuilder.ts backend/src/services/journal/__tests__/replayJournalBuilder.test.ts backend/src/routes/spx.ts backend/src/__tests__/integration/spx-replay-journal-api.test.ts` (pass)
+  - `pnpm exec eslint components/spx-command-center/replay-session-browser.tsx components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+- Compile validation: `pnpm exec tsc --noEmit` (pass)
+- Targeted test validation:
+  - `pnpm --dir backend exec jest src/services/journal/__tests__/replayJournalBuilder.test.ts src/__tests__/integration/spx-replay-journal-api.test.ts --runInBand` (pass)
+  - `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
 
 ---
 

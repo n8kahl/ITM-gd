@@ -19,7 +19,7 @@ interface GradeCandidate {
   setup_notes: string | null
   execution_notes: string | null
   lessons_learned: string | null
-  setup_type: string | null
+  setup_type?: string | null
   followed_plan: boolean | null
   discipline_score: number | null
 }
@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
 
     const { data: rows, error } = await supabase
       .from('journal_entries')
-      .select('id,symbol,direction,entry_price,exit_price,position_size,pnl,pnl_percentage,stop_loss,initial_target,setup_notes,execution_notes,lessons_learned,setup_type,followed_plan,discipline_score')
+      .select('id,symbol,direction,entry_price,exit_price,position_size,pnl,pnl_percentage,stop_loss,initial_target,setup_notes,execution_notes,lessons_learned,followed_plan,discipline_score')
       .eq('user_id', user.id)
       .in('id', validated.entryIds)
 

@@ -20,6 +20,7 @@
 | R6 | Uncapping tabs causes visual overflow on very small screens | Low | Medium | P2 | "More" menu hardening in Slice 1.2 handles overflow. Tested at 320px minimum width. | Frontend Agent | Open |
 | R7 | `pwa-asset-generator` dependency size or build issues | Low | Low | P2 | devDependency only; not in production bundle. Pin version. | Frontend Agent | Open |
 | R8 | SPX immersive mode removes escape path for users | Medium | High | P1 | Require visible "back" button in top bar or gesture support. Acceptance criterion in Slice 1.3. | Frontend Agent | Open |
+| R9 | Execution artifacts drift (spec, phase reports, tracker out of sync) causes invalid release sign-off | Medium | Medium | P1 | Update phase slice report + tracker in same slice before advancing. Block phase transitions if documentation is stale. | Docs Agent | Open |
 
 ### Retired Risks
 
@@ -96,6 +97,18 @@
 - **Rationale:** All changes are UI-layer (CSS, components, assets, service worker). No database migrations. No backend route changes. No auth model changes. Each slice is independently revertible via git. Blast radius is strictly frontend.
 - **Consequences:** Rollback is via git revert rather than flag toggle. Acceptable given scope.
 - **Revisit Trigger:** If any slice requires backend or database changes.
+
+### D-005: Split Final Playwright Gates by Project
+
+- **Date:** 2026-03-01
+- **Context:** `e2e/pwa.spec.ts` requires `serviceWorkers: 'allow'`, while default `chromium` config blocks service workers.
+- **Options Considered:**
+  1. Run `e2e/pwa.spec.ts` in `chromium` and `pwa-chromium` - duplicates coverage and can fail due to blocked service workers.
+  2. Run `e2e/mobile-*.spec.ts` in `chromium` and run `e2e/pwa.spec.ts` only in `pwa-chromium`.
+- **Decision:** Option 2.
+- **Rationale:** Keeps gate behavior aligned with the test contract and avoids false negatives from project config mismatch.
+- **Consequences:** Final release gate explicitly includes two Playwright runs with distinct scopes.
+- **Revisit Trigger:** If default `chromium` project changes to allow service workers.
 
 ---
 

@@ -2,10 +2,29 @@
 
 **Workstream:** Mobile Reachability, Native-Feel UX, and PWA Installability
 **Date:** 2026-03-01
-**Status:** Draft — Pending Approval
+**Status:** Draft — Pending Approval (Documentation Packet Complete)
 **Owner:** Orchestrator
 **Branch:** `codex/mobile-pwa`
 **Release Train:** March 2 – May 29, 2026 (90-day frame per §12.1)
+
+---
+
+## 0. Pre-Implementation Completeness Check
+
+| Required Artifact (§6.3) | Path | Status |
+|--------------------------|------|--------|
+| Master execution spec | `docs/specs/MOBILE_PWA_EXECUTION_SPEC_2026-03-01.md` | Present |
+| Phase slice report (Phase 1) | `docs/specs/MOBILE_PWA_PHASE1_SLICE_REPORT_2026-03-01.md` | Present (template) |
+| Phase slice report (Phase 2) | `docs/specs/MOBILE_PWA_PHASE2_SLICE_REPORT_2026-03-01.md` | Present (template) |
+| Phase slice report (Phase 3) | `docs/specs/MOBILE_PWA_PHASE3_SLICE_REPORT_2026-03-01.md` | Present (template) |
+| Phase slice report (Phase 4) | `docs/specs/MOBILE_PWA_PHASE4_SLICE_REPORT_2026-03-01.md` | Present (template) |
+| Release notes | `docs/specs/MOBILE_PWA_RELEASE_NOTES_2026-03-01.md` | Present (template) |
+| Runbook | `docs/specs/MOBILE_PWA_RUNBOOK_2026-03-01.md` | Present (template) |
+| Change control standard | `docs/specs/mobile-pwa-autonomous-2026-03-01/06_CHANGE_CONTROL_AND_PR_STANDARD.md` | Present |
+| Risk register + decision log | `docs/specs/mobile-pwa-autonomous-2026-03-01/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md` | Present |
+| Autonomous execution tracker | `docs/specs/mobile-pwa-autonomous-2026-03-01/08_AUTONOMOUS_EXECUTION_TRACKER.md` | Present |
+
+Implementation remains blocked until this spec is explicitly approved and the tracker is updated to `IN PROGRESS` for Slice 1.1.
 
 ---
 
@@ -480,12 +499,18 @@ Transform TradeITM from a responsive web app into a native-grade mobile experien
 - **Objective:** Complete the autonomous documentation packet.
 - **Agent:** Docs Agent
 - **Target Files:**
-  - `docs/specs/MOBILE_PWA_RELEASE_NOTES_2026-03-01.md` (new)
-  - `docs/specs/MOBILE_PWA_RUNBOOK_2026-03-01.md` (new)
+  - `docs/specs/MOBILE_PWA_PHASE1_SLICE_REPORT_2026-03-01.md`
+  - `docs/specs/MOBILE_PWA_PHASE2_SLICE_REPORT_2026-03-01.md`
+  - `docs/specs/MOBILE_PWA_PHASE3_SLICE_REPORT_2026-03-01.md`
+  - `docs/specs/MOBILE_PWA_PHASE4_SLICE_REPORT_2026-03-01.md`
+  - `docs/specs/MOBILE_PWA_RELEASE_NOTES_2026-03-01.md`
+  - `docs/specs/MOBILE_PWA_RUNBOOK_2026-03-01.md`
 - **Requirements:**
-  1. Release notes covering all implemented slices.
-  2. Runbook covering: PWA install troubleshooting, push notification debugging, service worker update procedure, splash screen regeneration, mobile nav configuration.
+  1. Phase slice report files are updated with actual file-level implementation and gate results.
+  2. Release notes covering all implemented slices.
+  3. Runbook covering: PWA install troubleshooting, push notification debugging, service worker update procedure, splash screen regeneration, mobile nav configuration.
 - **Acceptance Criteria:**
+  - All phase slice report files are current.
   - Both docs exist and are current with implementation.
 - **Validation:** Manual review.
 - **Rollback:** N/A (docs only).
@@ -518,7 +543,7 @@ pnpm exec eslint .
 pnpm exec tsc --noEmit
 pnpm run build
 pnpm vitest run
-pnpm exec playwright test e2e/mobile-*.spec.ts e2e/pwa.spec.ts --project=chromium --workers=1
+pnpm exec playwright test e2e/mobile-*.spec.ts --project=chromium --workers=1
 pnpm exec playwright test e2e/pwa.spec.ts --project=pwa-chromium --workers=1
 ```
 
@@ -588,10 +613,15 @@ Per §6.8, this workstream is complete only when:
 
 1. All slice acceptance criteria met (tracked in `08_AUTONOMOUS_EXECUTION_TRACKER.md`).
 2. All release gates green under Node >= 20.19.5.
-3. Release notes (`MOBILE_PWA_RELEASE_NOTES_2026-03-01.md`) current.
-4. Runbook (`MOBILE_PWA_RUNBOOK_2026-03-01.md`) current.
-5. Change control + risk register + tracker current.
-6. Production deploy approval explicitly recorded.
+3. Phase slice report docs are current:
+   - `MOBILE_PWA_PHASE1_SLICE_REPORT_2026-03-01.md`
+   - `MOBILE_PWA_PHASE2_SLICE_REPORT_2026-03-01.md`
+   - `MOBILE_PWA_PHASE3_SLICE_REPORT_2026-03-01.md`
+   - `MOBILE_PWA_PHASE4_SLICE_REPORT_2026-03-01.md`
+4. Release notes (`MOBILE_PWA_RELEASE_NOTES_2026-03-01.md`) current.
+5. Runbook (`MOBILE_PWA_RUNBOOK_2026-03-01.md`) current.
+6. Change control + risk register + tracker current.
+7. Production deploy approval explicitly recorded.
 
 ---
 

@@ -17,6 +17,11 @@ import { computeUnifiedGEXLandscape } from '../services/spx/gexEngine';
 import { getSPXSnapshot } from '../services/spx';
 import { getMergedLevels } from '../services/spx/levelEngine';
 import { getSPXWinRateAnalytics } from '../services/spx/outcomeTracker';
+import {
+  getSymbolProfileBySymbol,
+  listSymbolProfiles,
+  summarizeSymbolProfile,
+} from '../services/spx/symbolProfile';
 import { buildTradeStreamSnapshot, type TradeStreamFeedTrustMetadata } from '../services/spx/tradeStream';
 import {
   getSPXOptimizerScorecard,
@@ -48,6 +53,13 @@ import {
   loadOpenStatesWithOrders,
   closeAllUserStates,
 } from '../services/spx/executionStateStore';
+import {
+  normalizeEngineDirection,
+  scoreReplayDrill,
+  type DrillDirection,
+  type EngineDirection,
+} from '../services/spx/drillScoring';
+import { buildReplayJournalEntries } from '../services/journal/replayJournalBuilder';
 
 const router = Router();
 const KNOWN_MISSING_RELATIONS = new Set<string>();
@@ -55,6 +67,11 @@ const TRADE_STREAM_STALE_THRESHOLD_MS = 30_000;
 const REPLAY_SESSIONS_DEFAULT_WINDOW_DAYS = 30;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const DRILL_PRICE_MIN = 0;
+const DRILL_PRICE_MAX = 100_000;
+const DRILL_PNL_ABS_MAX = 1_000;
+const DRILL_DIRECTIONS = new Set<DrillDirection>(['long', 'short', 'flat']);
+const ENGINE_DIRECTIONS = new Set<EngineDirection>(['bullish', 'bearish', 'neutral']);
 
 type ReplaySessionQueryRow = {
   id?: unknown;
@@ -103,6 +120,26 @@ type ReplayMessageQueryRow = {
   is_signal?: unknown;
   signal_type?: unknown;
   parsed_trade_id?: unknown;
+  created_at?: unknown;
+};
+
+type ReplayDrillResultQueryRow = {
+  id?: unknown;
+  user_id?: unknown;
+  session_id?: unknown;
+  parsed_trade_id?: unknown;
+  decision_at?: unknown;
+  direction?: unknown;
+  strike?: unknown;
+  stop_level?: unknown;
+  target_level?: unknown;
+  learner_rr?: unknown;
+  learner_pnl_pct?: unknown;
+  actual_pnl_pct?: unknown;
+  engine_direction?: unknown;
+  direction_match?: unknown;
+  score?: unknown;
+  feedback_summary?: unknown;
   created_at?: unknown;
 };
 
@@ -221,6 +258,45 @@ function parseEpochMs(value: unknown): number | null {
   if (typeof value !== 'string') return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseIsoTimestampInput(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Date.parse(trimmed);
+  if (!Number.isFinite(parsed)) return null;
+  return new Date(parsed).toISOString();
+}
+
+function parseDrillDirectionInput(value: unknown): DrillDirection | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!DRILL_DIRECTIONS.has(normalized as DrillDirection)) return null;
+  return normalized as DrillDirection;
+}
+
+function parseEngineDirectionInput(value: unknown): EngineDirection | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!ENGINE_DIRECTIONS.has(normalized as EngineDirection)) return null;
+  return normalized as EngineDirection;
+}
+
+function parseBoundedNumberInput(value: unknown, min: number, max: number): number | null {
+  const parsed = parseFiniteNumber(value);
+  if (parsed == null) return null;
+  if (parsed < min || parsed > max) return null;
+  return parsed;
+}
+
+function normalizeBodyObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function bodyHasOwnKey(body: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(body, key);
 }
 
 function getPriorTradingDay(dateStr: string): string | null {
@@ -384,6 +460,28 @@ function mapReplayMessageRow(message: ReplayMessageQueryRow) {
   };
 }
 
+function mapReplayDrillResultRow(row: ReplayDrillResultQueryRow) {
+  return {
+    id: toNullableString(row.id),
+    userId: toNullableString(row.user_id),
+    sessionId: toNullableString(row.session_id),
+    parsedTradeId: toNullableString(row.parsed_trade_id),
+    decisionAt: toNullableString(row.decision_at),
+    direction: parseDrillDirectionInput(row.direction),
+    strike: parseFiniteNumber(row.strike),
+    stopLevel: parseFiniteNumber(row.stop_level),
+    targetLevel: parseFiniteNumber(row.target_level),
+    learnerRr: parseFiniteNumber(row.learner_rr),
+    learnerPnlPct: parseFiniteNumber(row.learner_pnl_pct),
+    actualPnlPct: parseFiniteNumber(row.actual_pnl_pct),
+    engineDirection: parseEngineDirectionInput(row.engine_direction),
+    directionMatch: typeof row.direction_match === 'boolean' ? row.direction_match : null,
+    score: parseFiniteNumber(row.score),
+    feedbackSummary: toNullableString(row.feedback_summary),
+    createdAt: toNullableString(row.created_at),
+  };
+}
+
 function toTradeStreamFeedTrust(generatedAt: string): TradeStreamFeedTrustMetadata {
   const snapshotMs = Date.parse(generatedAt);
   if (!Number.isFinite(snapshotMs)) {
@@ -465,6 +563,28 @@ function parseSetupPayload(value: unknown): Setup | null {
   if (typeof setup.target1.price !== 'number' || typeof setup.target2.price !== 'number') return null;
   if (typeof setup.direction !== 'string' || typeof setup.type !== 'string') return null;
   return setup as Setup;
+}
+
+async function requireBackendAdmin(req: Request, res: Response): Promise<boolean> {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Authentication required.',
+    });
+    return false;
+  }
+
+  const isAdmin = await hasBackendAdminAccess(userId);
+  if (!isAdmin) {
+    res.status(403).json({
+      error: 'Forbidden',
+      message: 'Admin access required.',
+    });
+    return false;
+  }
+
+  return true;
 }
 
 router.use(authenticateToken, requireTier('pro'));
@@ -943,6 +1063,590 @@ router.get('/replay-sessions/:sessionId/snapshots', async (req: Request, res: Re
   }
 });
 
+router.post('/replay-sessions/:sessionId/journal', async (req: Request, res: Response) => {
+  try {
+    const sessionId = typeof req.params.sessionId === 'string' ? req.params.sessionId.trim() : '';
+    if (!isUuid(sessionId)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'sessionId must be a valid UUID.',
+      });
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const isAdmin = await hasBackendAdminAccess(userId);
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin access required.',
+      });
+    }
+
+    const body = normalizeBodyObject(req.body);
+    const parsedTradeIdRaw = toNullableString(body.parsedTradeId);
+    if (parsedTradeIdRaw && !isUuid(parsedTradeIdRaw)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body field "parsedTradeId" must be a valid UUID when provided.',
+      });
+    }
+    const parsedTradeId = parsedTradeIdRaw ?? null;
+
+    const { data: session, error: sessionError } = await supabase
+      .from('discord_trade_sessions')
+      .select('id,session_date,channel_id,channel_name,caller_name,session_start,session_end,session_summary')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (sessionError) throw sessionError;
+    if (!session) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    const sessionRow = session as ReplaySessionQueryRow;
+    const sessionDate = toNullableString(sessionRow.session_date);
+    if (!sessionDate) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    let tradesQuery = supabase
+      .from('discord_parsed_trades')
+      .select(REPLAY_TRADE_SELECT_FIELDS)
+      .eq('session_id', sessionId);
+
+    if (parsedTradeId) {
+      tradesQuery = tradesQuery.eq('id', parsedTradeId);
+    }
+
+    const [{ data: tradesData, error: tradesError }, { data: messagesData, error: messagesError }, { data: snapshotsData, error: snapshotsError }] = await Promise.all([
+      tradesQuery.order('trade_index', { ascending: true }),
+      supabase
+        .from('discord_messages')
+        .select(REPLAY_MESSAGE_SELECT_FIELDS)
+        .eq('session_id', sessionId)
+        .order('sent_at', { ascending: true }),
+      supabase
+        .from('replay_snapshots')
+        .select('*')
+        .eq('session_date', sessionDate)
+        .order('captured_at', { ascending: true }),
+    ]);
+
+    if (tradesError) throw tradesError;
+    if (messagesError) throw messagesError;
+    if (snapshotsError) throw snapshotsError;
+
+    const tradeRows = (Array.isArray(tradesData) ? tradesData : []) as ReplayTradeQueryRow[];
+    if (parsedTradeId && tradeRows.length === 0) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body field "parsedTradeId" must belong to the provided sessionId.',
+      });
+    }
+
+    if (tradeRows.length === 0) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} has no parsed trades to save.`,
+      });
+    }
+
+    const mappedTrades = tradeRows.map(mapReplayTradeRow);
+    const mappedMessages = ((Array.isArray(messagesData) ? messagesData : []) as ReplayMessageQueryRow[]).map(mapReplayMessageRow);
+    const snapshotRows = (Array.isArray(snapshotsData) ? snapshotsData : []) as Record<string, unknown>[];
+    const resolvedSymbol = (
+      toNullableString(mappedTrades[0]?.contract.symbol)
+      || toNullableString((snapshotRows[0] as { symbol?: unknown })?.symbol)
+      || 'SPX'
+    ).toUpperCase();
+
+    const builtEntries = buildReplayJournalEntries({
+      userId,
+      session: {
+        sessionId,
+        sessionDate,
+        symbol: resolvedSymbol,
+        channelId: toNullableString(sessionRow.channel_id),
+        channelName: toNullableString(sessionRow.channel_name),
+        caller: toNullableString(sessionRow.caller_name),
+        sessionStart: toNullableString(sessionRow.session_start),
+        sessionEnd: toNullableString(sessionRow.session_end),
+        sessionSummary: toNullableString(sessionRow.session_summary),
+      },
+      trades: mappedTrades,
+      messages: mappedMessages,
+      snapshots: snapshotRows,
+    });
+
+    const journalPayloads = builtEntries.map((entry) => entry.payload);
+    const { data: upsertedRows, error: upsertError } = await supabase
+      .from('journal_entries')
+      .upsert(journalPayloads, {
+        onConflict: 'id',
+        ignoreDuplicates: true,
+      })
+      .select('id');
+
+    if (upsertError) throw upsertError;
+
+    const createdIds = new Set(
+      (Array.isArray(upsertedRows) ? upsertedRows : [])
+        .map((row) => toNullableString((row as { id?: unknown }).id))
+        .filter((value): value is string => Boolean(value)),
+    );
+
+    const results = builtEntries.map((entry) => ({
+      journalEntryId: entry.payload.id,
+      parsedTradeId: entry.parsedTradeId,
+      importId: entry.payload.import_id,
+      replayBacklink: entry.replayBacklink,
+      status: createdIds.has(entry.payload.id) ? 'created' : 'existing',
+    }));
+    const createdCount = results.filter((row) => row.status === 'created').length;
+
+    return res.status(201).json({
+      sessionId,
+      parsedTradeId,
+      symbol: resolvedSymbol,
+      count: results.length,
+      createdCount,
+      existingCount: Math.max(0, results.length - createdCount),
+      results,
+    });
+  } catch (error) {
+    logger.error('SPX replay journal create endpoint failed', {
+      sessionId: req.params.sessionId,
+      parsedTradeId: req.body && typeof req.body === 'object'
+        ? (req.body as Record<string, unknown>).parsedTradeId
+        : null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to save replay session to journal.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.post('/drill-results', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const isAdmin = await hasBackendAdminAccess(userId);
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin access required.',
+      });
+    }
+
+    const body = normalizeBodyObject(req.body);
+    const sessionId = toNullableString(body.sessionId);
+    if (!sessionId || !isUuid(sessionId)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body field "sessionId" must be a valid UUID.',
+      });
+    }
+
+    const parsedTradeIdRaw = toNullableString(body.parsedTradeId);
+    if (parsedTradeIdRaw && !isUuid(parsedTradeIdRaw)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body field "parsedTradeId" must be a valid UUID when provided.',
+      });
+    }
+    const parsedTradeId = parsedTradeIdRaw ?? null;
+
+    const decisionAt = parseIsoTimestampInput(body.decisionAt);
+    if (!decisionAt) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body field "decisionAt" must be a valid ISO timestamp.',
+      });
+    }
+
+    const direction = parseDrillDirectionInput(body.direction);
+    if (!direction) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body field "direction" must be one of: long, short, flat.',
+      });
+    }
+
+    const strikeProvided = bodyHasOwnKey(body, 'strike');
+    const stopLevelProvided = bodyHasOwnKey(body, 'stopLevel');
+    const targetLevelProvided = bodyHasOwnKey(body, 'targetLevel');
+
+    const strike = parseBoundedNumberInput(body.strike, DRILL_PRICE_MIN, DRILL_PRICE_MAX);
+    const stopLevel = parseBoundedNumberInput(body.stopLevel, DRILL_PRICE_MIN, DRILL_PRICE_MAX);
+    const targetLevel = parseBoundedNumberInput(body.targetLevel, DRILL_PRICE_MIN, DRILL_PRICE_MAX);
+
+    if (strikeProvided && strike == null) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: `Body field "strike" must be a finite number between ${DRILL_PRICE_MIN} and ${DRILL_PRICE_MAX}.`,
+      });
+    }
+    if (stopLevelProvided && stopLevel == null) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: `Body field "stopLevel" must be a finite number between ${DRILL_PRICE_MIN} and ${DRILL_PRICE_MAX}.`,
+      });
+    }
+    if (targetLevelProvided && targetLevel == null) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: `Body field "targetLevel" must be a finite number between ${DRILL_PRICE_MIN} and ${DRILL_PRICE_MAX}.`,
+      });
+    }
+
+    if (direction !== 'flat' && (strike == null || stopLevel == null || targetLevel == null)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body fields "strike", "stopLevel", and "targetLevel" are required when direction is long or short.',
+      });
+    }
+
+    const learnerPnlPctProvided = bodyHasOwnKey(body, 'learnerPnlPct');
+    const learnerPnlPct = parseBoundedNumberInput(
+      body.learnerPnlPct,
+      -DRILL_PNL_ABS_MAX,
+      DRILL_PNL_ABS_MAX,
+    );
+    if (learnerPnlPctProvided && learnerPnlPct == null) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: `Body field "learnerPnlPct" must be between ${-DRILL_PNL_ABS_MAX} and ${DRILL_PNL_ABS_MAX} when provided.`,
+      });
+    }
+
+    const actualPnlPctProvided = bodyHasOwnKey(body, 'actualPnlPct');
+    const providedActualPnlPct = parseBoundedNumberInput(
+      body.actualPnlPct,
+      -DRILL_PNL_ABS_MAX,
+      DRILL_PNL_ABS_MAX,
+    );
+    if (actualPnlPctProvided && providedActualPnlPct == null) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: `Body field "actualPnlPct" must be between ${-DRILL_PNL_ABS_MAX} and ${DRILL_PNL_ABS_MAX} when provided.`,
+      });
+    }
+
+    const rawEngineDirection = toNullableString(body.engineDirection);
+    const providedEngineDirection = rawEngineDirection == null ? null : parseEngineDirectionInput(rawEngineDirection);
+    if (rawEngineDirection != null && providedEngineDirection == null) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body field "engineDirection" must be one of: bullish, bearish, neutral.',
+      });
+    }
+
+    const { data: session, error: sessionError } = await supabase
+      .from('discord_trade_sessions')
+      .select('id')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (sessionError) throw sessionError;
+    if (!session) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    let resolvedActualPnlPct = providedActualPnlPct;
+    let resolvedEngineDirection = providedEngineDirection;
+
+    if (parsedTradeId) {
+      try {
+        const { data: trade, error: tradeError } = await supabase
+          .from('discord_parsed_trades')
+          .select('id,session_id,direction,final_pnl_pct')
+          .eq('id', parsedTradeId)
+          .maybeSingle();
+
+        if (tradeError) throw tradeError;
+
+        if (trade) {
+          const tradeSessionId = toNullableString((trade as { session_id?: unknown }).session_id);
+          if (!tradeSessionId || tradeSessionId !== sessionId) {
+            return res.status(400).json({
+              error: 'Invalid request',
+              message: 'Body field "parsedTradeId" must belong to the provided sessionId.',
+            });
+          }
+
+          const tradePnl = parseBoundedNumberInput(
+            (trade as { final_pnl_pct?: unknown }).final_pnl_pct,
+            -DRILL_PNL_ABS_MAX,
+            DRILL_PNL_ABS_MAX,
+          );
+          if (tradePnl != null) {
+            resolvedActualPnlPct = tradePnl;
+          }
+
+          const tradeEngineDirection = normalizeEngineDirection((trade as { direction?: unknown }).direction);
+          if (tradeEngineDirection) {
+            resolvedEngineDirection = tradeEngineDirection;
+          }
+        }
+      } catch (enrichmentError) {
+        logger.warn('SPX drill result trade enrichment failed; continuing with provided values', {
+          sessionId,
+          parsedTradeId,
+          error: enrichmentError instanceof Error ? enrichmentError.message : String(enrichmentError),
+        });
+      }
+    }
+
+    const scoreResult = scoreReplayDrill({
+      learnerDirection: direction,
+      engineDirection: resolvedEngineDirection,
+      strike: direction === 'flat' ? null : strike,
+      stopLevel: direction === 'flat' ? null : stopLevel,
+      targetLevel: direction === 'flat' ? null : targetLevel,
+      learnerPnlPct,
+      actualPnlPct: resolvedActualPnlPct,
+    });
+
+    const insertPayload = {
+      user_id: userId,
+      session_id: sessionId,
+      parsed_trade_id: parsedTradeId,
+      decision_at: decisionAt,
+      direction,
+      strike: direction === 'flat' ? null : strike,
+      stop_level: direction === 'flat' ? null : stopLevel,
+      target_level: direction === 'flat' ? null : targetLevel,
+      learner_rr: scoreResult.learnerRr,
+      learner_pnl_pct: scoreResult.learnerPnlPct,
+      actual_pnl_pct: resolvedActualPnlPct,
+      engine_direction: resolvedEngineDirection,
+      direction_match: scoreResult.directionMatch,
+      score: scoreResult.score,
+      feedback_summary: scoreResult.feedbackSummary,
+    };
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from('replay_drill_results')
+      .insert(insertPayload)
+      .select('*')
+      .maybeSingle();
+
+    if (insertError) throw insertError;
+
+    if (!insertedRow) {
+      logger.error('SPX drill result insert returned no row', {
+        sessionId,
+        parsedTradeId,
+        userId,
+      });
+      return res.status(503).json({
+        error: 'Data unavailable',
+        message: 'Unable to persist drill result.',
+        retryAfter: 10,
+      });
+    }
+
+    return res.status(201).json({
+      result: mapReplayDrillResultRow(insertedRow as ReplayDrillResultQueryRow),
+    });
+  } catch (error) {
+    logger.error('SPX drill result create endpoint failed', {
+      sessionId: req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>).sessionId : null,
+      parsedTradeId: req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>).parsedTradeId : null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to persist drill result.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/drill-results/history', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const isAdmin = await hasBackendAdminAccess(userId);
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin access required.',
+      });
+    }
+
+    const sessionId = toNullableString(req.query.sessionId);
+    if (sessionId && !isUuid(sessionId)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Query parameter "sessionId" must be a valid UUID.',
+      });
+    }
+
+    const limit = parsePositiveInteger(req.query.limit, 25, 1, 100);
+    let historyQuery = supabase
+      .from('replay_drill_results')
+      .select('*')
+      .eq('user_id', userId)
+      .order('decision_at', { ascending: false });
+
+    if (sessionId) {
+      historyQuery = historyQuery.eq('session_id', sessionId);
+    }
+
+    const { data: rows, error } = await historyQuery.limit(limit);
+    if (error) throw error;
+
+    const historyRows = (Array.isArray(rows) ? rows : []) as ReplayDrillResultQueryRow[];
+    const mappedHistory = historyRows.map(mapReplayDrillResultRow);
+
+    let sessionMetaById = new Map<string, {
+      sessionDate: string | null;
+      channelName: string | null;
+      caller: string | null;
+    }>();
+    let tradeMetaById = new Map<string, {
+      symbol: string | null;
+      tradeIndex: number | null;
+    }>();
+
+    try {
+      const sessionIds = Array.from(new Set(
+        mappedHistory
+          .map((row) => row.sessionId)
+          .filter((value): value is string => Boolean(value))
+      ));
+      const parsedTradeIds = Array.from(new Set(
+        mappedHistory
+          .map((row) => row.parsedTradeId)
+          .filter((value): value is string => Boolean(value))
+      ));
+
+      if (sessionIds.length > 0) {
+        const { data: sessionsData, error: sessionsError } = await supabase
+          .from('discord_trade_sessions')
+          .select('id,session_date,channel_name,caller_name')
+          .in('id', sessionIds);
+
+        if (sessionsError) throw sessionsError;
+
+        sessionMetaById = new Map(
+          (Array.isArray(sessionsData) ? sessionsData : [])
+            .map((row) => {
+              const id = toNullableString((row as { id?: unknown }).id);
+              if (!id) return null;
+              return [
+                id,
+                {
+                  sessionDate: toNullableString((row as { session_date?: unknown }).session_date),
+                  channelName: toNullableString((row as { channel_name?: unknown }).channel_name),
+                  caller: toNullableString((row as { caller_name?: unknown }).caller_name),
+                },
+              ] as const;
+            })
+            .filter((entry): entry is readonly [string, {
+              sessionDate: string | null;
+              channelName: string | null;
+              caller: string | null;
+            }] => entry != null)
+        );
+      }
+
+      if (parsedTradeIds.length > 0) {
+        const { data: tradesData, error: tradesError } = await supabase
+          .from('discord_parsed_trades')
+          .select('id,symbol,trade_index')
+          .in('id', parsedTradeIds);
+
+        if (tradesError) throw tradesError;
+
+        tradeMetaById = new Map(
+          (Array.isArray(tradesData) ? tradesData : [])
+            .map((row) => {
+              const id = toNullableString((row as { id?: unknown }).id);
+              if (!id) return null;
+              return [
+                id,
+                {
+                  symbol: toNullableString((row as { symbol?: unknown }).symbol),
+                  tradeIndex: parseFiniteNumber((row as { trade_index?: unknown }).trade_index),
+                },
+              ] as const;
+            })
+            .filter((entry): entry is readonly [string, {
+              symbol: string | null;
+              tradeIndex: number | null;
+            }] => entry != null)
+        );
+      }
+    } catch (enrichmentError) {
+      logger.warn('SPX drill history enrichment failed; returning base history rows', {
+        sessionId,
+        error: enrichmentError instanceof Error ? enrichmentError.message : String(enrichmentError),
+      });
+    }
+
+    const history = mappedHistory.map((row) => ({
+      ...row,
+      session:
+        row.sessionId && sessionMetaById.has(row.sessionId)
+          ? sessionMetaById.get(row.sessionId)
+          : null,
+      trade:
+        row.parsedTradeId && tradeMetaById.has(row.parsedTradeId)
+          ? tradeMetaById.get(row.parsedTradeId)
+          : null,
+    }));
+
+    return res.json({
+      count: history.length,
+      history,
+    });
+  } catch (error) {
+    logger.error('SPX drill history endpoint failed', {
+      sessionId: req.query.sessionId,
+      limit: req.query.limit,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load drill history.',
+      retryAfter: 10,
+    });
+  }
+});
+
 router.get('/snapshot', async (req: Request, res: Response) => {
   try {
     const snapshot = await getSPXSnapshot({ forceRefresh: parseBoolean(req.query.forceRefresh) });
@@ -1273,6 +1977,80 @@ router.post('/analytics/optimizer/revert', async (req: Request, res: Response) =
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to revert SPX optimizer profile.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/symbol-profiles', async (req: Request, res: Response) => {
+  try {
+    if (!await requireBackendAdmin(req, res)) {
+      return;
+    }
+
+    const includeInactive = parseBoolean(req.query.includeInactive);
+    const profiles = await listSymbolProfiles({
+      includeInactive,
+      failOpen: false,
+    });
+
+    return res.json({
+      profiles: profiles.map((profile) => summarizeSymbolProfile(profile)),
+      count: profiles.length,
+      includeInactive,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('SPX symbol profile list endpoint failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load symbol profiles.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/symbol-profiles/:symbol', async (req: Request, res: Response) => {
+  try {
+    if (!await requireBackendAdmin(req, res)) {
+      return;
+    }
+
+    const symbol = toNullableString(req.params.symbol)?.toUpperCase() || null;
+    if (!symbol) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Path parameter \"symbol\" is required.',
+      });
+    }
+
+    const profile = await getSymbolProfileBySymbol(symbol, {
+      includeInactive: true,
+      failOpen: false,
+      bypassCache: parseBoolean(req.query.forceRefresh),
+    });
+
+    if (!profile) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `No symbol profile exists for ${symbol}.`,
+      });
+    }
+
+    return res.json({
+      profile,
+      summary: summarizeSymbolProfile(profile),
+    });
+  } catch (error) {
+    logger.error('SPX symbol profile detail endpoint failed', {
+      symbol: req.params.symbol,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load symbol profile details.',
       retryAfter: 10,
     });
   }
