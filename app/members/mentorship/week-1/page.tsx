@@ -98,6 +98,30 @@ export default function Week1Page() {
         </div>
       </div>
 
+      {/* ─── Core Lesson Module (Gamma Presentation) ─── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15">
+            <BookOpen className="h-4 w-4 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="font-[family-name:var(--font-playfair)] text-xl font-semibold">Core Lesson</h2>
+            <p className="text-xs text-white/40">Interactive presentation &mdash; click through at your own pace</p>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.02]">
+          <iframe
+            src="https://gamma.app/embed/k7v0k4de6wwqh2o"
+            className="h-[500px] w-full md:h-[600px]"
+            allow="fullscreen"
+            title="Week 1 — The Trader Identity Reset"
+          />
+        </div>
+        <p className="text-center text-xs text-white/30">
+          Use the arrows to navigate slides. Click the expand icon for fullscreen.
+        </p>
+      </section>
+
       {/* ─── Learning Objectives ─── */}
       <section className="space-y-4">
         <h2 className="font-[family-name:var(--font-playfair)] text-xl font-semibold">What You&apos;ll Learn</h2>
