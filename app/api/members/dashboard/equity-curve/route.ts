@@ -14,12 +14,27 @@ async function buildFallbackEquityCurve(
   const start = new Date()
   start.setDate(start.getDate() - Math.max(1, days))
 
-  const { data: entries, error } = await supabase
+  let { data: entries, error } = await supabase
     .from('journal_entries')
     .select('trade_date, pnl')
     .eq('user_id', userId)
+    .eq('is_draft', false)
+    .neq('symbol', 'PENDING')
     .gte('trade_date', start.toISOString())
     .order('trade_date', { ascending: true })
+
+  if (error && typeof error.message === 'string' && error.message.includes('is_draft')) {
+    const retry = await supabase
+      .from('journal_entries')
+      .select('trade_date, pnl')
+      .eq('user_id', userId)
+      .neq('symbol', 'PENDING')
+      .gte('trade_date', start.toISOString())
+      .order('trade_date', { ascending: true })
+
+    entries = retry.data
+    error = retry.error
+  }
 
   if (error) throw error
 

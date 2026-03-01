@@ -88,6 +88,7 @@ export function DashboardStatCards() {
   const aiGrade = stats?.avg_ai_grade ?? '—'
   const tradesMtd = stats?.trades_mtd ?? 0
   const tradesLastMonth = stats?.trades_last_month ?? 0
+  const hasMonthTrades = tradesMtd > 0
 
   // Determine AI grade accent
   const gradeAccent: StatCardAccent = aiGrade.startsWith('A')
@@ -102,13 +103,13 @@ export function DashboardStatCards() {
     {
       key: 'win-rate',
       label: 'Win Rate',
-      value: `${winRate.toFixed(1)}%`,
+      value: hasMonthTrades ? `${winRate.toFixed(1)}%` : '—',
       icon: Target,
       accent: (winRate >= 50 ? 'emerald' : 'red') as StatCardAccent,
-      trend: stats?.pnl_change_pct != null ? {
-        value: `${stats.pnl_change_pct > 0 ? '+' : ''}${stats.pnl_change_pct.toFixed(1)}% vs last month`,
-        direction: (stats.pnl_change_pct >= 0 ? 'up' : 'down') as StatCardTrendDirection,
-      } : undefined,
+      trend: {
+        value: hasMonthTrades ? `${tradesMtd} trade${tradesMtd === 1 ? '' : 's'} this month` : 'No closed trades this month',
+        direction: 'neutral' as StatCardTrendDirection,
+      },
     },
     {
       key: 'pnl',
@@ -119,6 +120,10 @@ export function DashboardStatCards() {
       })}`,
       icon: pnlPositive ? TrendingUp : TrendingDown,
       accent: (pnlPositive ? 'emerald' : 'red') as StatCardAccent,
+      trend: stats?.pnl_change_pct != null ? {
+        value: `${stats.pnl_change_pct > 0 ? '+' : ''}${stats.pnl_change_pct.toFixed(1)}% vs last month`,
+        direction: (stats.pnl_change_pct >= 0 ? 'up' : 'down') as StatCardTrendDirection,
+      } : undefined,
     },
     {
       key: 'streak',
