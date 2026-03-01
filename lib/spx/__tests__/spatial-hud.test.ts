@@ -178,6 +178,23 @@ describe('spatial-hud helpers', () => {
       expect(result.stats.budgetSuppressedCount + result.stats.collisionSuppressedCount).toBeGreaterThan(0)
       expect(result.levels.some((level) => level.label === 'PDC')).toBe(true)
     })
+
+    it('keeps semantically similar levels when dedupe mode is disabled', () => {
+      const result = resolveVisibleChartLevels([
+        { price: 6861.9, label: 'PDC', color: '#fff', type: 'options', strength: 'critical' },
+        { price: 6861.92, label: 'SPY→SPX PDC', color: '#ccc', type: 'spy_derived', strength: 'moderate' },
+      ], {
+        livePrice: 6861.9,
+        nearWindowPoints: Number.MAX_SAFE_INTEGER,
+        nearLabelBudget: 8,
+        maxTotalLabels: 8,
+        minGapPoints: 0.01,
+        dedupeMode: 'none',
+      })
+
+      expect(result.levels).toHaveLength(2)
+      expect(result.stats.dedupedCount).toBe(0)
+    })
   })
 
   describe('buildGammaTopographyEntries', () => {
