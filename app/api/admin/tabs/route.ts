@@ -9,21 +9,6 @@ import {
   normalizeDiscordRoleIds,
 } from '@/lib/discord-role-access'
 
-const TRADE_DAY_REPLAY_TAB = {
-  tab_id: 'trade-day-replay',
-  label: 'Trade Day Replay',
-  icon: 'Play',
-  path: '/members/trade-day-replay',
-  required_tier: 'admin',
-  sort_order: 8,
-  is_required: false,
-  mobile_visible: true,
-  is_active: true,
-  badge_text: null,
-  badge_variant: null,
-  description: 'Replay and analyze a full trade day from transcript + market data',
-}
-
 type DynamicTabRecord = Record<string, unknown> & {
   tab_id?: unknown
   sort_order?: unknown
@@ -31,14 +16,6 @@ type DynamicTabRecord = Record<string, unknown> & {
 
 function sortBySortOrder<T extends { sort_order?: unknown }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
-}
-
-function ensureReplayTab(rows: DynamicTabRecord[]): DynamicTabRecord[] {
-  const hasReplay = rows.some((row) => String(row.tab_id || '') === 'trade-day-replay')
-  if (hasReplay) {
-    return rows
-  }
-  return [...rows, TRADE_DAY_REPLAY_TAB]
 }
 
 function getSupabaseAdmin() {
@@ -126,7 +103,7 @@ export async function GET() {
     }
 
     const rows = (tabs || []) as DynamicTabRecord[]
-    return NextResponse.json({ success: true, data: sortBySortOrder(ensureReplayTab(rows)) })
+    return NextResponse.json({ success: true, data: sortBySortOrder(rows) })
   } catch (error) {
     return NextResponse.json(
       { success: false, error: { code: 'INTERNAL', message: error instanceof Error ? error.message : 'Internal server error' } },
@@ -228,6 +205,19 @@ export async function PUT(request: NextRequest) {
       .upsert(normalizedTabs, { onConflict: 'tab_id' })
 
     if (upsertError) {
+      if (upsertError.message?.includes('tab_configurations_required_tier_check')) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'SCHEMA_OUTDATED',
+              message:
+                'Tab tier schema is outdated. Apply the latest Supabase migrations to support required_tier=admin.',
+            },
+          },
+          { status: 409 },
+        )
+      }
       return NextResponse.json(
         { success: false, error: { code: 'DB_ERROR', message: `Failed to update tab configurations: ${upsertError.message}` } },
         { status: 500 }

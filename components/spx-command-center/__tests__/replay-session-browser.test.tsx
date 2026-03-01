@@ -2,7 +2,7 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReplaySessionBrowser } from '@/components/spx-command-center/replay-session-browser'
 import { SPXRequestError } from '@/hooks/use-spx-api'
 import { publishReplayCursorTime, publishReplayTranscriptJump } from '@/lib/spx/replay-session-sync'
@@ -147,6 +147,10 @@ describe('spx-command-center/replay-session-browser', () => {
     })
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('shows admin-only copy on 403 list response', async () => {
     mockUseSPXQuery.mockImplementation((endpoint: string | null) => {
       if (typeof endpoint === 'string' && endpoint.startsWith('/api/spx/replay-sessions')) {
@@ -160,6 +164,64 @@ describe('spx-command-center/replay-session-browser', () => {
     render(createElement(ReplaySessionBrowser))
 
     expect(await screen.findByText(/available to backend admins only/i)).toBeInTheDocument()
+  })
+
+  it('loads admin replay channel presets and applies them into filters', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: [
+            {
+              key: 'trade_day_replay_channel_ids',
+              value: '["channel-1","channel-2"]',
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    )
+
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'test-token',
+          user: {
+            app_metadata: { is_admin: true },
+            user_metadata: {},
+          },
+        },
+      },
+    })
+
+    mockUseSPXQuery.mockImplementation((endpoint: string | null) => {
+      if (endpoint === '/api/spx/replay-sessions') {
+        return createQueryResult<ReplaySessionsListResponse>({
+          data: { count: 0, sessions: [] },
+        })
+      }
+      return createQueryResult()
+    })
+
+    render(createElement(ReplaySessionBrowser))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('spx-replay-admin-channels-panel')).toBeInTheDocument()
+      expect(screen.getByTestId('spx-replay-admin-channel-chip-channel-1')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId('spx-replay-admin-channels-apply'))
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('channel ids (comma-separated)')).toHaveValue('channel-1,channel-2')
+    })
+
+    fetchMock.mockRestore()
   })
 
   it('updates detail preview when selecting a different session row', async () => {

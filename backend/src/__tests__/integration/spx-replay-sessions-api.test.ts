@@ -78,6 +78,7 @@ function createSessionListBuilder(result: { data: Record<string, unknown>[] | nu
     gte: jest.fn(() => builder),
     lte: jest.fn(() => builder),
     eq: jest.fn(() => builder),
+    in: jest.fn(() => builder),
     order: jest.fn().mockResolvedValue(result),
   };
   return builder;
@@ -191,6 +192,40 @@ describeWithSockets('SPX replay sessions list API integration', () => {
     expect(sessionBuilder.gte).toHaveBeenCalledWith('session_date', '2026-02-20');
     expect(sessionBuilder.lte).toHaveBeenCalledWith('session_date', '2026-02-27');
     expect(sessionBuilder.eq).toHaveBeenCalledWith('channel_id', 'channel-123');
+    expect(sessionBuilder.order).toHaveBeenCalledWith('session_date', { ascending: false });
+  });
+
+  it('supports comma-separated multi-channel filtering with a single request', async () => {
+    const sessionBuilder = createSessionListBuilder({
+      data: [
+        {
+          id: VALID_SESSION_ID_1,
+          session_date: '2026-02-27',
+          channel_id: 'channel-123',
+          channel_name: 'SPX Premium',
+          caller_name: 'Nate',
+          trade_count: 2,
+          net_pnl_pct: '1.75',
+          session_start: '2026-02-27T14:30:00.000Z',
+          session_end: '2026-02-27T16:05:00.000Z',
+          session_summary: null,
+        },
+      ],
+      error: null,
+    });
+
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === 'discord_trade_sessions') return sessionBuilder;
+      throw new Error(`Unexpected table lookup: ${table}`);
+    });
+
+    const res = await request(app)
+      .get('/api/spx/replay-sessions?from=2026-02-20&to=2026-02-27&channelId=channel-123,channel-456');
+
+    expect(res.status).toBe(200);
+    expect(res.body.meta.channelId).toBe('channel-123,channel-456');
+    expect(sessionBuilder.eq).not.toHaveBeenCalled();
+    expect(sessionBuilder.in).toHaveBeenCalledWith('channel_id', ['channel-123', 'channel-456']);
     expect(sessionBuilder.order).toHaveBeenCalledWith('session_date', { ascending: false });
   });
 

@@ -200,4 +200,77 @@ describe('PUT /api/admin/tabs', () => {
     expect(mockLogAdminActivity).not.toHaveBeenCalled()
     expect(mockRevalidatePath).not.toHaveBeenCalled()
   })
+
+  it('returns schema error when required_tier check constraint is outdated', async () => {
+    const deleteInMock = vi.fn(async () => ({ error: null }))
+    const deleteMock = vi.fn(() => ({
+      in: deleteInMock,
+    }))
+    const upsertMock = vi.fn(async () => ({
+      error: {
+        message:
+          'new row for relation "tab_configurations" violates check constraint "tab_configurations_required_tier_check"',
+      },
+    }))
+    const selectMock = vi.fn((columns: string) => {
+      if (columns === 'tab_id') {
+        return Promise.resolve({
+          data: [{ tab_id: 'dashboard' }],
+          error: null,
+        })
+      }
+      return {
+        order: vi.fn(async () => ({ data: [], error: null })),
+      }
+    })
+
+    mockCreateClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table !== 'tab_configurations') {
+          throw new Error(`Unexpected table: ${table}`)
+        }
+        return {
+          select: selectMock,
+          delete: deleteMock,
+          upsert: upsertMock,
+        }
+      }),
+    })
+
+    const response = await PUT(
+      makePutRequest({
+        tabs: [
+          {
+            tab_id: 'dashboard',
+            label: 'Dashboard',
+            icon: 'LayoutDashboard',
+            path: '/members',
+            required_tier: 'core',
+            sort_order: 0,
+            is_required: true,
+            is_active: true,
+            mobile_visible: true,
+          },
+          {
+            tab_id: 'trade-day-replay',
+            label: 'Trade Day Replay',
+            icon: 'Play',
+            path: '/members/trade-day-replay',
+            required_tier: 'admin',
+            sort_order: 8,
+            is_required: false,
+            is_active: true,
+            mobile_visible: true,
+          },
+        ],
+      }),
+    )
+
+    const body = await response.json()
+    expect(response.status).toBe(409)
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('SCHEMA_OUTDATED')
+    expect(body.error.message).toContain('required_tier=admin')
+    expect(mockLogAdminActivity).not.toHaveBeenCalled()
+  })
 })

@@ -152,6 +152,88 @@ const DEFAULT_FILTERS: LocalFilters = {
 }
 
 const UNKNOWN_DAY_KEY = '__unknown_day__'
+const REPLAY_CHANNEL_SETTINGS_KEY = 'trade_day_replay_channel_ids'
+
+type AdminSettingRow = {
+  key: string
+  value: unknown
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeReplayChannelId(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (trimmed.length > 64) return null
+  return trimmed
+}
+
+function normalizeReplayChannelList(channelIds: string[]): string[] {
+  const next: string[] = []
+  const seen = new Set<string>()
+  for (const channelId of channelIds) {
+    const normalized = normalizeReplayChannelId(channelId)
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    next.push(normalized)
+  }
+  return next
+}
+
+function parseReplayChannelsCsv(value: string): string[] {
+  return normalizeReplayChannelList(
+    value
+      .split(',')
+      .map((token) => token.trim())
+      .filter(Boolean),
+  )
+}
+
+function parseReplayChannelSettingValue(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return normalizeReplayChannelList(
+      value
+        .map((item) => (typeof item === 'string' ? item : null))
+        .filter((item): item is string => item != null),
+    )
+  }
+
+  if (typeof value !== 'string') return []
+  const trimmed = value.trim()
+  if (!trimmed) return []
+
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) {
+        return normalizeReplayChannelList(
+          parsed
+            .map((item) => (typeof item === 'string' ? item : null))
+            .filter((item): item is string => item != null),
+        )
+      }
+    } catch {
+      // Fall through to CSV parsing.
+    }
+  }
+
+  return parseReplayChannelsCsv(trimmed)
+}
+
+function extractAdminSettingsRows(payload: unknown): AdminSettingRow[] {
+  if (!isRecord(payload) || payload.success !== true || !Array.isArray(payload.data)) return []
+  return payload.data
+    .map((row) => {
+      if (!isRecord(row) || typeof row.key !== 'string') return null
+      return {
+        key: row.key,
+        value: row.value,
+      }
+    })
+    .filter((row): row is AdminSettingRow => row != null)
+}
 
 function buildReplaySessionsListEndpoint(filters: LocalFilters): string {
   const params = new URLSearchParams()
@@ -347,6 +429,14 @@ export function ReplaySessionBrowser() {
   const journalSaveLockRef = useRef(false)
   const [draftFilters, setDraftFilters] = useState<LocalFilters>(DEFAULT_FILTERS)
   const [appliedFilters, setAppliedFilters] = useState<LocalFilters>(DEFAULT_FILTERS)
+  const [isAdminUser, setIsAdminUser] = useState(false)
+  const [adminChannels, setAdminChannels] = useState<string[]>([])
+  const [savedAdminChannels, setSavedAdminChannels] = useState<string[]>([])
+  const [adminChannelDraft, setAdminChannelDraft] = useState('')
+  const [isAdminChannelsLoading, setIsAdminChannelsLoading] = useState(false)
+  const [isAdminChannelsSaving, setIsAdminChannelsSaving] = useState(false)
+  const [adminChannelsStatus, setAdminChannelsStatus] = useState<string | null>(null)
+  const [adminChannelsError, setAdminChannelsError] = useState<string | null>(null)
   const [selectedDayKeyPreference, setSelectedDayKeyPreference] = useState<string | null>(null)
   const [selectedSessionIdPreference, setSelectedSessionIdPreference] = useState<string | null>(null)
   const [transcriptCursorSelection, setTranscriptCursorSelection] = useState<{
@@ -375,6 +465,8 @@ export function ReplaySessionBrowser() {
     [appliedFilters],
   )
   const selectedSymbol = appliedFilters.symbol.trim().toUpperCase() || 'SPX'
+  const hasAdminChannels = adminChannels.length > 0
+  const adminChannelsDirty = JSON.stringify(adminChannels) !== JSON.stringify(savedAdminChannels)
 
   const sessionsQuery = useSPXQuery<ReplaySessionsListResponse>(listEndpoint, {
     revalidateOnFocus: false,
@@ -535,12 +627,17 @@ export function ReplaySessionBrowser() {
     : null
 
   const onApplyFilters = () => {
+    const normalizedChannelIds = parseReplayChannelsCsv(draftFilters.channelId)
     setAppliedFilters({
       from: draftFilters.from.trim(),
       to: draftFilters.to.trim(),
       symbol: draftFilters.symbol.trim().toUpperCase(),
-      channelId: draftFilters.channelId.trim(),
+      channelId: normalizedChannelIds.join(','),
     })
+    setDraftFilters((current) => ({
+      ...current,
+      channelId: normalizedChannelIds.join(','),
+    }))
     setSelectedDayKeyPreference(null)
     setSelectedSessionIdPreference(null)
     setSnapshotCursorSelection(null)
@@ -557,6 +654,130 @@ export function ReplaySessionBrowser() {
     setTranscriptCursorSelection(null)
     setTranscriptJumpSelection(null)
   }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadAdminChannels = async () => {
+      try {
+        const browserSupabase = createBrowserSupabase()
+        const {
+          data: { session },
+        } = await browserSupabase.auth.getSession()
+
+        if (cancelled) return
+
+        const appMeta = isRecord(session?.user?.app_metadata) ? session.user.app_metadata : null
+        const userMeta = isRecord(session?.user?.user_metadata) ? session.user.user_metadata : null
+        const isAdmin = (
+          appMeta?.is_admin === true
+          || userMeta?.is_admin === true
+          || userMeta?.role === 'admin'
+        )
+        setIsAdminUser(isAdmin)
+        if (!isAdmin) return
+
+        setIsAdminChannelsLoading(true)
+        setAdminChannelsError(null)
+        setAdminChannelsStatus(null)
+
+        const response = await fetch('/api/admin/settings', {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          throw new Error(`Unable to load channel settings (${response.status}).`)
+        }
+
+        const payload = await response.json().catch(() => null)
+        const settings = extractAdminSettingsRows(payload)
+        const setting = settings.find((row) => row.key === REPLAY_CHANNEL_SETTINGS_KEY)
+        const channelIds = parseReplayChannelSettingValue(setting?.value ?? null)
+        if (cancelled) return
+        setAdminChannels(channelIds)
+        setSavedAdminChannels(channelIds)
+      } catch (error) {
+        if (cancelled) return
+        setAdminChannelsError(error instanceof Error ? error.message : 'Unable to load admin replay channel settings.')
+      } finally {
+        if (!cancelled) {
+          setIsAdminChannelsLoading(false)
+        }
+      }
+    }
+
+    void loadAdminChannels()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const onAddAdminChannel = () => {
+    const nextChannelId = normalizeReplayChannelId(adminChannelDraft)
+    if (!nextChannelId) {
+      setAdminChannelsError('Enter a valid channel id before adding.')
+      return
+    }
+
+    setAdminChannels((current) => (
+      current.includes(nextChannelId)
+        ? current
+        : [...current, nextChannelId]
+    ))
+    setAdminChannelDraft('')
+    setAdminChannelsError(null)
+    setAdminChannelsStatus(null)
+  }
+
+  const onRemoveAdminChannel = (channelId: string) => {
+    setAdminChannels((current) => current.filter((value) => value !== channelId))
+    setAdminChannelsStatus(null)
+  }
+
+  const onApplyAdminChannels = () => {
+    const joined = adminChannels.join(',')
+    setDraftFilters((current) => ({ ...current, channelId: joined }))
+  }
+
+  const onSaveAdminChannels = useCallback(async () => {
+    if (!isAdminUser) return
+
+    setIsAdminChannelsSaving(true)
+    setAdminChannelsError(null)
+    setAdminChannelsStatus(null)
+
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          key: REPLAY_CHANNEL_SETTINGS_KEY,
+          value: JSON.stringify(adminChannels),
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const message = isRecord(payload) && typeof payload.error === 'string'
+          ? payload.error
+          : `Unable to save channel settings (${response.status}).`
+        throw new Error(message)
+      }
+
+      setSavedAdminChannels(adminChannels)
+      setAdminChannelsStatus('Channel presets saved.')
+    } catch (error) {
+      setAdminChannelsError(error instanceof Error ? error.message : 'Unable to save admin replay channel settings.')
+    } finally {
+      setIsAdminChannelsSaving(false)
+    }
+  }, [adminChannels, isAdminUser])
 
   const listErrorCopy = resolveErrorCopy(sessionsQuery.error)
   const detailErrorCopy = resolveDetailErrorCopy(detailQuery.error)
@@ -688,16 +909,125 @@ export function ReplaySessionBrowser() {
             />
           </label>
           <label className="text-[9px] text-white/60">
-            <span className="mb-0.5 block uppercase tracking-[0.08em]">Channel</span>
+            <span className="mb-0.5 block uppercase tracking-[0.08em]">Channel(s)</span>
             <input
               type="text"
               value={draftFilters.channelId}
               onChange={(event) => setDraftFilters((current) => ({ ...current, channelId: event.target.value }))}
-              placeholder="channel id"
+              placeholder="channel ids (comma-separated)"
               className="w-full rounded border border-white/12 bg-black/20 px-1.5 py-1 text-[10px] text-white/85 placeholder:text-white/35 focus:border-emerald-300/40 focus:outline-none"
             />
           </label>
         </div>
+        {isAdminUser && (
+          <div
+            className="mt-2 rounded border border-emerald-300/18 bg-emerald-500/[0.06] px-2 py-2"
+            data-testid="spx-replay-admin-channels-panel"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[9px] uppercase tracking-[0.08em] text-emerald-100/90">
+                Admin Channel Presets
+              </p>
+              {isAdminChannelsLoading && (
+                <span className="text-[9px] text-white/60">Loading...</span>
+              )}
+            </div>
+            <p className="mt-1 text-[9px] text-white/55">
+              Configure reusable Discord channel ids for multi-channel replay filtering.
+            </p>
+
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <input
+                type="text"
+                value={adminChannelDraft}
+                onChange={(event) => {
+                  setAdminChannelDraft(event.target.value)
+                  if (adminChannelsError) setAdminChannelsError(null)
+                }}
+                placeholder="add channel id"
+                className="min-w-[180px] flex-1 rounded border border-white/12 bg-black/20 px-1.5 py-1 text-[10px] text-white/85 placeholder:text-white/35 focus:border-emerald-300/40 focus:outline-none"
+                data-testid="spx-replay-admin-channels-add-input"
+              />
+              <button
+                type="button"
+                onClick={onAddAdminChannel}
+                className="rounded border border-white/15 bg-white/[0.03] px-2 py-1 text-[9px] uppercase tracking-[0.08em] text-white/75 transition-colors hover:text-white"
+                data-testid="spx-replay-admin-channels-add"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={onApplyAdminChannels}
+                disabled={!hasAdminChannels}
+                className={cn(
+                  'rounded border px-2 py-1 text-[9px] uppercase tracking-[0.08em] transition-colors',
+                  hasAdminChannels
+                    ? 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100 hover:bg-emerald-500/20'
+                    : 'cursor-not-allowed border-white/10 bg-white/[0.02] text-white/40',
+                )}
+                data-testid="spx-replay-admin-channels-apply"
+              >
+                Use Presets
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void onSaveAdminChannels()
+                }}
+                disabled={isAdminChannelsLoading || isAdminChannelsSaving || !adminChannelsDirty}
+                className={cn(
+                  'rounded border px-2 py-1 text-[9px] uppercase tracking-[0.08em] transition-colors',
+                  isAdminChannelsLoading || isAdminChannelsSaving || !adminChannelsDirty
+                    ? 'cursor-not-allowed border-white/10 bg-white/[0.02] text-white/40'
+                    : 'border-champagne/45 bg-champagne/12 text-champagne hover:bg-champagne/20',
+                )}
+                data-testid="spx-replay-admin-channels-save"
+              >
+                {isAdminChannelsSaving ? 'Saving...' : 'Save Presets'}
+              </button>
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-1">
+              {adminChannels.length === 0 ? (
+                <span className="rounded border border-white/12 bg-white/[0.03] px-1.5 py-0.5 text-[9px] text-white/50">
+                  No channel presets configured.
+                </span>
+              ) : (
+                adminChannels.map((channelId) => (
+                  <span
+                    key={channelId}
+                    className="inline-flex items-center gap-1 rounded border border-white/14 bg-white/[0.04] px-1.5 py-0.5"
+                    data-testid={`spx-replay-admin-channel-chip-${channelId}`}
+                  >
+                    <span className="font-mono text-[9px] text-white/80">{channelId}</span>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveAdminChannel(channelId)}
+                      className="text-[9px] text-white/55 transition-colors hover:text-rose-200"
+                      aria-label={`Remove ${channelId}`}
+                      data-testid={`spx-replay-admin-channel-remove-${channelId}`}
+                    >
+                      x
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+
+            {(adminChannelsError || adminChannelsStatus) && (
+              <p
+                className={cn(
+                  'mt-1 text-[9px]',
+                  adminChannelsError ? 'text-rose-200' : 'text-emerald-200',
+                )}
+                data-testid="spx-replay-admin-channels-feedback"
+              >
+                {adminChannelsError || adminChannelsStatus}
+              </p>
+            )}
+          </div>
+        )}
         <div className="mt-2 flex items-center gap-1.5">
           <button
             type="button"
@@ -715,7 +1045,7 @@ export function ReplaySessionBrowser() {
           >
             Reset
           </button>
-          <span className="ml-auto text-[9px] text-white/45">Window defaults when blank</span>
+          <span className="ml-auto text-[9px] text-white/45">Use comma-separated channel ids for multi-channel filters</span>
         </div>
       </div>
 
