@@ -1,6 +1,6 @@
 const STATIC_CACHE_NAME = 'tradeitm-static-v7'
 const RUNTIME_CACHE_NAME = 'tradeitm-runtime-v6'
-const API_CACHE_NAME = 'tradeitm-api-v2'
+const API_CACHE_NAME = 'tradeitm-api-v3'
 const JOURNAL_MUTATION_DB_NAME = 'tradeitm-offline-journal'
 const JOURNAL_MUTATION_STORE_NAME = 'mutations'
 const JOURNAL_MUTATION_SYNC_TAG = 'journal-mutation-sync-v1'
@@ -14,6 +14,11 @@ const STATIC_ASSETS = [
 
 const CACHED_FILE_PATTERN = /\.(?:png|jpg|jpeg|gif|svg|webp|ico|woff2?|ttf)$/
 const RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429])
+const API_CACHE_ALLOWLIST = new Set([
+  '/api/health',
+  '/api/config/tabs',
+  '/api/config/roles',
+])
 
 function buildOfflineQueueId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
@@ -269,7 +274,13 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (requestUrl.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request, API_CACHE_NAME))
+    if (API_CACHE_ALLOWLIST.has(requestUrl.pathname)) {
+      event.respondWith(networkFirst(request, API_CACHE_NAME))
+      return
+    }
+
+    // Default strategy for API routes is network-only to avoid stale trading data.
+    event.respondWith(fetch(request))
     return
   }
 

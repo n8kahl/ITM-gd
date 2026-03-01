@@ -1374,7 +1374,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   }, [allTabConfigs, getAllowedTabsForTier, state.allowedTabs, state.profile?.membership_tier, state.profile?.role])
 
   const getMobileTabs = useCallback((): TabConfig[] => {
-    return getVisibleTabs().filter(tab => tab.mobile_visible).slice(0, 5)
+    return getVisibleTabs().filter(tab => tab.mobile_visible)
   }, [getVisibleTabs])
 
   // Keep tabConfigs in state synced with allTabConfigs when they're loaded

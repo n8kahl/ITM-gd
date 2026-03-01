@@ -10,6 +10,7 @@ import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
 import { MemberSidebar } from '@/components/members/member-sidebar'
 import { MobileTopBar } from '@/components/members/mobile-top-bar'
 import { MemberBottomNav } from '@/components/members/mobile-bottom-nav'
+import { InstallCta } from '@/components/pwa/install-cta'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 import { useIsMobile } from '@/hooks/use-is-mobile'
 import { getMemberSectionPath } from '@/lib/member-navigation'
@@ -40,6 +41,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   const previousSectionPathRef = useRef<string | null>(null)
   const isMobile = useIsMobile(1024)
   const prefersReducedMotion = useReducedMotion()
+  const hideMobileNav = pathname.startsWith('/members/spx-command-center')
 
   const {
     isLoading,
@@ -145,6 +147,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Top Bar */}
       <MobileTopBar />
+      <InstallCta immersive={hideMobileNav} />
 
       {/* Main Content Area */}
       <div className={cn(
@@ -160,7 +163,12 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
           }}
         />
 
-        <main className="px-4 py-4 lg:px-8 lg:py-6 pb-[var(--members-bottomnav-h)] lg:pb-8">
+        <main
+          className={cn(
+            'px-4 py-4 lg:px-8 lg:py-6 lg:pb-8',
+            hideMobileNav ? 'pb-6' : 'pb-[var(--members-bottomnav-h)]',
+          )}
+        >
           <motion.div
             key={pathname}
             initial={enterMotion.initial}
@@ -173,7 +181,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Mobile Bottom Nav */}
-      <MemberBottomNav />
+      {!hideMobileNav ? <MemberBottomNav /> : null}
     </div>
   )
 }

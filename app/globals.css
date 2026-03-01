@@ -901,6 +901,51 @@
     padding-bottom: calc(env(safe-area-inset-bottom) + 0.625rem);
   }
 
+  .mobile-sheet-h-92 {
+    height: 92vh;
+    height: 92dvh;
+  }
+
+  .mobile-sheet-max-h-92 {
+    max-height: 92vh;
+    max-height: 92dvh;
+  }
+
+  .mobile-sheet-max-h-90 {
+    max-height: 90vh;
+    max-height: 90dvh;
+  }
+
+  .pb-safe-sheet {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
+  }
+
+  @media (display-mode: standalone) {
+    html,
+    body {
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    [data-mobile-top-bar] {
+      padding-top: env(safe-area-inset-top);
+      min-height: calc(var(--members-topbar-h) + env(safe-area-inset-top));
+      top: 0;
+    }
+
+    [data-mobile-bottom-nav] {
+      bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+      overscroll-behavior: none;
+    }
+
+    [data-mobile-top-bar],
+    [data-mobile-bottom-nav],
+    [data-mobile-bottom-nav] a,
+    [data-mobile-bottom-nav] button {
+      user-select: none;
+    }
+  }
+
   /* Scrollbar styling - Emerald Luxury */
   ::-webkit-scrollbar {
     width: 4px;

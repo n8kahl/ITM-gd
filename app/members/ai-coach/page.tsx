@@ -1169,9 +1169,9 @@ function ChatArea({
                         Analytics.trackAICoachAction('delete_session')
                         onDeleteSession(s.id)
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-white/20 hover:text-red-400 transition-all"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded text-white/20 transition-all hover:bg-red-500/10 hover:text-red-400 touch-manipulation opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 ))

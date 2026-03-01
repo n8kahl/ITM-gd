@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -15,6 +15,8 @@ interface BlurBoxProps {
   containerBounds?: DOMRect | null
 }
 
+type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+
 export function BlurBox({
   id,
   initialX = 50,
@@ -26,9 +28,25 @@ export function BlurBox({
 }: BlurBoxProps) {
   const [size, setSize] = useState({ width: initialWidth, height: initialHeight })
   const [isResizing, setIsResizing] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  const isSelected = selectedId === id
 
-  const handleResize = (e: React.MouseEvent, corner: string) => {
+  useEffect(() => {
+    const handlePointerAway = (event: PointerEvent) => {
+      if (!boxRef.current) return
+      if (boxRef.current.contains(event.target as Node)) return
+      setSelectedId(null)
+    }
+
+    document.addEventListener('pointerdown', handlePointerAway)
+    return () => document.removeEventListener('pointerdown', handlePointerAway)
+  }, [])
+
+  const handleResize = (e: React.PointerEvent<HTMLButtonElement>, corner: ResizeCorner) => {
     e.stopPropagation()
+    e.preventDefault()
+    setSelectedId(id)
     setIsResizing(true)
 
     const startX = e.clientX
@@ -36,7 +54,7 @@ export function BlurBox({
     const startWidth = size.width
     const startHeight = size.height
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const handlePointerMove = (moveEvent: PointerEvent) => {
       const deltaX = moveEvent.clientX - startX
       const deltaY = moveEvent.clientY - startY
 
@@ -59,19 +77,20 @@ export function BlurBox({
       setSize({ width: newWidth, height: newHeight })
     }
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsResizing(false)
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
+      document.removeEventListener('pointermove', handlePointerMove)
+      document.removeEventListener('pointerup', handlePointerUp)
     }
 
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
+    document.addEventListener('pointermove', handlePointerMove)
+    document.addEventListener('pointerup', handlePointerUp)
   }
 
   return (
     <motion.div
-      drag
+      ref={boxRef}
+      drag={!isResizing}
       dragMomentum={false}
       dragElastic={0}
       dragConstraints={containerBounds ? {
@@ -81,8 +100,10 @@ export function BlurBox({
         bottom: containerBounds.height - size.height,
       } : undefined}
       initial={{ x: initialX, y: initialY }}
+      onPointerDown={() => setSelectedId(id)}
       className={cn(
-        "absolute z-20 border-2 border-emerald-500/50 rounded-lg group",
+        "absolute z-20 border-2 border-emerald-500/50 rounded-lg group touch-action-none",
+        isSelected && 'ring-2 ring-emerald-400/70',
         isResizing ? "cursor-nwse-resize" : "cursor-move"
       )}
       style={{
@@ -98,43 +119,85 @@ export function BlurBox({
           e.stopPropagation()
           onDelete(id)
         }}
-        className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-600 z-30"
+        className={cn(
+          "absolute -top-4 -right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-red-500 text-white transition-opacity duration-200 hover:bg-red-600 touch-manipulation",
+          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+        )}
+        aria-label="Delete privacy blur"
       >
-        <X className="w-3 h-3" />
+        <X className="w-4 h-4" />
       </button>
 
       {/* Drag handle (center) */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-emerald-500/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+      <div
+        className={cn(
+          "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-emerald-500/50 transition-opacity duration-200 pointer-events-none",
+          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+      >
         <GripVertical className="w-6 h-6" />
       </div>
 
       {/* Resize handles */}
       {/* Top-left */}
-      <div
-        onMouseDown={(e) => handleResize(e, 'top-left')}
-        className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-emerald-500 rounded-full cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity z-30"
-      />
+      <button
+        type="button"
+        onPointerDown={(e) => handleResize(e, 'top-left')}
+        className={cn(
+          "absolute -top-4 -left-4 z-30 flex h-11 w-11 items-center justify-center cursor-nwse-resize touch-manipulation transition-opacity",
+          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+        aria-label="Resize privacy blur from top left"
+      >
+        <span className="h-3 w-3 rounded-full bg-emerald-500" />
+      </button>
 
       {/* Top-right */}
-      <div
-        onMouseDown={(e) => handleResize(e, 'top-right')}
-        className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-emerald-500 rounded-full cursor-nesw-resize opacity-0 group-hover:opacity-100 transition-opacity z-30"
-      />
+      <button
+        type="button"
+        onPointerDown={(e) => handleResize(e, 'top-right')}
+        className={cn(
+          "absolute -top-4 -right-4 z-30 flex h-11 w-11 items-center justify-center cursor-nesw-resize touch-manipulation transition-opacity",
+          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+        aria-label="Resize privacy blur from top right"
+      >
+        <span className="h-3 w-3 rounded-full bg-emerald-500" />
+      </button>
 
       {/* Bottom-left */}
-      <div
-        onMouseDown={(e) => handleResize(e, 'bottom-left')}
-        className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-emerald-500 rounded-full cursor-nesw-resize opacity-0 group-hover:opacity-100 transition-opacity z-30"
-      />
+      <button
+        type="button"
+        onPointerDown={(e) => handleResize(e, 'bottom-left')}
+        className={cn(
+          "absolute -bottom-4 -left-4 z-30 flex h-11 w-11 items-center justify-center cursor-nesw-resize touch-manipulation transition-opacity",
+          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+        aria-label="Resize privacy blur from bottom left"
+      >
+        <span className="h-3 w-3 rounded-full bg-emerald-500" />
+      </button>
 
       {/* Bottom-right */}
-      <div
-        onMouseDown={(e) => handleResize(e, 'bottom-right')}
-        className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-emerald-500 rounded-full cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity z-30"
-      />
+      <button
+        type="button"
+        onPointerDown={(e) => handleResize(e, 'bottom-right')}
+        className={cn(
+          "absolute -bottom-4 -right-4 z-30 flex h-11 w-11 items-center justify-center cursor-nwse-resize touch-manipulation transition-opacity",
+          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+        )}
+        aria-label="Resize privacy blur from bottom right"
+      >
+        <span className="h-3 w-3 rounded-full bg-emerald-500" />
+      </button>
 
       {/* Privacy indicator */}
-      <div className="absolute bottom-2 right-2 text-xs text-white/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+      <div
+        className={cn(
+          "absolute bottom-2 right-2 text-xs text-white/40 transition-opacity pointer-events-none",
+          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+      >
         Privacy Blur
       </div>
     </motion.div>

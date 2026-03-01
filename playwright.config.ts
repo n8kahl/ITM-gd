@@ -109,8 +109,17 @@ export default defineConfig({
     // All other tests
     {
       name: 'chromium',
-      testIgnore: [/auth-health-check\.spec\.ts/, /ai-coach.*\.spec\.ts/, /journal-mobile\.spec\.ts/],
+      testIgnore: [/auth-health-check\.spec\.ts/, /ai-coach.*\.spec\.ts/, /journal-mobile\.spec\.ts/, /pwa\.spec\.ts/],
       use: { ...devices['Desktop Chrome'] },
+    },
+    // PWA-specific checks require service workers enabled.
+    {
+      name: 'pwa-chromium',
+      testMatch: /pwa\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        serviceWorkers: 'allow',
+      },
     },
     // Mobile testing for responsive auth
     {

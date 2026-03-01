@@ -391,7 +391,7 @@ export function TradeEntrySheet({
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        className="relative z-10 flex w-full max-w-4xl flex-col overflow-hidden rounded-t-xl border border-white/10 bg-[var(--onyx)] animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[90vh] sm:rounded-xl sm:slide-in-from-bottom-0 sm:zoom-in-95"
+        className="relative z-10 flex w-full max-w-4xl mobile-sheet-max-h-92 flex-col overflow-hidden rounded-t-xl border border-white/10 bg-[var(--onyx)] animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[90vh] sm:rounded-xl sm:slide-in-from-bottom-0 sm:zoom-in-95"
         style={{
           transform: isMobileSheet ? `translateY(${sheetDragOffset}px)` : undefined,
           transition: isMobileSheet && !isDraggingSheet
@@ -427,7 +427,7 @@ export function TradeEntrySheet({
           </Button>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-safe-sheet sm:pb-4">
           <div className="mb-4 flex gap-2">
             <Button
               type="button"
@@ -479,7 +479,7 @@ export function TradeEntrySheet({
         </div>
 
         {mode === 'full' && (
-          <div className="sticky bottom-0 z-10 flex shrink-0 items-center justify-end gap-2 border-t border-white/10 bg-[var(--onyx)] p-4">
+          <div className="sticky bottom-0 z-10 flex shrink-0 items-center justify-end gap-2 border-t border-white/10 bg-[var(--onyx)] p-4 pb-safe-sheet sm:pb-4">
             <Button
               type="button"
               onClick={closeWithoutSave}

@@ -363,10 +363,10 @@ function SessionItem({
           e.stopPropagation()
           onDelete()
         }}
-        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-white/30 hover:text-red-400 transition-all"
+        className="inline-flex h-11 w-11 items-center justify-center rounded text-white/30 transition-all hover:bg-red-500/10 hover:text-red-400 touch-manipulation opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
         title="Delete session"
       >
-        <Trash2 className="w-3 h-3" />
+        <Trash2 className="w-4 h-4" />
       </button>
     </div>
   )
