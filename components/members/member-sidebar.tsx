@@ -6,6 +6,7 @@ import Image from 'next/image'
 import {
   LogOut,
   Sparkles,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -55,6 +56,7 @@ export function MemberSidebar() {
 
   const visibleTabs = getVisibleTabs()
   const isExecutive = profile?.membership_tier === 'executive'
+  const canSwitchToAdmin = profile?.role === 'admin'
 
   return (
     <aside className={cn(
@@ -197,13 +199,25 @@ export function MemberSidebar() {
 
       {/* Logout */}
       <div className="px-3 pb-4 pt-2 border-t border-white/[0.06]">
-        <button
-          onClick={signOut}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
-        >
-          <LogOut strokeWidth={1.5} className="w-[18px] h-[18px]" />
-          <span>Sign Out</span>
-        </button>
+        <div className="space-y-1.5">
+          {canSwitchToAdmin ? (
+            <Link
+              href="/admin"
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-ivory hover:bg-white/[0.06] transition-all duration-200"
+            >
+              <ArrowRightLeft strokeWidth={1.5} className="w-[18px] h-[18px]" />
+              <span>Switch to Admin</span>
+            </Link>
+          ) : null}
+
+          <button
+            onClick={signOut}
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+          >
+            <LogOut strokeWidth={1.5} className="w-[18px] h-[18px]" />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </div>
     </aside>
   )
