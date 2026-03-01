@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { toEasternTime } from '../marketHours';
+import { logger } from '../../lib/logger';
 import type { ParsedTrade } from './types';
 
 const MIN_SPX_STRIKE = 4000;
@@ -42,6 +43,93 @@ function isWithinRegularSessionEt(value: Date): boolean {
   const minutes = et.hour * 60 + et.minute;
   const isWeekday = et.dayOfWeek >= 1 && et.dayOfWeek <= 5;
   return isWeekday && minutes >= REGULAR_SESSION_OPEN_MIN && minutes <= REGULAR_SESSION_CLOSE_MIN;
+}
+
+function toShiftedIsoTimestamp(value: string, shiftHours: number): string {
+  const date = parseIsoTimestampWithTimezone(value);
+  if (!date || shiftHours === 0) return value;
+  return new Date(date.getTime() + shiftHours * 60 * 60 * 1000).toISOString();
+}
+
+function collectAllTradeTimestamps(trades: ParsedTrade[]): Date[] {
+  const timestamps: Date[] = [];
+
+  for (const trade of trades) {
+    const entry = parseIsoTimestampWithTimezone(trade.entryTimestamp);
+    if (entry) timestamps.push(entry);
+
+    for (const exitEvent of trade.exitEvents) {
+      const exit = parseIsoTimestampWithTimezone(exitEvent.timestamp);
+      if (exit) timestamps.push(exit);
+    }
+
+    for (const stopLevel of trade.stopLevels) {
+      const stop = parseIsoTimestampWithTimezone(stopLevel.timestamp);
+      if (stop) timestamps.push(stop);
+    }
+  }
+
+  return timestamps;
+}
+
+function countInRegularSession(dates: Date[], shiftHours: number): number {
+  return dates.reduce((count, date) => {
+    const shifted = shiftHours === 0
+      ? date
+      : new Date(date.getTime() + shiftHours * 60 * 60 * 1000);
+    return count + (isWithinRegularSessionEt(shifted) ? 1 : 0);
+  }, 0);
+}
+
+function shiftTradesByHours(trades: ParsedTrade[], shiftHours: number): ParsedTrade[] {
+  if (shiftHours === 0) return trades;
+
+  return trades.map((trade) => ({
+    ...trade,
+    entryTimestamp: toShiftedIsoTimestamp(trade.entryTimestamp, shiftHours),
+    exitEvents: trade.exitEvents.map((exitEvent) => ({
+      ...exitEvent,
+      timestamp: toShiftedIsoTimestamp(exitEvent.timestamp, shiftHours),
+    })),
+    stopLevels: trade.stopLevels.map((stopLevel) => ({
+      ...stopLevel,
+      timestamp: toShiftedIsoTimestamp(stopLevel.timestamp, shiftHours),
+    })),
+  }));
+}
+
+function maybeRepairTimezoneDrift(trades: ParsedTrade[]): ParsedTrade[] {
+  const allDates = collectAllTradeTimestamps(trades);
+  const totalTimestamps = allDates.length;
+  if (totalTimestamps === 0) return trades;
+
+  const baselineInSession = countInRegularSession(allDates, 0);
+  if (baselineInSession > 0) return trades;
+
+  const candidateHourShifts = [-3, -2, -1, 1, 2, 3];
+  let bestShift = 0;
+  let bestInSession = baselineInSession;
+
+  for (const shiftHours of candidateHourShifts) {
+    const inSession = countInRegularSession(allDates, shiftHours);
+    if (inSession > bestInSession) {
+      bestInSession = inSession;
+      bestShift = shiftHours;
+    }
+  }
+
+  const minimumRecovered = Math.ceil(totalTimestamps * 0.8);
+  if (bestShift === 0 || bestInSession < minimumRecovered) {
+    return trades;
+  }
+
+  logger.warn('Trade replay validator applied timezone drift correction.', {
+    shiftHours: bestShift,
+    totalTimestamps,
+    recoveredInSession: bestInSession,
+  });
+
+  return shiftTradesByHours(trades, bestShift);
 }
 
 function normalizeTrade(trade: z.infer<typeof parsedTradeSchema>): ParsedTrade {
@@ -155,10 +243,11 @@ export function validateParsedTrades(input: unknown): ParsedTrade[] {
   const normalizedTrades = schemaResult.data
     .map((trade) => normalizeTrade(trade))
     .sort((a, b) => a.tradeIndex - b.tradeIndex);
+  const normalizedAndRepairedTrades = maybeRepairTimezoneDrift(normalizedTrades);
 
   const issues: TradeValidationIssue[] = [];
 
-  normalizedTrades.forEach((trade, index) => {
+  normalizedAndRepairedTrades.forEach((trade, index) => {
     if (trade.contract.strike < MIN_SPX_STRIKE || trade.contract.strike > MAX_SPX_STRIKE) {
       issues.push({
         path: `trades[${index}].contract.strike`,
@@ -251,5 +340,5 @@ export function validateParsedTrades(input: unknown): ParsedTrade[] {
     throw new TradeValidationError('Parsed trades failed replay validation checks.', issues);
   }
 
-  return normalizedTrades;
+  return normalizedAndRepairedTrades;
 }
