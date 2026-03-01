@@ -162,7 +162,45 @@ describe('trade-day-replay/transcript-parser retry behavior', () => {
     expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
     expect(mockLoggerWarn).toHaveBeenCalledWith(
       'Trade transcript parser retrying after parser/validation failure.',
-      expect.objectContaining({ code: 'TRADE_VALIDATION_FAILED', attempt: 1, nextAttempt: 2 }),
+      expect.objectContaining({
+        code: 'TRADE_VALIDATION_FAILED',
+        attempt: 1,
+        nextAttempt: 2,
+        nextInputTimezone: 'America/New_York',
+      }),
     );
+  });
+
+  it('switches retry input timezone to New York when validation fails on market hours', async () => {
+    const issues = [
+      { path: 'trades[0].entryTimestamp', message: 'Entry timestamp must be within regular market hours (09:30-16:00 ET).' },
+    ];
+    const parsedTrades = [{ tradeIndex: 1 }];
+
+    mockCreate
+      .mockResolvedValueOnce(completionWithContent('{"trades":[{"tradeIndex":1}]}'))
+      .mockResolvedValueOnce(completionWithContent('{"trades":[{"tradeIndex":1}]}'));
+    mockValidateParsedTrades
+      .mockImplementationOnce(() => {
+        throw new TradeValidationError('Parsed trades failed replay validation checks.', issues);
+      })
+      .mockReturnValueOnce(parsedTrades);
+
+    const result = await parseTranscriptToTrades({
+      transcript: 'Filled 1.20',
+      inputTimezone: 'America/Chicago',
+    });
+
+    expect(result).toEqual(parsedTrades);
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+
+    const firstCall = mockCreate.mock.calls[0]?.[0] as { messages: Array<{ content: string }> };
+    const secondCall = mockCreate.mock.calls[1]?.[0] as { messages: Array<{ content: string }> };
+    const firstUserPrompt = firstCall.messages[1]?.content ?? '';
+    const secondUserPrompt = secondCall.messages[1]?.content ?? '';
+
+    expect(firstUserPrompt).toContain('Input timezone: America/Chicago');
+    expect(secondUserPrompt).toContain('Input timezone: America/New_York');
+    expect(secondUserPrompt).toContain('Timezone correction: previous parse likely misread source timezone.');
   });
 });

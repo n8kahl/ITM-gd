@@ -9,7 +9,8 @@ const TRADE_REPLAY_PARSER_MODEL = process.env.TRADE_REPLAY_PARSER_MODEL || CHAT_
 const PARSER_TEMPERATURE = 0;
 const PARSER_MAX_TOKENS = 2400;
 const PARSER_MAX_RETRIES = 1;
-const DEFAULT_INPUT_TIMEZONE = 'America/Chicago';
+const DEFAULT_INPUT_TIMEZONE = 'America/New_York';
+const REPLAY_OUTPUT_TIMEZONE = 'America/New_York';
 
 const SYSTEM_PROMPT = [
   'You are a strict parser for SPX options day-trading Discord transcripts.',
@@ -104,6 +105,20 @@ function buildValidationFeedback(details?: Record<string, unknown>): string | nu
   ].join('\n');
 }
 
+function hasRegularSessionValidationIssue(details?: Record<string, unknown>): boolean {
+  const rawIssues = details?.issues;
+  if (!Array.isArray(rawIssues)) return false;
+  return rawIssues
+    .filter(isValidationIssueLike)
+    .some((issue) => issue.message.toLowerCase().includes('regular market hours'));
+}
+
+function appendFeedback(existing: string | undefined, extra: string): string {
+  if (!existing) return extra;
+  if (existing.includes(extra)) return existing;
+  return `${existing}\n${extra}`;
+}
+
 function buildUserPrompt(params: ParseTranscriptParams, validationFeedback?: string): string {
   const inputTimezone = (params.inputTimezone || DEFAULT_INPUT_TIMEZONE).trim();
   const dateHint = params.dateHint?.trim();
@@ -112,7 +127,7 @@ function buildUserPrompt(params: ParseTranscriptParams, validationFeedback?: str
 
   return [
     `Input timezone: ${inputTimezone}`,
-    'Output timezone: America/New_York',
+    `Output timezone: ${REPLAY_OUTPUT_TIMEZONE}`,
     hintLine,
     'Transcript:',
     params.transcript,
@@ -205,6 +220,7 @@ export async function parseTranscriptToTrades(params: ParseTranscriptParams): Pr
   }
 
   let retryValidationFeedback: string | undefined;
+  let activeInputTimezone = (params.inputTimezone || DEFAULT_INPUT_TIMEZONE).trim() || DEFAULT_INPUT_TIMEZONE;
   const maxAttempts = PARSER_MAX_RETRIES + 1;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -215,7 +231,13 @@ export async function parseTranscriptToTrades(params: ParseTranscriptParams): Pr
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildUserPrompt({ ...params, transcript }, retryValidationFeedback) },
+          {
+            role: 'user',
+            content: buildUserPrompt(
+              { ...params, transcript, inputTimezone: activeInputTimezone },
+              retryValidationFeedback,
+            ),
+          },
         ],
       }));
 
@@ -266,13 +288,26 @@ export async function parseTranscriptToTrades(params: ParseTranscriptParams): Pr
 
       const shouldRetry = RETRYABLE_PARSER_ERROR_CODES.has(parserError.code) && attempt <= PARSER_MAX_RETRIES;
       if (shouldRetry) {
-        retryValidationFeedback = parserError.code === 'TRADE_VALIDATION_FAILED'
-          ? (buildValidationFeedback(parserError.details) || retryValidationFeedback)
-          : retryValidationFeedback;
+        if (parserError.code === 'TRADE_VALIDATION_FAILED') {
+          retryValidationFeedback = buildValidationFeedback(parserError.details) || retryValidationFeedback;
+
+          if (
+            hasRegularSessionValidationIssue(parserError.details)
+            && activeInputTimezone !== REPLAY_OUTPUT_TIMEZONE
+          ) {
+            activeInputTimezone = REPLAY_OUTPUT_TIMEZONE;
+            retryValidationFeedback = appendFeedback(
+              retryValidationFeedback,
+              `Timezone correction: previous parse likely misread source timezone. Assume input timezone is ${REPLAY_OUTPUT_TIMEZONE}.`,
+            );
+          }
+        }
+
         logger.warn('Trade transcript parser retrying after parser/validation failure.', {
           code: parserError.code,
           attempt,
           nextAttempt: attempt + 1,
+          nextInputTimezone: activeInputTimezone,
         });
         continue;
       }
