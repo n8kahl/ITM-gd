@@ -110,6 +110,7 @@ function LoginContent() {
       // Supabase only allow-lists exact redirect URLs; query strings can cause it to fall back to site_url (/).
       try {
         window.sessionStorage.setItem('post_auth_redirect', redirectTo)
+        window.sessionStorage.removeItem('oauth_pkce_retry_attempted')
       } catch {}
       try {
         window.localStorage.setItem('post_auth_redirect', redirectTo)
