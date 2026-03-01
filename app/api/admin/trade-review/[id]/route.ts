@@ -167,13 +167,14 @@ export async function GET(
             .from('coach-review-screenshots')
             .createSignedUrl(path, SIGNED_URL_TTL_SECONDS)
 
-          if (signedError || !signed?.signedUrl) return null
+          if (signedError || !signed?.signedUrl) return ''
           return signed.signedUrl
         }))
 
+        // Preserve one-to-one index alignment with `screenshots`.
         coachNoteWithSignedScreenshots = {
           ...coachNote,
-          screenshot_urls: signedEntries.filter((url): url is string => Boolean(url)),
+          screenshot_urls: signedEntries,
         }
       }
     }

@@ -205,4 +205,23 @@ test.describe('Trade Journal V2', () => {
     await expect(page.getByText('Trade shared successfully!')).toBeVisible()
     await expect.poll(() => shareRequestCount, { timeout: 10_000 }).toBe(1)
   })
+
+  test('shows trade screenshot in entry detail sheet with zoom', async ({ page }) => {
+    await setupJournalCrudMocks(page, [
+      createMockEntry({
+        id: 'entry-screenshot-1',
+        symbol: 'QQQ',
+        screenshot_url: '/logo.png',
+      }),
+    ])
+
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
+
+    await page.getByLabel('Open QQQ trade details').click()
+    await expect(page.getByAltText('QQQ trade screenshot')).toBeVisible()
+
+    await page.getByAltText('QQQ trade screenshot').click()
+    await expect(page.getByAltText('QQQ trade screenshot full size')).toBeVisible()
+    await page.getByLabel('Close screenshot zoom').click()
+  })
 })
