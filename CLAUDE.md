@@ -153,6 +153,12 @@ ITM-gd/
 * **Logic:** `lib/journal/`
 * **Specs:** `docs/specs/TRADE_JOURNAL_V2_SPEC.md`
 
+### Trade Journal Review (Coach)
+* **Admin Routes:** `/admin/trade-review`, `/admin/trade-review/[id]`
+* **Admin APIs:** `/api/admin/trade-review/*`
+* **Member APIs:** `/api/members/journal/[id]/request-review`, `/api/members/journal/[id]/coach-feedback`
+* **Specs:** `docs/specs/TRADE_JOURNAL_REVIEW_EXECUTION_SPEC_2026-03-01.md`
+
 ### Academy
 * **Routes:** `/members/academy`, `/members/academy/modules/[slug]`, `/members/academy/lessons/[id]`
 * **Legacy Redirects:** `/members/library` and `/members/academy-v3/*` redirect to canonical routes.

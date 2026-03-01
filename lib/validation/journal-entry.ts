@@ -60,6 +60,8 @@ const journalEntryBaseSchema = z.object({
   screenshot_url: z.string().url().max(2_048).nullable().optional(),
   screenshot_storage_path: z.string().max(512).nullable().optional(),
   is_favorite: z.boolean().default(false),
+  coach_review_status: z.enum(['pending', 'in_review', 'completed']).nullable().optional(),
+  coach_review_requested_at: z.string().datetime().nullable().optional(),
 })
 
 export const journalEntryCreateSchema = journalEntryBaseSchema

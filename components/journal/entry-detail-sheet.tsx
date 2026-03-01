@@ -10,6 +10,8 @@ import { AIGradeDisplay } from '@/components/journal/ai-grade-display'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { ShareTradeSheet } from '@/components/social/share-trade-sheet'
 import { Analytics } from '@/lib/analytics'
+import { CoachReviewButton } from '@/components/journal/coach-review-button'
+import { CoachFeedbackSection } from '@/components/journal/coach-feedback-section'
 
 interface EntryDetailSheetProps {
   entry: JournalEntry | null
@@ -49,6 +51,19 @@ export function EntryDetailSheet({
   const [localEntry, setLocalEntry] = useState<JournalEntry | null>(entry)
   const [shareOpen, setShareOpen] = useState(false)
   const [alreadyShared, setAlreadyShared] = useState(false)
+
+  const handleCoachReviewStatusChange = (nextStatus: JournalEntry['coach_review_status']) => {
+    setLocalEntry((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        coach_review_status: nextStatus,
+        coach_review_requested_at: nextStatus === 'pending'
+          ? new Date().toISOString()
+          : prev.coach_review_requested_at,
+      }
+    })
+  }
 
   useEffect(() => {
     setLocalEntry(entry)
@@ -189,6 +204,15 @@ export function EntryDetailSheet({
           <Info label="Favorite" value={displayEntry.is_favorite ? 'Yes' : 'No'} />
         </div>
 
+        <div className="mt-3">
+          <CoachReviewButton
+            entryId={displayEntry.id}
+            status={displayEntry.coach_review_status}
+            onStatusChange={handleCoachReviewStatusChange}
+            disabled={disableActions}
+          />
+        </div>
+
         <div className="mt-4 space-y-3 overflow-y-auto pr-1">
           {displayEntry.strategy ? <TextBlock label="Strategy" value={displayEntry.strategy} /> : null}
           {displayEntry.setup_notes ? <TextBlock label="Setup Notes" value={displayEntry.setup_notes} /> : null}
@@ -208,8 +232,8 @@ export function EntryDetailSheet({
               </div>
             </div>
           ) : null}
-
-          {displayEntry.ai_analysis && <AIGradeDisplay analysis={displayEntry.ai_analysis} />}
+          <CoachFeedbackSection entryId={displayEntry.id} />
+          {displayEntry.ai_analysis ? <AIGradeDisplay analysis={displayEntry.ai_analysis} /> : null}
         </div>
 
         <div className="mt-4 flex items-center justify-end gap-2 border-t border-white/10 pt-4">
