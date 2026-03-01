@@ -366,7 +366,7 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       );
     });
 
-    it('target1_hit → scales out 2 contracts + places runner stop for 2', async () => {
+    it('target1_hit → routes partial scale order and defers runner stop resize to lifecycle polling', async () => {
       setupSupabaseMocks({
         credentials: [{
           account_id: MOCK_CREDENTIAL.account_id,
@@ -374,14 +374,12 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
           metadata: MOCK_CREDENTIAL.metadata,
         }],
       });
-      mockPlaceOrder
-        .mockResolvedValueOnce({ id: 'scale-order-001', status: 'pending', raw: {} })
-        .mockResolvedValueOnce({ id: 'runner-stop-001', status: 'pending', raw: {} });
+      mockPlaceOrder.mockResolvedValueOnce({ id: 'scale-order-001', status: 'pending', raw: {} });
 
       await processTradierExecutionTransitions([buildT1Event()]);
 
-      // Two orders: scale partial + runner stop
-      expect(mockPlaceOrder).toHaveBeenCalledTimes(2);
+      // Only the scale order is placed immediately.
+      expect(mockPlaceOrder).toHaveBeenCalledTimes(1);
 
       // Scale order: sell_to_close, limit, qty = floor(4 * 0.65) = 2
       const scalePayload = mockPlaceOrder.mock.calls[0][0];
@@ -390,32 +388,13 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       expect(scalePayload.quantity).toBe(2); // floor(4 * 0.65)
       expect(scalePayload.option_symbol).toBe(entryOrderSymbol);
 
-      // Runner stop order: sell_to_close, stop, qty = 4 - 2 = 2
-      const stopPayload = mockPlaceOrder.mock.calls[1][0];
-      expect(stopPayload.side).toBe('sell_to_close');
-      expect(stopPayload.type).toBe('stop');
-      expect(stopPayload.quantity).toBe(2);
-      // Stop price = entryLimit * 1.015 = 4.40 * 1.015 = 4.466 → rounded to 4.47
-      expect(stopPayload.stop).toBeCloseTo(4.47, 2);
-
-      // State updated with reduced remaining and runner order ID
-      expect(mockUpdateExecutionState).toHaveBeenCalledWith(
-        MOCK_CREDENTIAL.user_id,
-        MOCK_SETUP.id,
-        expect.any(String),
-        expect.objectContaining({
-          remainingQuantity: 2,
-          runnerStopOrderId: 'runner-stop-001',
-        }),
-      );
-
       // T1 fill is reconciled from broker order lifecycle polling.
       expect(mockRecordExecutionFill).not.toHaveBeenCalledWith(
         expect.objectContaining({ side: 'partial', phase: 'target1_hit' }),
       );
     });
 
-    it('target2_hit → cancels runner stop + market exits 2 remaining', async () => {
+    it('target2_hit → routes market exit for remaining quantity when no T1 fill poll has reconciled yet', async () => {
       setupSupabaseMocks({
         credentials: [{
           account_id: MOCK_CREDENTIAL.account_id,
@@ -428,15 +407,16 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
 
       await processTradierExecutionTransitions([buildT2Event()]);
 
-      // Runner stop cancelled
-      expect(mockCancelOrder).toHaveBeenCalledWith('runner-stop-001');
+      // Runner stop cancellation depends on lifecycle-polled state updates.
+      expect(mockCancelOrder).not.toHaveBeenCalled();
 
-      // Market exit for remaining 2 contracts
+      // In this test path we do not run lifecycle polling between T1 and terminal,
+      // so state still carries full quantity.
       expect(mockPlaceOrder).toHaveBeenCalledTimes(1);
       const exitPayload = mockPlaceOrder.mock.calls[0][0];
       expect(exitPayload.side).toBe('sell_to_close');
       expect(exitPayload.type).toBe('market');
-      expect(exitPayload.quantity).toBe(2);
+      expect(exitPayload.quantity).toBe(4);
 
       // State closed
       expect(mockCloseExecutionState).toHaveBeenCalledWith(
@@ -458,7 +438,7 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       __resetExecutionEngineStateForTests();
     });
 
-    it('stop breach → cancels runner stop + market exits remaining', async () => {
+    it('stop breach → routes market exit for full quantity when no T1 fill poll has reconciled yet', async () => {
       // Phase 1: Entry
       mockGetContractRecommendation.mockResolvedValue(MOCK_RECOMMENDATION);
       setupSupabaseMocks({ credentials: [MOCK_CREDENTIAL], portfolio: LARGE_PORTFOLIO });
@@ -501,7 +481,6 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       mockPlaceOrder
         .mockResolvedValueOnce({ id: 'scale-order-002', status: 'pending', raw: {} })
         .mockResolvedValueOnce({ id: 'runner-stop-002', status: 'pending', raw: {} });
-      mockUpdateExecutionState.mockResolvedValue(undefined);
       mockRecordExecutionFill.mockResolvedValue(undefined);
       await processTradierExecutionTransitions([buildT1Event()]);
 
@@ -521,15 +500,16 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
 
       await processTradierExecutionTransitions([buildStopEvent()]);
 
-      // Runner stop cancelled
-      expect(mockCancelOrder).toHaveBeenCalledWith('runner-stop-002');
+      // Runner stop cancellation depends on lifecycle-polled state updates.
+      expect(mockCancelOrder).not.toHaveBeenCalled();
 
-      // Market exit for remaining
+      // In this test path we do not run lifecycle polling between T1 and stop,
+      // so state still carries full quantity.
       expect(mockPlaceOrder).toHaveBeenCalledTimes(1);
       const exitPayload = mockPlaceOrder.mock.calls[0][0];
       expect(exitPayload.side).toBe('sell_to_close');
       expect(exitPayload.type).toBe('market');
-      expect(exitPayload.quantity).toBe(2);
+      expect(exitPayload.quantity).toBe(4);
 
       // State closed with 'stop' reason
       expect(mockCloseExecutionState).toHaveBeenCalledWith(
@@ -692,15 +672,8 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       expect(scalePayload.side).toBe('sell_to_close');
       expect(scalePayload.quantity).toBe(1);
 
-      // State updated with remaining = 0, no runner stop order
-      expect(mockUpdateExecutionState).toHaveBeenCalledWith(
-        MOCK_CREDENTIAL.user_id,
-        MOCK_SETUP.id,
-        expect.any(String),
-        expect.objectContaining({
-          remainingQuantity: 0,
-        }),
-      );
+      // Remaining/runners are now managed via lifecycle polling on actual T1 fill status.
+      expect(mockUpdateExecutionState).not.toHaveBeenCalled();
     });
   });
 });

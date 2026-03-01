@@ -29,8 +29,10 @@ interface PollEntry {
   referencePrice?: number;
   symbol?: string;
   protectiveStopPrice?: number;
-  protectiveStopOrderId?: string | null;
-  protectedQuantity: number;
+  activeStopOrderId?: string | null;
+  stopCoverageQuantity: number;
+  remainingBeforeOrder?: number;
+  postFillStopPrice?: number;
   fillSide?: ExecutionFillSide;
   fillPhase?: ExecutionTransitionPhase;
 }
@@ -58,10 +60,16 @@ export function enqueueOrderForPolling(entry: {
   referencePrice?: number;
   symbol?: string;
   protectiveStopPrice?: number;
+  activeStopOrderId?: string | null;
+  remainingBeforeOrder?: number;
+  postFillStopPrice?: number;
   fillSide?: ExecutionFillSide;
   fillPhase?: ExecutionTransitionPhase;
 }): void {
   const resolvedFillMeta = resolveFillMeta(entry.phase, entry.fillSide, entry.fillPhase);
+  const initialStopCoverage = entry.phase === 't1'
+    ? Math.max(0, entry.remainingBeforeOrder ?? 0)
+    : 0;
 
   pollQueue.set(entry.orderId, {
     ...entry,
@@ -70,8 +78,8 @@ export function enqueueOrderForPolling(entry: {
     placedAt: Date.now(),
     pollCount: 0,
     lastRecordedFillQty: 0,
-    protectiveStopOrderId: null,
-    protectedQuantity: 0,
+    activeStopOrderId: entry.activeStopOrderId ?? null,
+    stopCoverageQuantity: initialStopCoverage,
   });
 
   ensurePollerRunning();
@@ -302,6 +310,9 @@ async function recordFillDelta(
   if (entry.phase === 'entry') {
     await ensureEntryProtectiveStopCoverage(entry, cumulativeFilledQty);
   }
+  if (entry.phase === 't1') {
+    await ensureT1RunnerStopCoverage(entry, cumulativeFilledQty);
+  }
   entry.lastRecordedFillQty = cumulativeFilledQty;
 }
 
@@ -329,11 +340,11 @@ async function ensureEntryProtectiveStopCoverage(
   if (!entry.symbol) return;
   if (!Number.isFinite(entry.protectiveStopPrice) || (entry.protectiveStopPrice ?? 0) <= 0) return;
   if (cumulativeFilledQty <= 0) return;
-  if (cumulativeFilledQty <= entry.protectedQuantity) return;
+  if (cumulativeFilledQty <= entry.stopCoverageQuantity) return;
 
   try {
-    if (entry.protectiveStopOrderId) {
-      await entry.tradier.cancelOrder(entry.protectiveStopOrderId).catch(() => false);
+    if (entry.activeStopOrderId) {
+      await entry.tradier.cancelOrder(entry.activeStopOrderId).catch(() => false);
     }
 
     const stopOrder = await entry.tradier.placeOrder(buildTradierRunnerStopOrder({
@@ -343,8 +354,8 @@ async function ensureEntryProtectiveStopCoverage(
       tag: `spx:${entry.setupId}:${entry.sessionDate}:entry_stop`,
     }));
 
-    entry.protectiveStopOrderId = stopOrder.id;
-    entry.protectedQuantity = cumulativeFilledQty;
+    entry.activeStopOrderId = stopOrder.id;
+    entry.stopCoverageQuantity = cumulativeFilledQty;
 
     await updateExecutionState(entry.userId, entry.setupId, entry.sessionDate, {
       runnerStopOrderId: stopOrder.id,
@@ -355,6 +366,53 @@ async function ensureEntryProtectiveStopCoverage(
       userId: entry.userId,
       setupId: entry.setupId,
       cumulativeFilledQty,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function ensureT1RunnerStopCoverage(
+  entry: PollEntry,
+  cumulativeFilledQty: number,
+): Promise<void> {
+  if (entry.phase !== 't1') return;
+  if (!entry.symbol) return;
+  if (!Number.isFinite(entry.postFillStopPrice) || (entry.postFillStopPrice ?? 0) <= 0) return;
+  const startingRemaining = Math.max(0, entry.remainingBeforeOrder ?? 0);
+  if (startingRemaining <= 0) return;
+
+  const boundedFilledQty = Math.min(startingRemaining, Math.max(0, cumulativeFilledQty));
+  const nextRemaining = Math.max(0, startingRemaining - boundedFilledQty);
+  if (nextRemaining === entry.stopCoverageQuantity) return;
+
+  try {
+    if (entry.activeStopOrderId) {
+      await entry.tradier.cancelOrder(entry.activeStopOrderId).catch(() => false);
+      entry.activeStopOrderId = null;
+    }
+
+    if (nextRemaining > 0) {
+      const runnerStopOrder = await entry.tradier.placeOrder(buildTradierRunnerStopOrder({
+        symbol: entry.symbol,
+        quantity: nextRemaining,
+        stopPrice: entry.postFillStopPrice!,
+        tag: `spx:${entry.setupId}:${entry.sessionDate}:runner_stop`,
+      }));
+      entry.activeStopOrderId = runnerStopOrder.id;
+    }
+
+    entry.stopCoverageQuantity = nextRemaining;
+    await updateExecutionState(entry.userId, entry.setupId, entry.sessionDate, {
+      remainingQuantity: nextRemaining,
+      runnerStopOrderId: entry.activeStopOrderId ?? null,
+    }).catch(() => undefined);
+  } catch (error) {
+    logger.warn('Order lifecycle: failed to update T1 runner stop coverage', {
+      orderId: entry.orderId,
+      userId: entry.userId,
+      setupId: entry.setupId,
+      cumulativeFilledQty,
+      startingRemaining,
       error: error instanceof Error ? error.message : String(error),
     });
   }

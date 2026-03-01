@@ -6,12 +6,11 @@ import { getContractRecommendation } from '../../spx/contractSelector';
 import type { SetupTransitionEvent } from '../../spx/tickEvaluator';
 import {
   upsertExecutionState,
-  updateExecutionState,
   closeExecutionState,
   loadOpenStates,
   type ExecutionActiveState,
 } from '../../spx/executionStateStore';
-import { buildTradierEntryOrder, buildTradierMarketExitOrder, buildTradierRunnerStopOrder, buildTradierScaleOrder } from './orderRouter';
+import { buildTradierEntryOrder, buildTradierMarketExitOrder, buildTradierScaleOrder } from './orderRouter';
 import { formatTradierOccSymbol } from './occFormatter';
 import { TradierClient } from './client';
 import { decryptTradierAccessToken, isTradierProductionRuntimeEnabled } from './credentials';
@@ -448,7 +447,7 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
   const activeStates = Array.from(stateByUserSetup.entries()).filter(([key]) => key.endsWith(suffix));
   if (activeStates.length === 0) return;
 
-  for (const [key, state] of activeStates) {
+  for (const [, state] of activeStates) {
     if (state.remainingQuantity <= 0) continue;
     const partialQuantity = Math.min(
       state.remainingQuantity,
@@ -500,38 +499,8 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
         tag: `spx:${state.setupId}:${state.sessionDate}:t1`,
       }));
 
-      const nextRemaining = Math.max(0, state.remainingQuantity - partialQuantity);
-      let runnerStopOrderId: string | null = state.runnerStopOrderId;
-
       // S6: Move stop to entry + 0.15R instead of flat breakeven
       const runnerStopPrice = Math.max(0.05, state.entryLimitPrice * 1.015);
-
-      if (nextRemaining > 0) {
-        if (runnerStopOrderId) {
-          await tradier.cancelOrder(runnerStopOrderId).catch(() => false);
-        }
-        const runnerOrder = await tradier.placeOrder(buildTradierRunnerStopOrder({
-          symbol: state.symbol,
-          quantity: nextRemaining,
-          stopPrice: runnerStopPrice,
-          tag: `spx:${state.setupId}:${state.sessionDate}:runner_stop`,
-        }));
-        runnerStopOrderId = runnerOrder.id;
-      }
-
-      // S1: Persist state update to Supabase
-      await updateExecutionState(state.userId, state.setupId, state.sessionDate, {
-        remainingQuantity: nextRemaining,
-        runnerStopOrderId,
-      });
-
-      // Update in-memory cache
-      stateByUserSetup.set(key, {
-        ...state,
-        remainingQuantity: nextRemaining,
-        runnerStopOrderId,
-        updatedAt: new Date().toISOString(),
-      });
       enqueueOrderForPolling({
         orderId: partialOrder.id,
         userId: state.userId,
@@ -543,6 +512,10 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
         transitionEventId: event.id,
         direction: event.direction,
         referencePrice: event.price,
+        symbol: state.symbol,
+        activeStopOrderId: state.runnerStopOrderId,
+        remainingBeforeOrder: state.remainingQuantity,
+        postFillStopPrice: runnerStopPrice,
         fillSide: 'partial',
         fillPhase: 'target1_hit',
       });
