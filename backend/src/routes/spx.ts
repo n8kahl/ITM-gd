@@ -254,6 +254,18 @@ function toNullableString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function parseReplayChannelIdsFilter(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+  const normalized = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  if (normalized.length === 0) return [];
+
+  return Array.from(new Set(normalized));
+}
+
 function parseEpochMs(value: unknown): number | null {
   if (typeof value !== 'string') return null;
   const parsed = Date.parse(value);
@@ -635,7 +647,8 @@ router.get('/replay-sessions', async (req: Request, res: Response) => {
       });
     }
 
-    const channelId = toNullableString(req.query.channelId);
+    const channelIds = parseReplayChannelIdsFilter(req.query.channelId);
+    const channelFilter = channelIds.length > 0 ? channelIds.join(',') : null;
     const symbol = toNullableString(req.query.symbol)?.toUpperCase() || null;
 
     let sessionsQuery = supabase
@@ -646,8 +659,10 @@ router.get('/replay-sessions', async (req: Request, res: Response) => {
       .gte('session_date', from)
       .lte('session_date', to);
 
-    if (channelId) {
-      sessionsQuery = sessionsQuery.eq('channel_id', channelId);
+    if (channelIds.length === 1) {
+      sessionsQuery = sessionsQuery.eq('channel_id', channelIds[0]);
+    } else if (channelIds.length > 1) {
+      sessionsQuery = sessionsQuery.in('channel_id', channelIds);
     }
 
     const { data: sessionsData, error: sessionsError } = await sessionsQuery.order('session_date', { ascending: false });
@@ -713,7 +728,7 @@ router.get('/replay-sessions', async (req: Request, res: Response) => {
       meta: {
         from,
         to,
-        channelId,
+        channelId: channelFilter,
         symbol,
         defaultWindowDays: REPLAY_SESSIONS_DEFAULT_WINDOW_DAYS,
         usedDefaultFrom: !parsedFrom,
