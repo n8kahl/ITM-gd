@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Bell, Menu, X, Search, Command, LogOut } from 'lucide-react'
+import { Bell, Menu, X, Search, Command, LogOut, ArrowRightLeft } from 'lucide-react'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { createBrowserClient } from '@supabase/ssr'
 
@@ -100,6 +100,14 @@ export function AdminLayoutShell({ children }: AdminLayoutShellProps) {
              </button>
 
              <div className="h-8 w-[1px] bg-white/10 mx-1" />
+
+             <button
+               onClick={() => router.push('/members')}
+               className="flex items-center gap-1.5 text-xs font-medium text-white/60 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/5 transition-all"
+             >
+               <ArrowRightLeft className="w-3.5 h-3.5" />
+               Members
+             </button>
 
              <button
                onClick={handleLogout}
