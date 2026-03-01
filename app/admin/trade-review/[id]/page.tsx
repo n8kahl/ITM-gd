@@ -48,6 +48,8 @@ interface ApiEnvelope<T> {
   error?: string
 }
 
+type ReferencePanelTab = 'trade_detail' | 'market_context'
+
 async function fetchApi<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     cache: 'no-store',
@@ -136,6 +138,7 @@ function toTitleCase(value: string): string {
 export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewDetailPageProps) {
   const { id: entryId } = use(params)
   const [detail, setDetail] = useState<TradeReviewDetailResponse | null>(null)
+  const [referenceTab, setReferenceTab] = useState<ReferencePanelTab>('trade_detail')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -145,9 +148,12 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
   const [dismissing, setDismissing] = useState(false)
   const [uploading, setUploading] = useState(false)
 
-  const loadDetail = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const loadDetail = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
 
     try {
       const data = await fetchApi<TradeReviewDetailResponse>(`/api/admin/trade-review/${entryId}`)
@@ -155,7 +161,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load trade review detail')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [entryId])
 
@@ -176,7 +182,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
           }),
         },
       )
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setGenerating(false)
     }
@@ -190,7 +196,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
         method,
         body: JSON.stringify(payload),
       })
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setSaving(false)
     }
@@ -202,7 +208,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
       await fetchApi<{ published: boolean }>(`/api/admin/trade-review/${entryId}/publish`, {
         method: 'POST',
       })
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setPublishing(false)
     }
@@ -214,7 +220,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
       await fetchApi<{ dismissed: boolean }>(`/api/admin/trade-review/${entryId}/dismiss`, {
         method: 'POST',
       })
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setDismissing(false)
     }
@@ -253,7 +259,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
         throw new Error('Failed to upload screenshot to storage')
       }
 
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setUploading(false)
     }
@@ -265,7 +271,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
       await fetchApi<{ removed: boolean }>(`/api/admin/trade-review/${entryId}/screenshots?path=${encodeURIComponent(path)}`, {
         method: 'DELETE',
       })
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setUploading(false)
     }
@@ -360,32 +366,77 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <TradeDetailPanel
-              entry={detail.entry}
-              memberDisplayName={detail.member.display_name}
-              memberDiscordUsername={detail.member.discord_username}
-              memberAvatarUrl={detail.member.avatar_url}
-              memberTier={detail.member.tier}
-            />
-            <MarketContextPanel snapshot={detail.coach_note?.market_data_snapshot ?? null} />
-            <CoachWorkspace
-              key={detail.coach_note?.updated_at ?? 'no-note'}
-              entryId={entryId}
-              note={detail.coach_note}
-              activityLog={detail.activity_log}
-              generating={generating}
-              saving={saving}
-              publishing={publishing}
-              dismissing={dismissing}
-              uploading={uploading}
-              onGenerateAI={handleGenerateAI}
-              onSaveDraft={handleSaveDraft}
-              onPublish={handlePublish}
-              onDismiss={handleDismiss}
-              onUploadScreenshot={handleUploadScreenshot}
-              onRemoveScreenshot={handleRemoveScreenshot}
-            />
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+            <section className="space-y-3 xl:col-span-2">
+              <div className="glass-card-heavy rounded-xl border border-white/10 p-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className={`h-9 rounded-lg border text-xs font-medium transition ${
+                      referenceTab === 'trade_detail'
+                        ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
+                        : 'border-white/10 bg-white/5 text-muted-foreground hover:text-ivory'
+                    }`}
+                    onClick={() => setReferenceTab('trade_detail')}
+                  >
+                    Trade Detail
+                  </button>
+                  <button
+                    type="button"
+                    className={`h-9 rounded-lg border text-xs font-medium transition ${
+                      referenceTab === 'market_context'
+                        ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
+                        : 'border-white/10 bg-white/5 text-muted-foreground hover:text-ivory'
+                    }`}
+                    onClick={() => setReferenceTab('market_context')}
+                  >
+                    Market Context
+                  </button>
+                </div>
+              </div>
+
+              {referenceTab === 'trade_detail' ? (
+                <TradeDetailPanel
+                  entry={detail.entry}
+                  memberDisplayName={detail.member.display_name}
+                  memberDiscordUsername={detail.member.discord_username}
+                  memberAvatarUrl={detail.member.avatar_url}
+                  memberTier={detail.member.tier}
+                />
+              ) : (
+                <MarketContextPanel snapshot={detail.coach_note?.market_data_snapshot ?? null} />
+              )}
+            </section>
+
+            <section className="xl:col-span-3">
+              <CoachWorkspace
+                entryId={entryId}
+                note={detail.coach_note}
+                activityLog={detail.activity_log}
+                memberName={detail.member.display_name}
+                memberSymbol={detail.entry.symbol}
+                memberStats={detail.member_stats}
+                memberNotes={{
+                  strategy: detail.entry.strategy,
+                  setupType: detail.entry.setup_type,
+                  setupNotes: detail.entry.setup_notes,
+                  executionNotes: detail.entry.execution_notes,
+                  lessonsLearned: detail.entry.lessons_learned,
+                  deviationNotes: detail.entry.deviation_notes,
+                }}
+                generating={generating}
+                saving={saving}
+                publishing={publishing}
+                dismissing={dismissing}
+                uploading={uploading}
+                onGenerateAI={handleGenerateAI}
+                onSaveDraft={handleSaveDraft}
+                onPublish={handlePublish}
+                onDismiss={handleDismiss}
+                onUploadScreenshot={handleUploadScreenshot}
+                onRemoveScreenshot={handleRemoveScreenshot}
+              />
+            </section>
           </div>
         </>
       ) : null}

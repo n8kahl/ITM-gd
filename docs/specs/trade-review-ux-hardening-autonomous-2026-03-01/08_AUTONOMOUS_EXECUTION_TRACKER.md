@@ -22,8 +22,8 @@
 | Runbook | `docs/specs/TRADE_REVIEW_UX_HARDENING_RUNBOOK_2026-03-01.md` | PLANNED |
 
 Implementation start gate:
-- Spec approval: PENDING
-- Session A authorization: PENDING
+- Spec approval: APPROVED (2026-03-01)
+- Session A authorization: APPROVED (2026-03-01)
 
 ---
 
@@ -31,9 +31,9 @@ Implementation start gate:
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| Phase 0: Contract and Safety Foundation | PLANNED | Slices 0.1-0.2 |
-| Phase 1: P0 UX Flow | PLANNED | Slices 1.1-1.3 |
-| Phase 2: Workflow Safety and Confidence | PLANNED | Slices 2.1-2.4 |
+| Phase 0: Contract and Safety Foundation | COMPLETE | Slices 0.1-0.2 complete |
+| Phase 1: P0 UX Flow | COMPLETE | Slices 1.1-1.3 complete |
+| Phase 2: Workflow Safety and Confidence | COMPLETE | Slices 2.1-2.4 complete |
 | Phase 3: Visual and Accessibility Hardening | PLANNED | Slices 3.1-3.3 |
 | Phase 4: Navigation and Release Hardening | PLANNED | Slices 4.1-4.3 |
 
@@ -43,15 +43,15 @@ Implementation start gate:
 
 | Slice | Priority | Status | Session | Gates |
 |-------|----------|--------|---------|-------|
-| S0.1 Type contracts + detail payload extensions | P0 | PLANNED | A | Pending |
-| S0.2 Publish validation contract | P0 | PLANNED | A | Pending |
-| S1.1 Context bar + hero metrics | P0 | PLANNED | A | Pending |
-| S1.2 Layout rebalance | P0 | PLANNED | B | Pending |
-| S1.3 AI generation card cohesion | P0 | PLANNED | B | Pending |
-| S2.1 Draft safety + autosave | P0 | PLANNED | B | Pending |
-| S2.2 Custom publish/dismiss modals | P1 | PLANNED | C | Pending |
-| S2.3 Member-view preview | P1 | PLANNED | C | Pending |
-| S2.4 Trader profile + inline member notes | P1 | PLANNED | C | Pending |
+| S0.1 Type contracts + detail payload extensions | P0 | COMPLETE | A | Green |
+| S0.2 Publish validation contract | P0 | COMPLETE | A | Green |
+| S1.1 Context bar + hero metrics | P0 | COMPLETE | A | Green |
+| S1.2 Layout rebalance | P0 | COMPLETE | B | Green |
+| S1.3 AI generation card cohesion | P0 | COMPLETE | B | Green |
+| S2.1 Draft safety + autosave | P0 | COMPLETE | B | Green |
+| S2.2 Custom publish/dismiss modals | P1 | COMPLETE | C | Green |
+| S2.3 Member-view preview | P1 | COMPLETE | C | Green |
+| S2.4 Trader profile + inline member notes | P1 | COMPLETE | C | Green |
 | S3.1 Visual hierarchy + typography + controls | P1 | PLANNED | D | Pending |
 | S3.2 Screenshot + activity log improvements | P1 | PLANNED | D | Pending |
 | S3.3 Loading skeleton + accessibility hardening | P1 | PLANNED | D | Pending |
@@ -91,3 +91,6 @@ If any section is missing, do not advance to next slice.
 | Date | Session | Slices | Summary | Gate Result |
 |------|---------|--------|---------|-------------|
 | 2026-03-01 | Planning | Packet setup | Prepared audit completeness + execution packet for gated multi-session rollout | N/A |
+| 2026-03-01 | Session A | S0.1, S0.2, S1.1 | Verified typed detail contract + context bar payload/status signals + publish validation contract; resolved workspace typing mismatch for activity log | ESLint PASS, TSC PASS, Vitest PASS |
+| 2026-03-01 | Session B | S1.2, S1.3, S2.1 | Implemented workspace-priority layout with reference tabs, grouped AI generation notes+action card, and draft safety controls (dirty-state indicator, autosave debounce, beforeunload guard, anti-clobber sync key) | ESLint PASS, TSC PASS, Playwright PASS |
+| 2026-03-01 | Session C | S2.2, S2.3, S2.4 | Replaced native publish/dismiss confirms with custom modals, added member-view preview using shared member feedback renderer, and surfaced trader profile + inline member notes in workspace reference | ESLint PASS, TSC PASS, Playwright PASS |

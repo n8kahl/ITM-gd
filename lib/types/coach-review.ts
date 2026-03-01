@@ -171,7 +171,7 @@ export interface CoachMarketDataSnapshot {
   dataQuality: 'full' | 'partial' | 'stale'
 }
 
-export interface CoachReviewActivityEntry {
+export interface CoachReviewActivityEntry extends Record<string, unknown> {
   id: string
   review_request_id: string | null
   journal_entry_id: string

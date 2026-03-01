@@ -81,6 +81,9 @@ Checklist:
 | Date | Slice | Change | Author | Approved By | Notes |
 |------|-------|--------|--------|-------------|-------|
 | 2026-03-01 | Planning | Prepared completeness addendum + execution packet + autonomous control docs | Orchestrator | Pending implementation kickoff | No product code changes |
+| 2026-03-01 | S0.1 / S0.2 / S1.1 | Executed Session A gates and synchronized typed activity log contract in workspace props to match new detail payload typing | Orchestrator | Self-reviewed | Gates: eslint + tsc + vitest all pass |
+| 2026-03-01 | S1.2 / S1.3 / S2.1 | Implemented reference-tab layout split (2/5 + 3/5), moved AI generation CTA into guided notes card with regenerate semantics, and added autosave + unsaved-change protections | Orchestrator | Self-reviewed | Gates: eslint + tsc + targeted playwright pass |
+| 2026-03-01 | S2.2 / S2.3 / S2.4 | Replaced native confirm dialogs with custom modal confirmations, added member-view preview dialog via shared feedback renderer, and surfaced trader profile + inline member notes within workspace | Orchestrator | Self-reviewed | Gates: eslint + tsc + full admin trade-review playwright pass |
 
 ---
 

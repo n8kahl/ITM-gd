@@ -30,15 +30,17 @@ test.describe('Admin: Trade Review', () => {
 
     await page.getByRole('button', { name: 'Generate AI Analysis' }).click()
     await expect.poll(() => state.aiGeneratedCount, { timeout: 10_000 }).toBe(1)
+    const saveDraftButton = page.getByRole('button', { name: 'Save Draft' })
+    await expect(saveDraftButton).toBeEnabled({ timeout: 10_000 })
 
     const privateNotes = page.getByPlaceholder('Private coach notes. Never shown to members.')
     await privateNotes.fill('Coach-only follow-up: reinforce early scaling discipline.')
 
-    await page.getByRole('button', { name: 'Save Draft' }).click()
+    await saveDraftButton.click()
     await expect.poll(() => state.saveCount, { timeout: 10_000 }).toBeGreaterThan(0)
 
-    page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: 'Publish to Member' }).click()
+    await page.getByRole('button', { name: 'Confirm Publish' }).click()
 
     await expect.poll(() => state.publishCount, { timeout: 10_000 }).toBe(1)
     await expect(page.getByText('completed').first()).toBeVisible()
@@ -49,8 +51,8 @@ test.describe('Admin: Trade Review', () => {
 
     await page.goto(`/admin/trade-review/${TRADE_REVIEW_ENTRY_ID}`, { waitUntil: 'domcontentloaded' })
 
-    page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: 'Dismiss' }).click()
+    await page.getByRole('button', { name: 'Confirm Dismiss' }).click()
 
     await expect.poll(() => state.dismissCount, { timeout: 10_000 }).toBe(1)
   })
