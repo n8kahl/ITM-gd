@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { isIOS, isStandaloneMode } from '@/lib/pwa-utils'
+import { isAndroid, isIOS, isStandaloneMode } from '@/lib/pwa-utils'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -9,22 +9,16 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const INSTALL_DISMISSED_KEY = 'tradeitm:pwa-install-dismissed'
-const INSTALL_VISIT_COUNT_KEY = 'tradeitm:pwa-install-visit-count'
-const INSTALL_VISIT_SESSION_KEY = 'tradeitm:pwa-install-visit-counted'
-
-function parseCount(raw: string | null): number {
-  const value = Number.parseInt(raw || '0', 10)
-  return Number.isFinite(value) && value > 0 ? value : 0
-}
+const INSTALL_DISMISSED_KEY_V2 = 'tradeitm:pwa-install-dismissed:v2'
 
 export function usePwaInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [canInstall, setCanInstall] = useState(false)
   const [isInstalled, setIsInstalled] = useState(false)
   const [isIOSDevice, setIsIOSDevice] = useState(false)
+  const [isAndroidDevice, setIsAndroidDevice] = useState(false)
   const [isStandalone, setIsStandalone] = useState(false)
   const [dismissed, setDismissed] = useState(false)
-  const [visitCount, setVisitCount] = useState(0)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -33,18 +27,14 @@ export function usePwaInstall() {
     const initializeTimer = window.setTimeout(() => {
       const initialStandalone = isStandaloneMode()
       setIsIOSDevice(isIOS())
+      setIsAndroidDevice(isAndroid())
       setIsStandalone(initialStandalone)
       setIsInstalled(initialStandalone)
-      setDismissed(window.localStorage.getItem(INSTALL_DISMISSED_KEY) === '1')
-
-      const storedVisitCount = parseCount(window.localStorage.getItem(INSTALL_VISIT_COUNT_KEY))
-      const shouldIncrementVisit = !window.sessionStorage.getItem(INSTALL_VISIT_SESSION_KEY)
-      const nextVisitCount = shouldIncrementVisit ? storedVisitCount + 1 : storedVisitCount
-      if (shouldIncrementVisit) {
-        window.localStorage.setItem(INSTALL_VISIT_COUNT_KEY, String(nextVisitCount))
-        window.sessionStorage.setItem(INSTALL_VISIT_SESSION_KEY, '1')
-      }
-      setVisitCount(nextVisitCount)
+      const isDismissed = (
+        window.localStorage.getItem(INSTALL_DISMISSED_KEY_V2) === '1'
+        || window.localStorage.getItem(INSTALL_DISMISSED_KEY) === '1'
+      )
+      setDismissed(isDismissed)
       setReady(true)
     }, 0)
 
@@ -99,7 +89,7 @@ export function usePwaInstall() {
 
   const dismiss = useCallback(() => {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(INSTALL_DISMISSED_KEY, '1')
+      window.localStorage.setItem(INSTALL_DISMISSED_KEY_V2, '1')
     }
     setDismissed(true)
   }, [])
@@ -107,18 +97,17 @@ export function usePwaInstall() {
   const shouldShow = useMemo(() => {
     if (!ready) return false
     if (isInstalled || dismissed) return false
-    if (visitCount < 2) return false
     if (canInstall) return true
-    return isIOSDevice && !isStandalone
-  }, [ready, isInstalled, dismissed, visitCount, canInstall, isIOSDevice, isStandalone])
+    return !isStandalone && (isIOSDevice || isAndroidDevice)
+  }, [ready, isInstalled, dismissed, canInstall, isIOSDevice, isAndroidDevice, isStandalone])
 
   return {
     canInstall,
     isInstalled,
     isIOSDevice,
+    isAndroidDevice,
     isStandalone,
     shouldShow,
-    visitCount,
     promptInstall,
     dismiss,
   }

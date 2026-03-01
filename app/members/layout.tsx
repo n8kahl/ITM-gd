@@ -41,7 +41,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   const previousSectionPathRef = useRef<string | null>(null)
   const isMobile = useIsMobile(1024)
   const prefersReducedMotion = useReducedMotion()
-  const hideMobileNav = pathname.startsWith('/members/spx-command-center')
+  const hideMobileNav = false
 
   const {
     isLoading,

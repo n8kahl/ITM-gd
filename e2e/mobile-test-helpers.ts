@@ -130,10 +130,11 @@ export async function prepareMobileMemberShell(page: Page): Promise<void> {
   await setupMobileShellMocks(page)
 }
 
-export async function seedInstallPromptState(page: Page, visitCount: number = 2): Promise<void> {
-  await page.addInitScript((count: number) => {
-    localStorage.setItem('tradeitm:pwa-install-visit-count', String(count))
+export async function seedInstallPromptState(page: Page, _visitCount: number = 2): Promise<void> {
+  await page.addInitScript(() => {
     localStorage.removeItem('tradeitm:pwa-install-dismissed')
+    localStorage.removeItem('tradeitm:pwa-install-dismissed:v2')
+    localStorage.removeItem('tradeitm:pwa-install-visit-count')
     sessionStorage.removeItem('tradeitm:pwa-install-visit-counted')
-  }, visitCount)
+  })
 }

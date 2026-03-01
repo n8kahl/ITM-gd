@@ -93,7 +93,7 @@ export function MemberBottomNav() {
   return (
     <div data-mobile-bottom-nav className="fixed bottom-6 left-4 right-4 z-40 lg:hidden">
       <nav className="glass-card-heavy rounded-2xl border border-white/10 shadow-2xl px-2 pt-2 pb-safe">
-        <div className="flex items-end justify-around gap-1">
+        <div className="flex items-end justify-between gap-1">
           {primaryTabs.map((tab) => {
             const Icon = tab.icon
             const active = isActivePath(pathname, tab)
@@ -106,7 +106,7 @@ export function MemberBottomNav() {
                   Analytics.trackMemberNavItem(tab.label)
                   setMoreOpenPath(null)
                 }}
-                className="relative flex-1 max-w-[84px] flex flex-col items-center justify-center py-1.5"
+                className="relative min-w-0 flex-1 flex flex-col items-center justify-center py-1.5"
                 aria-current={active ? 'page' : undefined}
               >
                 {active && (
@@ -147,7 +147,7 @@ export function MemberBottomNav() {
           })}
 
           {showMoreButton ? (
-            <div ref={moreMenuRef} className="relative flex-1 max-w-[84px] flex flex-col items-center justify-center py-1.5">
+            <div ref={moreMenuRef} className="relative min-w-0 flex-1 flex flex-col items-center justify-center py-1.5">
               <button
                 type="button"
                 onClick={() => {

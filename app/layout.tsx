@@ -10,6 +10,8 @@ import { AppToaster } from '@/components/ui/app-toaster'
 import './globals.css'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://tradeitm.com'
+const PWA_ASSET_VERSION = '20260301'
+const withPwaAssetVersion = (assetPath: string) => `${assetPath}?v=${PWA_ASSET_VERSION}`
 const IOS_SPLASH_SCREENS = [
   {
     href: '/splash/apple-splash-640x1136.png',
@@ -89,7 +91,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: '/',
   },
-  manifest: '/manifest.json',
+  manifest: withPwaAssetVersion('/manifest.json'),
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -97,24 +99,24 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/icons/icon-72x72.png', sizes: '72x72', type: 'image/png' },
-      { url: '/icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
-      { url: '/icons/icon-128x128.png', sizes: '128x128', type: 'image/png' },
-      { url: '/icons/icon-144x144.png', sizes: '144x144', type: 'image/png' },
-      { url: '/icons/icon-152x152.png', sizes: '152x152', type: 'image/png' },
-      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/icons/icon-384x384.png', sizes: '384x384', type: 'image/png' },
-      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+      { url: withPwaAssetVersion('/favicon-16x16.png'), sizes: '16x16', type: 'image/png' },
+      { url: withPwaAssetVersion('/favicon-32x32.png'), sizes: '32x32', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-72x72.png'), sizes: '72x72', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-96x96.png'), sizes: '96x96', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-128x128.png'), sizes: '128x128', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-144x144.png'), sizes: '144x144', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-152x152.png'), sizes: '152x152', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-192x192.png'), sizes: '192x192', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-384x384.png'), sizes: '384x384', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-512x512.png'), sizes: '512x512', type: 'image/png' },
     ],
     shortcut: [
-      { url: '/icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
-      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-96x96.png'), sizes: '96x96', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-192x192.png'), sizes: '192x192', type: 'image/png' },
     ],
     apple: [
-      { url: '/icons/icon-152x152.png', sizes: '152x152', type: 'image/png' },
-      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      { url: withPwaAssetVersion('/icons/icon-152x152.png'), sizes: '152x152', type: 'image/png' },
+      { url: withPwaAssetVersion('/apple-touch-icon.png'), sizes: '180x180', type: 'image/png' },
     ],
   },
   openGraph: {
@@ -152,11 +154,14 @@ export default async function RootLayout({
     <html lang="en" className="dark" data-scroll-behavior="smooth">
       <head>
         <StructuredData nonce={nonce} />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="TradeITM" />
         {IOS_SPLASH_SCREENS.map((screen) => (
           <link
             key={screen.href}
             rel="apple-touch-startup-image"
-            href={screen.href}
+            href={withPwaAssetVersion(screen.href)}
             media={screen.media}
           />
         ))}
