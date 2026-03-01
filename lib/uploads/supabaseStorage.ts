@@ -42,6 +42,91 @@ function buildStoragePath(userId: string, file: File, entryId?: string): string 
   return `${userId}/${folder}/${timestamp}-${random}.${ext}`
 }
 
+type SignedUploadDestination = {
+  uploadUrl: string
+  storagePath: string
+}
+
+async function getSignedUploadDestination(file: File): Promise<SignedUploadDestination> {
+  const res = await fetch('/api/members/journal/screenshot-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType: file.type,
+    }),
+  })
+
+  const payload = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    throw new Error(payload?.error || `Failed to get upload URL (${res.status})`)
+  }
+
+  const uploadUrl = payload?.data?.uploadUrl
+    ?? payload?.uploadUrl
+    // Backward-compatible fallback for older mocks/handlers.
+    ?? payload?.data?.signedUrl
+    ?? payload?.signedUrl
+  const storagePath = payload?.data?.storagePath
+    ?? payload?.storagePath
+
+  if (typeof uploadUrl !== 'string' || uploadUrl.length === 0) {
+    throw new Error('Upload URL response was missing uploadUrl')
+  }
+
+  if (typeof storagePath !== 'string' || storagePath.length === 0) {
+    throw new Error('Upload URL response was missing storagePath')
+  }
+
+  return { uploadUrl, storagePath }
+}
+
+async function uploadViaSignedUrl(
+  file: File,
+): Promise<{ storagePath: string; url: string }> {
+  const { uploadUrl, storagePath } = await getSignedUploadDestination(file)
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type,
+    },
+    body: file,
+  })
+
+  if (!uploadResponse.ok) {
+    throw new Error(`Upload failed (${uploadResponse.status})`)
+  }
+
+  const url = await getSignedUrl(storagePath)
+  return { storagePath, url }
+}
+
+async function uploadViaClientStorage(
+  file: File,
+  userId: string,
+  entryId?: string,
+): Promise<{ storagePath: string; url: string }> {
+  const supabase = createBrowserSupabase()
+  const storagePath = buildStoragePath(userId, file, entryId)
+
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET)
+    .upload(storagePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type,
+    })
+
+  if (uploadError) {
+    throw new Error(`Upload failed: ${uploadError.message}`)
+  }
+
+  const url = await getSignedUrl(storagePath)
+  return { storagePath, url }
+}
+
 /**
  * Upload a screenshot file to Supabase Storage.
  *
@@ -72,37 +157,23 @@ export async function uploadScreenshot(
 
   // --- Upload ---
   onProgress?.({ status: 'uploading', percent: 0 })
-  const supabase = createBrowserSupabase()
-  const storagePath = buildStoragePath(userId, file, entryId)
-
   try {
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET)
-      .upload(storagePath, file, {
-        cacheControl: '3600',
-        upsert: false,
-        contentType: file.type,
-      })
-
-    if (uploadError) {
-      const result: UploadProgress = {
-        status: 'error',
-        error: `Upload failed: ${uploadError.message}`,
-      }
-      onProgress?.(result)
-      return result
+    let uploadResult: { storagePath: string; url: string } | null = null
+    try {
+      // Prefer server-signed upload URLs to avoid client-side RLS/session drift.
+      uploadResult = await uploadViaSignedUrl(file)
+    } catch {
+      // Fallback for older environments/tests where signed upload URL is unavailable.
+      uploadResult = await uploadViaClientStorage(file, userId, entryId)
     }
 
     onProgress?.({ status: 'uploading', percent: 100 })
 
-    // --- Get signed URL from server (private bucket) ---
-    const signedUrl = await getSignedUrl(storagePath)
-
     const result: UploadProgress = {
       status: 'complete',
       percent: 100,
-      url: signedUrl,
-      storagePath,
+      url: uploadResult.url,
+      storagePath: uploadResult.storagePath,
     }
     onProgress?.(result)
     return result
