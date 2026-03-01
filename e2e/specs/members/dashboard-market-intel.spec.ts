@@ -48,7 +48,7 @@ test.describe('Dashboard Market Intelligence Component', () => {
     const marketIntelRegion = page.locator('region[aria-label="Market intelligence"]');
     await expect(marketIntelRegion).toBeVisible();
 
-    const gainersTab = marketIntelRegion.locator('text=/Gainers|Movers/'i);
+    const gainersTab = marketIntelRegion.locator('text=/Gainers|Movers/i');
     const losersTab = marketIntelRegion.locator('text=/Losers/i');
 
     await expect(gainersTab).toBeVisible();

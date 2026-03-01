@@ -49,6 +49,24 @@ function firstRowSymbol(page: Page) {
     .nth(1)
 }
 
+async function pickFilterDate(page: Page, label: 'Start date' | 'End date', day: number) {
+  await page.getByLabel(label).click()
+
+  const previousMonthButton = page.getByRole('button', { name: /previous month/i })
+  const targetDateRegex = new RegExp(`February\\s+${day}.*2026`, 'i')
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const targetDay = page.getByRole('button', { name: targetDateRegex })
+    if (await targetDay.count()) {
+      await targetDay.first().click()
+      return
+    }
+    await previousMonthButton.click()
+  }
+
+  throw new Error(`Unable to select February ${day}, 2026 in ${label} picker`)
+}
+
 test.describe('Trade Journal Filters', () => {
   test.describe.configure({ mode: 'serial' })
 
@@ -61,8 +79,8 @@ test.describe('Trade Journal Filters', () => {
   test('filters by date range', async ({ page }) => {
     await openWithFixtures(page)
 
-    await page.getByLabel('Start date').fill('2026-02-04')
-    await page.getByLabel('End date').fill('2026-02-06')
+    await pickFilterDate(page, 'Start date', 4)
+    await pickFilterDate(page, 'End date', 6)
 
     await expect(page.getByText('TSLA')).toBeVisible()
     await expect(page.getByText('AAPL')).not.toBeVisible()
@@ -82,7 +100,8 @@ test.describe('Trade Journal Filters', () => {
   test('filters by direction', async ({ page }) => {
     await openWithFixtures(page)
 
-    await page.getByLabel('Direction', { exact: true }).selectOption('short')
+    await page.getByLabel('Direction', { exact: true }).click()
+    await page.getByRole('option', { name: 'Short', exact: true }).click()
 
     await expect(page.getByText('TSLA')).toBeVisible()
     await expect(page.getByText('AAPL')).not.toBeVisible()
@@ -92,7 +111,8 @@ test.describe('Trade Journal Filters', () => {
   test('filters by win/loss', async ({ page }) => {
     await openWithFixtures(page)
 
-    await page.getByLabel('Win/loss').selectOption('false')
+    await page.getByLabel('Win/loss').click()
+    await page.getByRole('option', { name: 'Losers', exact: true }).click()
 
     await expect(page.getByText('TSLA')).toBeVisible()
     await expect(page.getByText('AAPL')).not.toBeVisible()
@@ -102,12 +122,15 @@ test.describe('Trade Journal Filters', () => {
   test('sorts by P&L ascending and descending', async ({ page }) => {
     await openWithFixtures(page)
 
-    await page.getByLabel('Sort by').selectOption('pnl')
-    await page.getByLabel('Sort direction').selectOption('asc')
+    await page.getByLabel('Sort by').click()
+    await page.getByRole('option', { name: 'Sort: P&L', exact: true }).click()
+    await page.getByLabel('Sort direction').click()
+    await page.getByRole('option', { name: 'Ascending', exact: true }).click()
 
     await expect(firstRowSymbol(page)).toHaveText('TSLA')
 
-    await page.getByLabel('Sort direction').selectOption('desc')
+    await page.getByLabel('Sort direction').click()
+    await page.getByRole('option', { name: 'Descending', exact: true }).click()
 
     await expect(firstRowSymbol(page)).toHaveText('AAPL')
   })

@@ -15,6 +15,7 @@ import {
   YAxis,
 } from 'recharts'
 import { Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import type { AdvancedAnalyticsResponse } from '@/lib/types/journal'
 
 class ChartErrorBoundary extends Component<{ title: string, children: ReactNode }, { hasError: boolean }> {
@@ -113,14 +114,16 @@ export function AnalyticsDashboard() {
     <section className="space-y-4">
       <div className="flex flex-wrap gap-2">
         {PERIODS.map((value) => (
-          <button
+          <Button
             key={value}
             type="button"
             onClick={() => setPeriod(value)}
-            className={`rounded-md px-3 py-1.5 text-xs ${period === value ? 'bg-emerald-600 text-white' : 'border border-white/10 text-muted-foreground'}`}
+            variant={period === value ? 'default' : 'luxury-outline'}
+            size="sm"
+            className="h-9 px-3 text-xs"
           >
             {value}
-          </button>
+          </Button>
         ))}
       </div>
 

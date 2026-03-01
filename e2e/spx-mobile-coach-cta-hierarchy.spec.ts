@@ -20,7 +20,7 @@ test.describe('SPX mobile coach CTA hierarchy', () => {
     const coachSheet = page.getByTestId('spx-coach-bottom-sheet')
     await expect(coachSheet).toBeVisible()
 
-    const decisionActions = coachSheet.getByTestId('spx-coach-decision-actions')
+    const decisionActions = coachSheet.getByTestId('spx-coach-decision-actions').first()
     await expect(decisionActions).toBeVisible()
     await expect(decisionActions.getByRole('button', { name: /open coach history/i })).toHaveCount(0)
     const actionCount = await decisionActions.getByRole('button').count()

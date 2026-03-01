@@ -3,6 +3,14 @@
 import { useMemo, useState } from 'react'
 import Papa from 'papaparse'
 import { FileSpreadsheet, Loader2, Upload } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { importTradeRowSchema } from '@/lib/validation/journal-entry'
 
 const BROKERS = [
@@ -168,24 +176,31 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
       {step === 1 ? (
         <div className="space-y-3">
           <label className="block text-xs text-muted-foreground">Broker</label>
-          <select
+          <Select
             value={broker}
-            onChange={(event) => setBroker(event.target.value as (typeof BROKERS)[number]['value'])}
-            className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+            onValueChange={(value) => setBroker(value as (typeof BROKERS)[number]['value'])}
           >
-            {BROKERS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+            <SelectTrigger className="h-10 border-white/10 bg-black/20 text-sm text-ivory focus:ring-2 focus:ring-emerald-500/50">
+              <SelectValue placeholder="Select broker" />
+            </SelectTrigger>
+            <SelectContent>
+              {BROKERS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <div className="flex justify-end">
-            <button
+            <Button
               type="button"
               onClick={() => setStep(2)}
-              className="h-10 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500"
+              size="sm"
+              className="h-10 px-4"
             >
               Continue
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
@@ -216,13 +231,15 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
           ) : null}
 
           <div className="flex justify-between">
-            <button
+            <Button
               type="button"
               onClick={() => setStep(1)}
-              className="h-10 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5"
+              variant="luxury-outline"
+              size="sm"
+              className="h-10 px-4"
             >
               Back
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
@@ -275,23 +292,26 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
           </div>
 
           <div className="flex justify-between">
-            <button
+            <Button
               type="button"
               onClick={() => setStep(2)}
-              className="h-10 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5"
+              variant="luxury-outline"
+              size="sm"
+              className="h-10 px-4"
             >
               Back
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
               onClick={runImport}
               disabled={importing}
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-60"
+              size="sm"
+              className="h-10 px-4"
             >
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Confirm Import
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
@@ -307,7 +327,7 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
             <li>Errors: {result.errors}</li>
           </ul>
           <div className="flex justify-end">
-            <button
+            <Button
               type="button"
               onClick={() => {
                 setStep(1)
@@ -316,10 +336,12 @@ export function ImportWizard({ onImported }: ImportWizardProps) {
                 setFileName('')
                 setParseError(null)
               }}
-              className="h-10 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5"
+              variant="luxury-outline"
+              size="sm"
+              className="h-10 px-4"
             >
               Import Another File
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}

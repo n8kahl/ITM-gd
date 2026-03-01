@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { Button } from '@/components/ui/button'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 
 interface DeleteConfirmationModalProps {
@@ -49,14 +50,14 @@ export function DeleteConfirmationModal({ entry, onConfirm, onCancel, busy = fal
   if (typeof document === 'undefined') return null
 
   return createPortal(
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/50 p-4 animate-in fade-in-0 duration-200">
       <div
         ref={modalRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="delete-dialog-title"
         aria-describedby="delete-dialog-description"
-        className="w-full max-w-md rounded-lg border border-white/10 bg-[#111416] p-4"
+        className="w-full max-w-md rounded-lg border border-white/10 bg-[var(--onyx)] p-4 animate-in zoom-in-95 duration-200"
       >
         <h3 id="delete-dialog-title" className="text-sm font-semibold text-ivory">
           Delete trade entry?
@@ -67,23 +68,27 @@ export function DeleteConfirmationModal({ entry, onConfirm, onCancel, busy = fal
         </p>
 
         <div className="mt-4 flex justify-end gap-2">
-          <button
+          <Button
             ref={cancelButtonRef}
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="h-10 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5 disabled:opacity-60"
+            variant="luxury-outline"
+            size="sm"
+            className="h-10 px-4"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className="h-10 rounded-md bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+            variant="destructive"
+            size="sm"
+            className="h-10 px-4"
           >
             Delete
-          </button>
+          </Button>
         </div>
       </div>
     </div>,

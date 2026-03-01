@@ -21,7 +21,13 @@ test.describe('SPX spatial layout viewport guardrails', () => {
       })
 
       await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
-      await page.getByTestId('spx-view-mode-spatial').click()
+      const spatialToggle = page.getByTestId('spx-view-mode-spatial')
+      await expect(spatialToggle).toBeVisible()
+      await expect(spatialToggle).toBeEnabled()
+      if ((await spatialToggle.getAttribute('aria-pressed')) !== 'true') {
+        await spatialToggle.click({ force: true })
+      }
+      await expect(spatialToggle).toHaveAttribute('aria-pressed', 'true')
 
       const chart = page.getByTestId('spx-desktop-spatial')
       const sidebar = page.getByTestId('spx-sidebar-panel')

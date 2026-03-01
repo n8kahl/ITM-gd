@@ -1,6 +1,15 @@
 'use client'
 
 import { Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface QuickEntryFormProps {
   symbol: string
@@ -18,6 +27,9 @@ interface QuickEntryFormProps {
   onPnlChange: (value: string) => void
   onSave: () => void
 }
+
+const inputClassName = 'h-10 border-white/10 bg-white/5 text-sm text-ivory placeholder:text-muted-foreground focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/50'
+const selectClassName = 'h-10 border-white/10 bg-white/5 text-sm text-ivory focus:ring-2 focus:ring-emerald-500/50'
 
 export function QuickEntryForm({
   symbol,
@@ -42,10 +54,10 @@ export function QuickEntryForm({
       <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">Symbol</label>
-          <input
+          <Input
             value={symbol}
             onChange={(event) => onSymbolChange(event.target.value.toUpperCase())}
-            className="h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 text-sm text-ivory"
+            className={inputClassName}
             placeholder="AAPL"
             disabled={isDisabled}
           />
@@ -56,25 +68,30 @@ export function QuickEntryForm({
 
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">Direction</label>
-          <select
+          <Select
             value={direction}
-            onChange={(event) => onDirectionChange(event.target.value as 'long' | 'short')}
-            className="h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 text-sm text-ivory"
+            onValueChange={(value) => onDirectionChange(value as 'long' | 'short')}
             disabled={isDisabled}
           >
-            <option value="long">Long</option>
-            <option value="short">Short</option>
-          </select>
+            <SelectTrigger className={selectClassName}>
+              <SelectValue placeholder="Direction" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="long">Long</SelectItem>
+              <SelectItem value="short">Short</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">Entry Price</label>
-          <input
+          <Input
             value={entryPrice}
             onChange={(event) => onEntryPriceChange(event.target.value)}
             type="number"
+            inputMode="decimal"
             step="0.01"
-            className="h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 text-sm text-ivory"
+            className={inputClassName}
             placeholder="0.00"
             disabled={isDisabled}
           />
@@ -82,12 +99,13 @@ export function QuickEntryForm({
 
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">Exit Price</label>
-          <input
+          <Input
             value={exitPrice}
             onChange={(event) => onExitPriceChange(event.target.value)}
             type="number"
+            inputMode="decimal"
             step="0.01"
-            className="h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 text-sm text-ivory"
+            className={inputClassName}
             placeholder="0.00"
             disabled={isDisabled}
           />
@@ -95,12 +113,13 @@ export function QuickEntryForm({
 
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">P&L</label>
-          <input
+          <Input
             value={pnl}
             onChange={(event) => onPnlChange(event.target.value)}
             type="number"
+            inputMode="decimal"
             step="0.01"
-            className="h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 text-sm text-ivory"
+            className={inputClassName}
             placeholder="Optional"
             disabled={isDisabled}
           />
@@ -108,15 +127,16 @@ export function QuickEntryForm({
       </div>
 
       <div className="flex justify-end">
-        <button
+        <Button
           type="button"
           onClick={onSave}
           disabled={isDisabled}
-          className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+          size="sm"
+          className="h-10 px-4"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Save
-        </button>
+        </Button>
       </div>
     </div>
   )

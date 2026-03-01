@@ -1,4 +1,9 @@
 import type { ChartBar } from '@/lib/api/ai-coach'
+import type {
+  ReplayAnalyticalSnapshot,
+  ReplayDiscordMessage,
+  ReplayDiscordTrade,
+} from '@/lib/trade-day-replay/types'
 
 export type SPXReplayWindowMinutes = 30 | 60 | 120
 export type SPXReplaySpeed = 1 | 2 | 4
@@ -8,6 +13,9 @@ export interface SPXReplayFrame {
   progress: number
   currentBar: ChartBar | null
   visibleBars: ChartBar[]
+  snapshot: ReplayAnalyticalSnapshot | null
+  visibleDiscordMessages: ReplayDiscordMessage[] | null
+  activeDiscordTrade: ReplayDiscordTrade | null
 }
 
 export interface SPXReplayEngine {
@@ -128,6 +136,9 @@ export function createSPXReplayEngine(
         progress: 0,
         currentBar: null,
         visibleBars: [],
+        snapshot: null,
+        visibleDiscordMessages: null,
+        activeDiscordTrade: null,
       }
     }
     const clampedCursor = Math.min(Math.max(cursorIndex, firstCursorIndex), lastCursorIndex)
@@ -141,6 +152,9 @@ export function createSPXReplayEngine(
       progress,
       currentBar: normalizedBars[clampedCursor] ?? null,
       visibleBars,
+      snapshot: null,
+      visibleDiscordMessages: null,
+      activeDiscordTrade: null,
     }
   }
 

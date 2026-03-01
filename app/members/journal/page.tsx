@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { ImagePlus, Plus, Upload } from 'lucide-react'
 import { PageHeader } from '@/components/members/page-header'
+import { Button } from '@/components/ui/button'
 import { JournalFilterBar } from '@/components/journal/journal-filter-bar'
 import { JournalSummaryStats } from '@/components/journal/journal-summary-stats'
 import { JournalTableView } from '@/components/journal/journal-table-view'
@@ -19,6 +20,7 @@ import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
 import { DEFAULT_JOURNAL_FILTERS } from '@/lib/types/journal'
 import { JournalSubNav } from '@/components/journal/journal-sub-nav'
 import { Analytics } from '@/lib/analytics'
+import { SkeletonJournalEntry } from '@/components/ui/skeleton-loader'
 
 const JOURNAL_VIEW_PREF_KEY = 'journal-view-preference-v1'
 const MOBILE_VIEW_MEDIA_QUERY = '(max-width: 767px)'
@@ -101,6 +103,9 @@ export default function JournalPage() {
 
   const [psychPromptEntry, setPsychPromptEntry] = useState<JournalEntry | null>(null)
   const loadEntriesAbortRef = useRef<AbortController | null>(null)
+  const pullStartYRef = useRef<number | null>(null)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [pullRefreshing, setPullRefreshing] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -344,10 +349,59 @@ export default function JournalPage() {
     setEntries((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
   }, [])
 
+  const handlePullTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!isOnline || loading || typeof window === 'undefined') return
+    if (window.scrollY > 0) return
+    pullStartYRef.current = event.touches[0]?.clientY ?? null
+  }, [isOnline, loading])
+
+  const handlePullTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (pullStartYRef.current == null || typeof window === 'undefined') return
+    if (window.scrollY > 0) {
+      pullStartYRef.current = null
+      setPullDistance(0)
+      return
+    }
+
+    const currentY = event.touches[0]?.clientY ?? pullStartYRef.current
+    const delta = currentY - pullStartYRef.current
+    if (delta <= 0) {
+      setPullDistance(0)
+      return
+    }
+
+    setPullDistance(Math.min(delta * 0.45, 96))
+  }, [])
+
+  const handlePullTouchEnd = useCallback(() => {
+    const shouldRefresh = pullDistance >= 56 && isOnline && !loading
+    pullStartYRef.current = null
+    setPullDistance(0)
+
+    if (shouldRefresh) {
+      setPullRefreshing(true)
+      void loadEntries().finally(() => setPullRefreshing(false))
+    }
+  }, [isOnline, loadEntries, loading, pullDistance])
+
   const disableActions = !isOnline
 
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4"
+      onTouchStart={handlePullTouchStart}
+      onTouchMove={handlePullTouchMove}
+      onTouchEnd={handlePullTouchEnd}
+      onTouchCancel={handlePullTouchEnd}
+    >
+      {(pullDistance > 0 || pullRefreshing) ? (
+        <div className="sticky top-0 z-20 flex justify-center">
+          <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
+            {pullRefreshing ? 'Refreshing entries...' : (pullDistance >= 56 ? 'Release to refresh' : 'Pull to refresh')}
+          </div>
+        </div>
+      ) : null}
+
       <PageHeader
         title="Trade Journal"
         subtitle="Manual-first journaling with clean analytics and import workflows."
@@ -357,20 +411,22 @@ export default function JournalPage() {
         ]}
         actions={(
           <>
-            <button
+            <Button
               type="button"
               onClick={() => {
                 Analytics.trackJournalAction('import')
                 setShowImportWizard((prev) => !prev)
               }}
               disabled={disableActions}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+              variant="luxury-outline"
+              size="sm"
+              className="h-10 px-3"
             >
               <Upload className="h-4 w-4" />
               Import
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
               onClick={() => {
                 Analytics.trackJournalAction('upload_screenshot')
@@ -378,13 +434,15 @@ export default function JournalPage() {
                 setScreenshotQuickAddOpen(true)
               }}
               disabled={disableActions}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+              variant="luxury-outline"
+              size="sm"
+              className="h-10 px-3"
             >
               <ImagePlus className="h-4 w-4" />
               Screenshot
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
               onClick={() => {
                 Analytics.trackJournalAction('new_entry')
@@ -392,11 +450,12 @@ export default function JournalPage() {
                 setSheetOpen(true)
               }}
               disabled={disableActions}
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+              size="sm"
+              className="h-10 px-3"
             >
               <Plus className="h-4 w-4" />
               New Entry
-            </button>
+            </Button>
           </>
         )}
       />
@@ -404,7 +463,7 @@ export default function JournalPage() {
       <JournalSubNav />
 
       {!isOnline ? (
-        <div className="rounded-md border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">
           You&apos;re offline. Journal is in read-only cache mode until your connection returns.
         </div>
       ) : null}
@@ -439,7 +498,7 @@ export default function JournalPage() {
         availableTags={availableTags}
       />
 
-      <JournalSummaryStats entries={entries} />
+      <JournalSummaryStats entries={entries} loading={loading} />
 
       {error ? (
         <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
@@ -448,10 +507,30 @@ export default function JournalPage() {
       ) : null}
 
       {loading ? (
-        <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-sm text-muted-foreground">Loading entries...</div>
+        <div className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <SkeletonJournalEntry key={`journal-loading-${index}`} />
+          ))}
+        </div>
       ) : entries.length === 0 ? (
-        <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-sm text-muted-foreground">
-          No journal entries found. Add your first trade to get started.
+        <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-center">
+          <p className="text-base font-medium text-ivory">Start tracking your edge</p>
+          <p className="mt-1 text-sm text-muted-foreground">No journal entries found yet.</p>
+          <div className="mt-4">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                Analytics.trackJournalAction('new_entry')
+                setEditEntry(null)
+                setSheetOpen(true)
+              }}
+              disabled={disableActions}
+            >
+              <Plus className="h-4 w-4" />
+              Add First Trade
+            </Button>
+          </div>
         </div>
       ) : filters.view === 'cards' ? (
         <JournalCardView
@@ -521,28 +600,32 @@ export default function JournalPage() {
       />
 
       {deleteTarget ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-lg border border-white/10 bg-[#111416] p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 animate-in fade-in-0 duration-200">
+          <div className="w-full max-w-md rounded-lg border border-white/10 bg-[var(--onyx)] p-4 animate-in zoom-in-95 duration-200">
             <h3 className="text-sm font-semibold text-ivory">Delete trade entry?</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               {deleteTarget.symbol} ({deleteTarget.trade_date.slice(0, 10)}) with P&L {deleteTarget.pnl ?? '—'} will be deleted.
             </p>
             <div className="mt-4 flex justify-end gap-2">
-              <button
+              <Button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="h-10 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5"
+                variant="luxury-outline"
+                size="sm"
+                className="h-10 px-4"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => void handleDeleteConfirmed()}
                 disabled={deleteBusy}
-                className="h-10 rounded-md bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-60"
+                variant="destructive"
+                size="sm"
+                className="h-10 px-4"
               >
                 {deleteBusy ? 'Deleting...' : 'Delete'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -14,7 +14,7 @@ test.describe('SPX context split', () => {
 
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
 
-    await expect(page.getByText(/SPX \d/).first()).toBeVisible()
+    await expect(page.getByTestId('spx-header-overlay')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Setup Feed' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'AI Coach' })).toBeVisible()
 

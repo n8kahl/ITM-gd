@@ -11,6 +11,7 @@ import { GEXLandscape } from '@/components/spx-command-center/gex-landscape'
 import { LevelMatrix } from '@/components/spx-command-center/level-matrix'
 import { SPXOptimizerScorecardPanel } from '@/components/spx-command-center/optimizer-scorecard-panel'
 import { PostTradePanel } from '@/components/spx-command-center/post-trade-panel'
+import { ReplaySessionBrowser } from '@/components/spx-command-center/replay-session-browser'
 import { SetupFeed } from '@/components/spx-command-center/setup-feed'
 import { SPXChart } from '@/components/spx-command-center/spx-chart'
 import { FlowTicker } from '@/components/spx-command-center/flow-ticker'
@@ -155,6 +156,7 @@ export function SPXDesktopSidebarSurface({
       {showContractSelector && <ContractSelector />}
       {showInlineCoachFeed && coachPanel}
       {showDecisionContext && <DecisionContext />}
+      <ReplaySessionBrowser />
 
       {showAnalytics && (
         <details
@@ -247,6 +249,7 @@ export function SPXSpatialSidebarContent({
       {showContractSelector && <ContractSelector />}
       {showInlineCoachFeed && coachPanel}
       {showDecisionContext && <DecisionContext />}
+      <ReplaySessionBrowser />
       {analyticsDrawer}
     </div>
   )

@@ -31,7 +31,8 @@ test.describe('Trade Journal V2', () => {
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByRole('heading', { name: 'Trade Journal' })).toBeVisible()
-    await expect(page.getByText('No journal entries found. Add your first trade to get started.')).toBeVisible()
+    await expect(page.getByText('Start tracking your edge')).toBeVisible()
+    await expect(page.getByText('No journal entries found yet.')).toBeVisible()
   })
 
   test('creates entry via quick form', async ({ page }) => {
@@ -60,10 +61,13 @@ test.describe('Trade Journal V2', () => {
 
     await page.getByRole('button', { name: 'New Entry' }).click()
     await page.getByRole('button', { name: 'Full Form' }).click()
+    const tradeDialog = page.locator('[role="dialog"]').first()
 
     await page.locator('input[placeholder="AAPL"]').fill('MSFT')
-    await page.locator('select').first().selectOption('short')
-    await page.locator('select').nth(1).selectOption('call')
+    await tradeDialog.getByLabel('Direction', { exact: true }).click()
+    await page.getByRole('option', { name: 'Short', exact: true }).click()
+    await tradeDialog.getByLabel('Contract Type', { exact: true }).click()
+    await page.getByRole('option', { name: 'Call', exact: true }).click()
 
     await page.locator('label', { hasText: 'Entry Price' }).locator('..').locator('input').fill('12.5')
     await page.locator('label', { hasText: 'Exit Price' }).locator('..').locator('input').fill('14.2')
@@ -101,7 +105,8 @@ test.describe('Trade Journal V2', () => {
 
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
-    await page.getByLabel('View').selectOption('cards')
+    await page.getByLabel('View').click()
+    await page.getByRole('option', { name: 'Cards', exact: true }).click()
     await page.getByRole('button', { name: 'Edit' }).first().click()
 
     await page.locator('label').filter({ hasText: /^P&L$/ }).locator('..').locator('input').first().fill('200')
@@ -124,14 +129,15 @@ test.describe('Trade Journal V2', () => {
 
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
-    await page.getByLabel('View').selectOption('cards')
+    await page.getByLabel('View').click()
+    await page.getByRole('option', { name: 'Cards', exact: true }).click()
     await page.getByRole('button', { name: 'Delete' }).first().click()
 
     await expect(page.getByText('Delete trade entry?')).toBeVisible()
     await page.getByRole('button', { name: 'Delete' }).nth(1).click()
 
     await expect(page.getByRole('heading', { name: 'NVDA' })).toHaveCount(0)
-    await expect(page.getByText('No journal entries found. Add your first trade to get started.')).toBeVisible()
+    await expect(page.getByText('Start tracking your edge')).toBeVisible()
   })
 
   test('cancel delete does not remove entry', async ({ page }) => {
@@ -145,7 +151,8 @@ test.describe('Trade Journal V2', () => {
 
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
-    await page.getByLabel('View').selectOption('cards')
+    await page.getByLabel('View').click()
+    await page.getByRole('option', { name: 'Cards', exact: true }).click()
     await page.getByRole('button', { name: 'Delete' }).first().click()
 
     await expect(page.getByText('Delete trade entry?')).toBeVisible()

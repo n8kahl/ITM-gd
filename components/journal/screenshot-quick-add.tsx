@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ImagePlus, Loader2, X } from 'lucide-react'
 import Image from 'next/image'
@@ -103,7 +103,7 @@ function ScreenshotQuickAddDialog({
   const [saveResult, setSaveResult] = useState<{ created: number; failed: number } | null>(null)
 
   const hasMultiplePositions = (analysis?.positionCount ?? 0) > 1
-  const validPositions = analysis?.positions.filter(isValidPosition) ?? []
+  const validPositions = useMemo(() => analysis?.positions.filter(isValidPosition) ?? [], [analysis?.positions])
 
   useFocusTrap({
     active: !uploading,
@@ -408,7 +408,7 @@ function ScreenshotQuickAddDialog({
       setError(err instanceof Error ? err.message : 'Save failed')
       setUploading(false)
     }
-  }, [analysis, buildEntryPayload, file, hasMultiplePositions, notes, onEntryCreated, selectedPositions, symbol, validPositions])
+  }, [analysis, buildEntryPayload, file, hasMultiplePositions, onEntryCreated, selectedPositions, symbol, validPositions])
 
   return (
     <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6">
@@ -418,7 +418,7 @@ function ScreenshotQuickAddDialog({
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        className="relative z-10 w-full max-w-2xl rounded-t-xl border border-white/10 bg-[#101315] p-6 sm:rounded-xl"
+        className="relative z-10 w-full max-w-2xl rounded-t-xl border border-white/10 bg-[var(--onyx)] p-6 sm:rounded-xl"
       >
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -429,7 +429,7 @@ function ScreenshotQuickAddDialog({
             type="button"
             onClick={onClose}
             disabled={uploading}
-            className="rounded-md border border-white/10 p-2 text-muted-foreground hover:text-ivory disabled:opacity-60"
+            className="rounded-md border border-white/10 p-2 text-muted-foreground transition-colors hover:bg-white/10 hover:text-ivory focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 disabled:opacity-60"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -458,7 +458,7 @@ function ScreenshotQuickAddDialog({
                 <button
                   type="button"
                   onClick={handlePasteFromClipboard}
-                  className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                  className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
                 >
                   <ImagePlus className="h-4 w-4" />
                   Paste from Clipboard
@@ -467,7 +467,7 @@ function ScreenshotQuickAddDialog({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 rounded-md border border-white/10 px-4 py-2 text-sm text-ivory hover:bg-white/5"
+                  className="inline-flex items-center gap-2 rounded-md border border-white/10 px-4 py-2 text-sm text-ivory transition-colors hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
                 >
                   Upload File
                 </button>
@@ -502,7 +502,7 @@ function ScreenshotQuickAddDialog({
                     setSelectedPositions(new Set())
                     setSaveResult(null)
                   }}
-                  className="absolute right-2 top-2 rounded-md bg-black/80 p-1.5 text-red-300 hover:bg-black"
+                  className="absolute right-2 top-2 rounded-md bg-black/80 p-1.5 text-red-300 transition-colors hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
                   aria-label="Remove screenshot"
                 >
                   <X className="h-4 w-4" />
@@ -530,7 +530,7 @@ function ScreenshotQuickAddDialog({
                         type="button"
                         onClick={selectAllPositions}
                         disabled={uploading}
-                        className="text-[11px] text-emerald-300 hover:text-emerald-200"
+                        className="text-[11px] text-emerald-300 transition-colors hover:text-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
                       >
                         {selectedPositions.size === validPositions.length ? 'Deselect All' : 'Select All'}
                       </button>
@@ -604,7 +604,7 @@ function ScreenshotQuickAddDialog({
                                 e.stopPropagation()
                                 setSymbol(normalizeSymbol(pos.symbol))
                               }}
-                              className="shrink-0 rounded border border-emerald-500/30 px-2 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-500/10"
+                              className="shrink-0 rounded border border-emerald-500/30 px-2 py-0.5 text-[10px] text-emerald-200 transition-colors hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
                             >
                               Use
                             </button>
@@ -622,7 +622,7 @@ function ScreenshotQuickAddDialog({
                           key={action.id}
                           type="button"
                           onClick={() => openAICoach(`${action.label}: ${action.description}`)}
-                          className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/80 hover:border-emerald-500/30 hover:text-emerald-200"
+                          className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/80 transition-colors hover:border-emerald-500/30 hover:text-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50"
                           title={action.description}
                         >
                           {action.label}
@@ -645,7 +645,7 @@ function ScreenshotQuickAddDialog({
                     onChange={(e) => setSymbol(e.target.value.toUpperCase())}
                     placeholder="e.g., AAPL"
                     disabled={uploading}
-                    className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory placeholder:text-muted-foreground disabled:opacity-60"
+                    className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory placeholder:text-muted-foreground transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-60"
                   />
                 </div>
               )}
@@ -658,7 +658,7 @@ function ScreenshotQuickAddDialog({
                   placeholder="What made you take this trade?"
                   disabled={uploading}
                   rows={2}
-                  className="w-full rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-ivory placeholder:text-muted-foreground disabled:opacity-60"
+                  className="w-full rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-ivory placeholder:text-muted-foreground transition-colors hover:border-white/20 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-60"
                 />
               </div>
             </div>
@@ -675,7 +675,7 @@ function ScreenshotQuickAddDialog({
                 type="button"
                 onClick={onClose}
                 disabled={uploading}
-                className="h-10 rounded-md border border-white/10 px-4 text-sm text-muted-foreground hover:text-ivory disabled:opacity-60"
+                className="h-10 rounded-md border border-white/10 px-4 text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-ivory focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -683,7 +683,7 @@ function ScreenshotQuickAddDialog({
                 type="button"
                 onClick={handleSave}
                 disabled={uploading || (hasMultiplePositions && selectedPositions.size === 0 && !symbol.trim())}
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {uploading ? (
                   <>

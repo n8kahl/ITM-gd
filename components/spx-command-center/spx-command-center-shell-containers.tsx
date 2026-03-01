@@ -73,63 +73,50 @@ export function SPXDesktopSurfaceContainer({
   return (
     <motion.div variants={controller.itemVariants} className="relative h-[calc(100vh-56px)] overflow-hidden">
       <div className="absolute inset-0">
-        <div
-          aria-hidden={!desktopViewPolicy.isClassicView}
-          className={cn(
-            'absolute inset-0 transition-opacity duration-150',
-            desktopViewPolicy.isClassicView
-              ? 'opacity-100 pointer-events-auto'
-              : 'opacity-0 pointer-events-none',
-          )}
-        >
-          <SPXDesktopSurfaceOrchestrator {...classicDesktopOrchestratorProps} />
-          <div className="h-full pb-16 pt-16">
-            {classicDesktopLayoutPolicy.showSkeleton ? (
-              <SPXPanelSkeleton />
-            ) : (
-              <PanelGroup
-                autoSaveId={DESKTOP_CLASSIC_LAYOUT_AUTOSAVE_ID}
-                direction="horizontal"
-                className="h-full"
-                data-testid={classicDesktopLayoutPolicy.panelGroupTestId}
-              >
-                <Panel
-                  defaultSize={classicDesktopLayoutPolicy.mainPanelDefaultSize}
-                  minSize={classicDesktopLayoutPolicy.mainPanelMinSize}
+        {desktopViewPolicy.isClassicView ? (
+          <div className="absolute inset-0">
+            <SPXDesktopSurfaceOrchestrator {...classicDesktopOrchestratorProps} />
+            <div className="h-full pb-16 pt-16">
+              {classicDesktopLayoutPolicy.showSkeleton ? (
+                <SPXPanelSkeleton />
+              ) : (
+                <PanelGroup
+                  autoSaveId={DESKTOP_CLASSIC_LAYOUT_AUTOSAVE_ID}
+                  direction="horizontal"
+                  className="h-full"
+                  data-testid={classicDesktopLayoutPolicy.panelGroupTestId}
                 >
-                  <SPXDesktopMainSurface
-                    className="pr-1"
-                    {...desktopMainSurfaceProps}
-                  />
-                </Panel>
+                  <Panel
+                    defaultSize={classicDesktopLayoutPolicy.mainPanelDefaultSize}
+                    minSize={classicDesktopLayoutPolicy.mainPanelMinSize}
+                  >
+                    <SPXDesktopMainSurface
+                      className="pr-1"
+                      {...desktopMainSurfaceProps}
+                    />
+                  </Panel>
 
-                <PanelResizeHandle className="w-2 cursor-col-resize bg-transparent transition-colors hover:bg-emerald-500/15 active:bg-emerald-500/25" />
+                  <PanelResizeHandle className="w-2 cursor-col-resize bg-transparent transition-colors hover:bg-emerald-500/15 active:bg-emerald-500/25" />
 
-                <Panel
-                  defaultSize={classicDesktopLayoutPolicy.sidebarPanelDefaultSize}
-                  minSize={classicDesktopLayoutPolicy.sidebarPanelMinSize}
-                >
-                  <SPXDesktopSidebarSurface
-                    className="pl-1"
-                    {...desktopSidebarSurfaceProps}
-                  />
-                </Panel>
-              </PanelGroup>
-            )}
+                  <Panel
+                    defaultSize={classicDesktopLayoutPolicy.sidebarPanelDefaultSize}
+                    minSize={classicDesktopLayoutPolicy.sidebarPanelMinSize}
+                  >
+                    <SPXDesktopSidebarSurface
+                      className="pl-1"
+                      {...desktopSidebarSurfaceProps}
+                    />
+                  </Panel>
+                </PanelGroup>
+              )}
+            </div>
           </div>
-        </div>
-        <div
-          aria-hidden={desktopViewPolicy.isClassicView}
-          className={cn(
-            'absolute inset-0 transition-opacity duration-150',
-            desktopViewPolicy.isClassicView
-              ? 'opacity-0 pointer-events-none'
-              : 'opacity-100 pointer-events-auto',
-          )}
-        >
-          <SPXDesktopSpatialCanvas {...desktopSpatialCanvasProps} />
-          <SPXDesktopSurfaceOrchestrator {...spatialDesktopOrchestratorProps} />
-        </div>
+        ) : (
+          <div className="absolute inset-0">
+            <SPXDesktopSpatialCanvas {...desktopSpatialCanvasProps} />
+            <SPXDesktopSurfaceOrchestrator {...spatialDesktopOrchestratorProps} />
+          </div>
+        )}
       </div>
     </motion.div>
   )

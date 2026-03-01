@@ -24,6 +24,17 @@ async function stabilizePage(page: Page): Promise<void> {
   await page.waitForTimeout(400)
 }
 
+async function ensureSpatialMode(page: Page): Promise<void> {
+  const spatialToggle = page.getByTestId('spx-view-mode-spatial')
+  await expect(spatialToggle).toBeVisible()
+  await expect(spatialToggle).toBeEnabled()
+  if ((await spatialToggle.getAttribute('aria-pressed')) !== 'true') {
+    await spatialToggle.click({ force: true })
+  }
+  await expect(spatialToggle).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('spx-desktop-spatial')).toBeVisible({ timeout: 12_000 })
+}
+
 test.describe('SPX spatial visual regression', () => {
   test('desktop evaluate mode baseline', async ({ page }) => {
     await page.setViewportSize({ width: 1728, height: 1117 })
@@ -37,7 +48,7 @@ test.describe('SPX spatial visual regression', () => {
     })
 
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
-    await page.getByTestId('spx-view-mode-spatial').click()
+    await ensureSpatialMode(page)
     await page.keyboard.press('j')
 
     await expect(page.getByTestId('spx-desktop-spatial')).toBeVisible()
@@ -69,7 +80,7 @@ test.describe('SPX spatial visual regression', () => {
     })
 
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
-    await page.getByTestId('spx-view-mode-spatial').click()
+    await ensureSpatialMode(page)
 
     const cone = page.getByTestId('spx-probability-cone-svg')
     await expect(cone).toBeVisible()
