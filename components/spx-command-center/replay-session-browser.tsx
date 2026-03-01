@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { SPXRequestError, useSPXQuery } from '@/hooks/use-spx-api'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { postSPX, SPXRequestError, useSPXQuery } from '@/hooks/use-spx-api'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { cn } from '@/lib/utils'
 
 type ReplaySessionListRow = {
@@ -57,6 +58,22 @@ type ReplaySessionDetailResponse = {
     messages: number
   }
   trades: ReplayDetailTrade[]
+}
+
+type ReplayJournalSaveResponse = {
+  sessionId: string
+  parsedTradeId: string | null
+  symbol: string | null
+  count: number
+  createdCount: number
+  existingCount: number
+  results: Array<{
+    journalEntryId: string
+    parsedTradeId: string | null
+    importId: string
+    replayBacklink: string
+    status: 'created' | 'existing'
+  }>
 }
 
 type LocalFilters = {
@@ -219,10 +236,18 @@ function resolveDetailErrorCopy(error: Error | undefined): string {
 }
 
 export function ReplaySessionBrowser() {
+  const journalSaveLockRef = useRef(false)
   const [draftFilters, setDraftFilters] = useState<LocalFilters>(DEFAULT_FILTERS)
   const [appliedFilters, setAppliedFilters] = useState<LocalFilters>(DEFAULT_FILTERS)
   const [selectedDayKeyPreference, setSelectedDayKeyPreference] = useState<string | null>(null)
   const [selectedSessionIdPreference, setSelectedSessionIdPreference] = useState<string | null>(null)
+  const [journalSaveState, setJournalSaveState] = useState<{
+    status: 'idle' | 'saving' | 'success' | 'error'
+    message: string | null
+  }>({
+    status: 'idle',
+    message: null,
+  })
 
   const listEndpoint = useMemo(
     () => buildReplaySessionsListEndpoint(appliedFilters),
@@ -281,6 +306,51 @@ export function ReplaySessionBrowser() {
     revalidateOnFocus: false,
     dedupingInterval: 15_000,
   })
+  const submitReplayJournalSave = useCallback(async (parsedTradeId: string | null): Promise<void> => {
+    if (!selectedSessionId || journalSaveLockRef.current) return
+    journalSaveLockRef.current = true
+    setJournalSaveState({
+      status: 'saving',
+      message: parsedTradeId
+        ? 'Saving replay trade to journal...'
+        : 'Saving replay session trades to journal...',
+    })
+
+    try {
+      const browserSupabase = createBrowserSupabase()
+      const {
+        data: { session },
+      } = await browserSupabase.auth.getSession()
+
+      const token = session?.access_token
+      if (!token) {
+        throw new Error('You must be signed in to save replay journal entries.')
+      }
+
+      const requestBody: Record<string, unknown> = {}
+      if (parsedTradeId) {
+        requestBody.parsedTradeId = parsedTradeId
+      }
+
+      const response = await postSPX<ReplayJournalSaveResponse>(
+        `/api/spx/replay-sessions/${selectedSessionId}/journal`,
+        token,
+        requestBody,
+      )
+      setJournalSaveState({
+        status: 'success',
+        message: `Journal save complete: ${response.createdCount} new, ${response.existingCount} already saved.`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to save replay journal entries.'
+      setJournalSaveState({
+        status: 'error',
+        message,
+      })
+    } finally {
+      journalSaveLockRef.current = false
+    }
+  }, [selectedSessionId])
 
   const onApplyFilters = () => {
     setAppliedFilters({
@@ -302,6 +372,14 @@ export function ReplaySessionBrowser() {
 
   const listErrorCopy = resolveErrorCopy(sessionsQuery.error)
   const detailErrorCopy = resolveDetailErrorCopy(detailQuery.error)
+
+  useEffect(() => {
+    journalSaveLockRef.current = false
+    setJournalSaveState({
+      status: 'idle',
+      message: null,
+    })
+  }, [selectedSessionId])
 
   return (
     <section
@@ -524,7 +602,40 @@ export function ReplaySessionBrowser() {
               </div>
 
               <div className="space-y-1">
-                <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Trade Preview</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Trade Preview</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void submitReplayJournalSave(null)
+                    }}
+                    disabled={detailQuery.data.trades.length === 0 || journalSaveState.status === 'saving'}
+                    className={cn(
+                      'rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] transition-colors',
+                      detailQuery.data.trades.length === 0 || journalSaveState.status === 'saving'
+                        ? 'cursor-not-allowed border-white/10 bg-white/[0.02] text-white/45'
+                        : 'border-emerald-300/35 bg-emerald-500/12 text-emerald-100 hover:bg-emerald-500/20',
+                    )}
+                    data-testid="spx-replay-save-journal-session"
+                  >
+                    Save to Journal
+                  </button>
+                </div>
+                {journalSaveState.status !== 'idle' && journalSaveState.message && (
+                  <p
+                    className={cn(
+                      'text-[9px]',
+                      journalSaveState.status === 'error'
+                        ? 'text-rose-200'
+                        : journalSaveState.status === 'success'
+                          ? 'text-emerald-200'
+                          : 'text-white/65',
+                    )}
+                    data-testid="spx-replay-save-journal-status"
+                  >
+                    {journalSaveState.message}
+                  </p>
+                )}
                 {detailQuery.data.trades.length === 0 ? (
                   <p className="text-[10px] text-white/50">No trades for the selected symbol/session.</p>
                 ) : (
@@ -544,6 +655,24 @@ export function ReplaySessionBrowser() {
                       <p className="mt-0.5 text-[9px] text-white/55">
                         Entry {trade.entry.price ?? '--'} · {asCompactTimestamp(trade.entry.timestamp)}
                       </p>
+                      <div className="mt-1 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void submitReplayJournalSave(trade.id || null)
+                          }}
+                          disabled={!trade.id || journalSaveState.status === 'saving'}
+                          className={cn(
+                            'rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] transition-colors',
+                            !trade.id || journalSaveState.status === 'saving'
+                              ? 'cursor-not-allowed border-white/10 bg-white/[0.02] text-white/45'
+                              : 'border-champagne/40 bg-champagne/12 text-champagne hover:bg-champagne/18',
+                          )}
+                          data-testid={`spx-replay-save-journal-trade-${trade.id || `idx-${trade.tradeIndex}`}`}
+                        >
+                          Save to Journal
+                        </button>
+                      </div>
                     </article>
                   ))
                 )}

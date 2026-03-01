@@ -1,7 +1,7 @@
 # Same-Day Replay — Autonomous Execution Tracker
 
 > **Created:** 2026-02-28  
-> **Status:** SESSION_19_PHASE_4_5C_COMPLETE_READY_FOR_NEXT_SLICE
+> **Status:** SESSION_24_MACRO_E_COMPLETE
 
 ---
 
@@ -12,7 +12,7 @@
 | 0 | Scope redefinition and control packet setup | COMPLETE | S0 |
 | 1 | Data foundation: tables, RLS, core types, env schema | COMPLETE (1.1-1.6 complete) | 1.1-1.6 |
 | 2 | Snapshot capture + bootstrap wiring | COMPLETE (2.1-2.4 complete) | 2.1-2.4 |
-| 3-10 | Replay UI, Discord, symbol profile, drill, journal, hardening | IN_PROGRESS (4.1-4.5c + 5.2a-5.2d + 5.1a-5.1b complete; 5+ pending) | Remaining |
+| 3-10 | Replay UI, Discord, symbol profile, drill, journal, hardening | IN_PROGRESS (4.1-4.5c + 5.2a-5.2d + 5.1a-5.1b + Session 20 Macro A [Phase 3 + 5.3 + 5.4] + Session 21 Macro B [Phase 6.1-6.3] + Session 22 Macro C [Phase 8.1-8.3] + Session 23 Macro D [Phase 7.1-7.3] + Session 24 Macro E [Phase 9.1-9.2 + 10.1] complete; remaining: final replay e2e hardening slice) | Remaining |
 
 ---
 
@@ -41,6 +41,11 @@
 | S17 | Implement Phase 4.5a Discord persistence foundation (upsert session rows + idempotent raw message persistence) and wire parse->persist->broadcast in live bot pipeline with fail-open persistence | SPX/Backend Agents | COMPLETE | `pnpm exec eslint <targets>` + `pnpm exec tsc --noEmit` + `pnpm --dir backend exec jest src/services/discord/__tests__/discordPersistence.test.ts --runInBand` + Discord parser/bot/broadcaster regressions pass |
 | S18 | Implement Phase 4.5b parsed trade lifecycle persistence in `discord_parsed_trades` and signal-message linkage via `parsed_trade_id` with V1 per-channel stream assumptions | SPX/Backend Agents | COMPLETE | `pnpm exec eslint <targets>` + `pnpm exec tsc --noEmit` + `pnpm --dir backend exec jest src/services/discord/__tests__/discordPersistence.test.ts --runInBand` + Discord parser/bot/broadcaster regressions pass |
 | S19 | Implement Phase 4.5c session rollup maintenance for replay browser quality (`session_start/session_end/trade_count/net_pnl_pct`) with replay list regression coverage | SPX/Backend Agents | COMPLETE | `pnpm exec eslint <targets>` + `pnpm exec tsc --noEmit` + `pnpm --dir backend exec jest src/services/discord/__tests__/discordPersistence.test.ts --runInBand` + replay sessions list + Discord parser/bot/broadcaster regressions pass |
+| S20 | Implement Session 20 Macro Slice A (Phase 3 + 5.3 + 5.4): replay engine snapshot-aware fidelity, replay chart snapshot-level sourcing, and synchronized replay confluence panel in browser detail flow | SPX/Frontend Agents | COMPLETE | `pnpm exec eslint <targets>` + `pnpm exec tsc --noEmit` + `pnpm vitest run lib/spx/__tests__/replay-engine.test.ts` + `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` pass |
+| S21 | Implement Session 21 Macro Slice B (Phase 6.1-6.3): transcript sidebar learning surface, cursor-time sync/jump behavior, and replay lifecycle marker rendering on chart | SPX/Frontend Agents | COMPLETE | `pnpm exec eslint <targets>` + `pnpm exec tsc --noEmit` + `pnpm vitest run components/spx-command-center/__tests__/replay-transcript-sidebar.test.tsx` + `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` pass |
+| S22 | Implement Session 22 Macro Slice C (Phase 8.1-8.3): interactive drill pause/predict/reveal UI, deterministic scoring contract, and persisted admin-only drill history APIs | SPX/Frontend + SPX/Backend Agents | COMPLETE | `pnpm exec eslint <targets>` + `pnpm exec tsc --noEmit` + `pnpm vitest run components/spx-command-center/__tests__/replay-drill-mode.test.tsx` + `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` + `pnpm --dir backend exec jest src/__tests__/integration/spx-drill-results-api.test.ts --runInBand` + `pnpm --dir backend exec jest src/services/spx/__tests__/drillScoring.test.ts --runInBand` pass |
+| S23 | Implement Session 23 Macro Slice D (Phase 7.1-7.3): SymbolProfile abstraction across engines and admin-only SymbolProfile API/settings visibility | SPX/Backend + SPX/Frontend Agents | COMPLETE | `pnpm exec eslint <targets>` + `pnpm exec tsc --noEmit` + `pnpm --dir backend exec jest src/services/spx/__tests__/symbolProfile.test.ts src/services/spx/__tests__/flowEngine.test.ts src/services/spx/__tests__/levelEngineProfile.test.ts src/services/spx/__tests__/regimeClassifierProfile.test.ts src/services/spx/__tests__/gexEngine.test.ts src/services/spx/__tests__/multiTFConfluence.test.ts --runInBand` + `pnpm --dir backend exec jest src/__tests__/integration/spx-symbol-profiles-api.test.ts --runInBand` pass |
+| S24 | Implement Session 24 Macro Slice E (Phase 9.1-9.2 + 10.1): replay journal auto-generation from replay data, replay detail Save-to-Journal wiring, and replay journal hardening tests | SPX/Backend + SPX/Frontend Agents | COMPLETE | `pnpm exec eslint <targets>` + `pnpm exec tsc --noEmit` + `pnpm --dir backend exec jest src/services/journal/__tests__/replayJournalBuilder.test.ts src/__tests__/integration/spx-replay-journal-api.test.ts --runInBand` + `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` pass |
 
 ---
 
@@ -508,3 +513,208 @@ Session 1 is complete only when:
 - Added unit coverage for rollup updates across PREP/FILL/TRIM/EXIT lifecycle flows, trade-count progression, timestamp boundary handling, and null-safe PnL rollup behavior.
 - Added replay sessions list integration regression assertions that rollup-backed fields (`tradeCount`, `sessionStart`, `sessionEnd`, `netPnlPct`) surface deterministically in API responses.
 - Kept scope isolated: no UI changes, no new API routes, no migrations, and no multi-caller model changes beyond V1 assumptions.
+
+## Session 20 Evidence
+
+- `pnpm exec eslint lib/spx/replay-engine.ts lib/spx/__tests__/replay-engine.test.ts components/spx-command-center/spx-chart.tsx components/spx-command-center/replay-confluence-panel.tsx components/spx-command-center/replay-session-browser.tsx components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+- `pnpm exec tsc --noEmit` (pass)
+- `pnpm vitest run lib/spx/__tests__/replay-engine.test.ts` (pass)
+- `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+- `rg --files components lib | rg "(spx-chart|replay-chart).*(test|spec)"` (no existing replay chart targeted test found; gap documented)
+- Scope files updated:
+  - `lib/spx/replay-engine.ts`
+  - `lib/spx/__tests__/replay-engine.test.ts`
+  - `components/spx-command-center/spx-chart.tsx`
+  - `components/spx-command-center/replay-confluence-panel.tsx`
+  - `components/spx-command-center/replay-session-browser.tsx`
+  - `components/spx-command-center/__tests__/replay-session-browser.test.tsx`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+
+## Session 20 Outcomes
+
+- Extended replay engine frame resolution so cursor-time frames now resolve `snapshot` context from the latest replay snapshot at-or-before the cursor timestamp.
+- Updated SPX replay chart level sourcing to use replay snapshot `levels` whenever replay snapshot levels exist, with explicit null-safe fallback to live levels when absent.
+- Added `ReplayConfluencePanel` controlled-selection behavior so browser detail flow owns snapshot/cursor state and panel content updates deterministically with selection/session changes.
+- Implemented deterministic confluence sections for the selected replay snapshot:
+  - R:R + EV
+  - Multi-TF alignment
+  - GEX context
+  - Flow confirmation
+  - Regime + Environment
+  - Memory edge
+- Enforced null-safe partial-context behavior:
+  - explicit `Partial context only; some fields were not captured for this timestamp.` copy when sections are partially populated
+  - explicit `Not captured for this timestamp.` copy when section fields are unavailable
+  - deterministic empty state when snapshots are absent
+- Added targeted regression coverage for replay-engine snapshot resolution and replay-browser confluence synchronization.
+- Replay-chart targeted test gap remains: no existing `spx-chart`/replay-chart test file currently exists in repo; gap explicitly logged for follow-up.
+- Preserved existing replay browser list/day grouping/filter/detail behavior and kept scope isolated from backend routes, migrations, and admin-only V1 contract.
+
+## Session 21 Evidence
+
+- `pnpm exec eslint components/spx-command-center/replay-transcript-sidebar.tsx components/spx-command-center/replay-session-browser.tsx components/spx-command-center/spx-chart.tsx components/ai-coach/trading-chart.tsx components/spx-command-center/__tests__/replay-transcript-sidebar.test.tsx components/spx-command-center/__tests__/replay-session-browser.test.tsx lib/spx/replay-session-sync.ts vitest.config.ts` (pass)
+- `pnpm exec tsc --noEmit` (pass)
+- `pnpm vitest run components/spx-command-center/__tests__/replay-transcript-sidebar.test.tsx` (pass)
+- `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+- `rg --files components lib | rg "(spx-chart|replay-chart).*(test|spec)"` (no dedicated `spx-chart` replay marker harness; gap still open)
+- Scope files updated:
+  - `components/spx-command-center/replay-transcript-sidebar.tsx`
+  - `components/spx-command-center/replay-session-browser.tsx`
+  - `components/spx-command-center/spx-chart.tsx`
+  - `components/ai-coach/trading-chart.tsx`
+  - `lib/spx/replay-session-sync.ts`
+  - `components/spx-command-center/__tests__/replay-transcript-sidebar.test.tsx`
+  - `components/spx-command-center/__tests__/replay-session-browser.test.tsx`
+  - `vitest.config.ts`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+
+## Session 21 Outcomes
+
+- Added `ReplayTranscriptSidebar` with full message stream rendering, deterministic signal color coding (`prep/fill/trim/stop/exit/commentary`), reduced-opacity commentary, and special `Caller Thesis` treatment.
+- Added replay sync event contract (`session sync`, `cursor time`, `transcript jump`) in `lib/spx/replay-session-sync.ts` to coordinate chart and transcript behavior across sibling surfaces.
+- Extended `ReplaySessionBrowser` detail flow to:
+  - publish selected replay session context (bars/snapshots/messages/trades)
+  - subscribe to replay cursor updates for transcript auto-focus
+  - subscribe to marker jump events and focus transcript to the nearest message time
+  - preserve deterministic reset behavior when session/filter/day selection changes
+- Extended `SPXChart` replay mode to consume selected replay-session bars/snapshots when available, publish cursor-time updates, and render replay lifecycle markers including `entry`, `exit`, `trim`, `stop_adjust`, `trail`, `breakeven`, and `thesis`.
+- Extended `TradingChart` timeline markers to support optional click handlers so replay markers can trigger transcript jumps directly from chart annotations.
+- Added targeted frontend regression coverage for transcript behavior and browser-level cursor/jump sync:
+  - `replay-transcript-sidebar.test.tsx`
+  - `replay-session-browser.test.tsx`
+- Replay chart harness gap remains: no dedicated `spx-chart` marker test surface currently exists, so marker rendering correctness is covered indirectly through integration behavior and documented for follow-up.
+
+## Session 22 Evidence
+
+- `pnpm exec eslint backend/src/routes/spx.ts backend/src/services/spx/drillScoring.ts backend/src/services/spx/__tests__/drillScoring.test.ts backend/src/__tests__/integration/spx-drill-results-api.test.ts components/spx-command-center/replay-drill-mode.tsx components/spx-command-center/replay-session-browser.tsx components/spx-command-center/__tests__/replay-drill-mode.test.tsx components/spx-command-center/__tests__/replay-session-browser.test.tsx --no-warn-ignored` (pass)
+- `pnpm exec tsc --noEmit` (pass)
+- `pnpm vitest run components/spx-command-center/__tests__/replay-drill-mode.test.tsx` (pass)
+- `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+- `pnpm --dir backend exec jest src/__tests__/integration/spx-drill-results-api.test.ts --runInBand` (pass)
+- `pnpm --dir backend exec jest src/services/spx/__tests__/drillScoring.test.ts --runInBand` (pass)
+- Scope files updated:
+  - `components/spx-command-center/replay-drill-mode.tsx`
+  - `components/spx-command-center/replay-session-browser.tsx`
+  - `components/spx-command-center/__tests__/replay-drill-mode.test.tsx`
+  - `components/spx-command-center/__tests__/replay-session-browser.test.tsx`
+  - `backend/src/routes/spx.ts`
+  - `backend/src/services/spx/drillScoring.ts`
+  - `backend/src/services/spx/__tests__/drillScoring.test.ts`
+  - `backend/src/__tests__/integration/spx-drill-results-api.test.ts`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+
+## Session 22 Outcomes
+
+- Added `ReplayDrillMode` as an end-to-end pause-and-predict learning surface in replay detail:
+  - pause at a decision-point trade
+  - hide future outcome until learner reveal
+  - collect learner direction + strike/stop/target inputs
+  - show reveal scorecard comparing learner vs actual trade and engine context
+  - surface persisted drill history rows inline
+- Integrated drill mode into `ReplaySessionBrowser` detail flow using existing replay session detail payloads (trades/snapshots), without fake drill data.
+- Added admin-gated drill persistence APIs in `backend/src/routes/spx.ts`:
+  - `POST /api/spx/drill-results`
+  - `GET /api/spx/drill-results/history`
+- Enforced deterministic validation for UUIDs, ISO timestamps, bounded numeric fields, and required trade-plan fields for non-flat decisions.
+- Added deterministic scoring contract in shared utility `backend/src/services/spx/drillScoring.ts` with components for direction alignment, risk-discipline quality, and learner-vs-actual PnL delta.
+- Persisted `score`, `direction_match`, and `feedback_summary` in `replay_drill_results`; added fail-open handling for optional enrichment (trade/history context) while preserving deterministic 4xx/5xx behavior for core validation and persistence failures.
+- Added coverage for both unit and API integration edge cases:
+  - score edge-cases (aligned, opposite, flat-neutral, missing actual PnL, direction normalization)
+  - API authz, validation failures, deterministic insert contract, history enrichment success, and history enrichment fail-open behavior.
+
+## Session 23 Evidence
+
+- `pnpm exec eslint --no-ignore --no-warn-ignored backend/src/services/spx/symbolProfile.ts backend/src/services/spx/gexEngine.ts backend/src/services/spx/flowEngine.ts backend/src/services/spx/levelEngine.ts backend/src/services/spx/multiTFConfluence.ts backend/src/services/spx/regimeClassifier.ts backend/src/services/spx/setupDetector.ts backend/src/services/spx/index.ts backend/src/services/spx/utils.ts backend/src/routes/spx.ts backend/src/services/spx/__tests__/symbolProfile.test.ts backend/src/services/spx/__tests__/gexEngine.test.ts backend/src/services/spx/__tests__/flowEngine.test.ts backend/src/services/spx/__tests__/multiTFConfluence.test.ts backend/src/services/spx/__tests__/regimeClassifierProfile.test.ts backend/src/services/spx/__tests__/levelEngineProfile.test.ts backend/src/__tests__/integration/spx-symbol-profiles-api.test.ts` (pass)
+- `pnpm exec eslint hooks/use-spx-symbol-profiles.ts components/spx-command-center/spx-settings-sheet.tsx` (pass)
+- `pnpm exec tsc --noEmit` (pass)
+- `pnpm --dir backend exec jest src/services/spx/__tests__/symbolProfile.test.ts src/services/spx/__tests__/flowEngine.test.ts src/services/spx/__tests__/levelEngineProfile.test.ts src/services/spx/__tests__/regimeClassifierProfile.test.ts src/services/spx/__tests__/gexEngine.test.ts src/services/spx/__tests__/multiTFConfluence.test.ts --runInBand` (pass)
+- `pnpm --dir backend exec jest src/__tests__/integration/spx-symbol-profiles-api.test.ts --runInBand` (pass)
+- Scope files updated:
+  - `backend/src/services/spx/symbolProfile.ts`
+  - `backend/src/services/spx/gexEngine.ts`
+  - `backend/src/services/spx/flowEngine.ts`
+  - `backend/src/services/spx/levelEngine.ts`
+  - `backend/src/services/spx/multiTFConfluence.ts`
+  - `backend/src/services/spx/regimeClassifier.ts`
+  - `backend/src/services/spx/setupDetector.ts`
+  - `backend/src/services/spx/index.ts`
+  - `backend/src/services/spx/utils.ts`
+  - `backend/src/routes/spx.ts`
+  - `backend/src/services/spx/__tests__/symbolProfile.test.ts`
+  - `backend/src/services/spx/__tests__/gexEngine.test.ts`
+  - `backend/src/services/spx/__tests__/flowEngine.test.ts`
+  - `backend/src/services/spx/__tests__/multiTFConfluence.test.ts`
+  - `backend/src/services/spx/__tests__/regimeClassifierProfile.test.ts`
+  - `backend/src/services/spx/__tests__/levelEngineProfile.test.ts`
+  - `backend/src/__tests__/integration/spx-symbol-profiles-api.test.ts`
+  - `hooks/use-spx-symbol-profiles.ts`
+  - `components/spx-command-center/spx-settings-sheet.tsx`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+
+## Session 23 Outcomes
+
+- Added a strict, fail-open SymbolProfile domain loader/service backed by `symbol_profiles` table reads with cache and null-safe fallback to legacy defaults.
+- Threaded optional `profile`/`symbol` context through engine inputs for:
+  - level engine
+  - GEX engine
+  - flow engine
+  - multi-timeframe confluence context/scoring
+  - regime classifier
+  - snapshot orchestration + setup detector callers
+- Preserved SPX seeded behavior using explicit compatibility guards:
+  - seeded regime threshold mapping to legacy classifier signal thresholds
+  - seeded directional flow premium mapping to legacy interval thresholds
+  - default profile synthesis when profile rows are missing/inactive/unavailable
+- Added admin-only SymbolProfile APIs:
+  - `GET /api/spx/symbol-profiles`
+  - `GET /api/spx/symbol-profiles/:symbol`
+  with explicit admin gate and profile detail refresh support.
+- Added frontend SymbolProfile settings visibility surface:
+  - new `useSPXSymbolProfiles` hook for list/detail polling
+  - new Profiles tab in SPX settings sheet for operator validation of active/inactive profile contracts.
+- Added focused SymbolProfile override coverage per path:
+  - loader/service behavior (`symbolProfile.test.ts`)
+  - GEX overrides (`gexEngine.test.ts`)
+  - flow overrides (`flowEngine.test.ts`)
+  - level engine profile threading (`levelEngineProfile.test.ts`)
+  - MTF override behavior (`multiTFConfluence.test.ts`)
+  - regime threshold/ticker behavior (`regimeClassifierProfile.test.ts`)
+  - admin endpoint integration (`spx-symbol-profiles-api.test.ts`).
+
+## Session 24 Evidence
+
+- `pnpm exec eslint --no-ignore --no-warn-ignored backend/src/services/journal/replayJournalBuilder.ts backend/src/services/journal/__tests__/replayJournalBuilder.test.ts backend/src/routes/spx.ts backend/src/__tests__/integration/spx-replay-journal-api.test.ts` (pass)
+- `pnpm exec eslint components/spx-command-center/replay-session-browser.tsx components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+- `pnpm exec tsc --noEmit` (pass)
+- `pnpm --dir backend exec jest src/services/journal/__tests__/replayJournalBuilder.test.ts src/__tests__/integration/spx-replay-journal-api.test.ts --runInBand` (pass)
+- `pnpm vitest run components/spx-command-center/__tests__/replay-session-browser.test.tsx` (pass)
+- Scope files updated:
+  - `backend/src/services/journal/replayJournalBuilder.ts`
+  - `backend/src/services/journal/__tests__/replayJournalBuilder.test.ts`
+  - `backend/src/routes/spx.ts`
+  - `backend/src/__tests__/integration/spx-replay-journal-api.test.ts`
+  - `components/spx-command-center/replay-session-browser.tsx`
+  - `components/spx-command-center/__tests__/replay-session-browser.test.tsx`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+  - `docs/specs/same-day-replay-autonomous-2026-02-28/08_AUTONOMOUS_EXECUTION_TRACKER.md`
+
+## Session 24 Outcomes
+
+- Added a replay-to-journal transformer domain service that converts replay session/trade/message/snapshot payloads into deterministic journal insert payloads (one entry per trade).
+- Added admin-gated replay journal creation endpoint: `POST /api/spx/replay-sessions/:sessionId/journal` with canonical `sessionId` validation and optional `parsedTradeId` mapping enforcement.
+- Implemented idempotent persistence semantics for replay journal creation using deterministic entry IDs + upsert conflict handling, returning created vs existing result counts.
+- Added replay detail Save-to-Journal UI wiring in the replay session browser for both full-session and per-trade save actions.
+- Added deterministic save UX states in replay detail flow (saving/success/error) plus rapid-submit lock guard to prevent accidental duplicate submits.
+- Added replay-focused hardening tests:
+  - transformer unit coverage for mapping + missing-thesis/partial-snapshot/null-safe confluence cases
+  - backend replay journal API integration coverage for contract and failure behavior
+  - frontend replay browser tests for save wiring, idempotency guard, and error copy.

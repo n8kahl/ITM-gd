@@ -48,6 +48,7 @@ import {
   loadOpenStatesWithOrders,
   closeAllUserStates,
 } from '../services/spx/executionStateStore';
+import { buildReplayJournalEntries } from '../services/journal/replayJournalBuilder';
 
 const router = Router();
 const KNOWN_MISSING_RELATIONS = new Set<string>();
@@ -221,6 +222,11 @@ function parseEpochMs(value: unknown): number | null {
   if (typeof value !== 'string') return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeBodyObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
 }
 
 function getPriorTradingDay(dateStr: string): string | null {
@@ -938,6 +944,190 @@ router.get('/replay-sessions/:sessionId/snapshots', async (req: Request, res: Re
     return res.status(503).json({
       error: 'Data unavailable',
       message: 'Unable to load replay session snapshots.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.post('/replay-sessions/:sessionId/journal', async (req: Request, res: Response) => {
+  try {
+    const sessionId = typeof req.params.sessionId === 'string' ? req.params.sessionId.trim() : '';
+    if (!isUuid(sessionId)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'sessionId must be a valid UUID.',
+      });
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const isAdmin = await hasBackendAdminAccess(userId);
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin access required.',
+      });
+    }
+
+    const body = normalizeBodyObject(req.body);
+    const parsedTradeIdRaw = toNullableString(body.parsedTradeId);
+    if (parsedTradeIdRaw && !isUuid(parsedTradeIdRaw)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body field "parsedTradeId" must be a valid UUID when provided.',
+      });
+    }
+    const parsedTradeId = parsedTradeIdRaw ?? null;
+
+    const { data: session, error: sessionError } = await supabase
+      .from('discord_trade_sessions')
+      .select('id,session_date,channel_id,channel_name,caller_name,session_start,session_end,session_summary')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (sessionError) throw sessionError;
+    if (!session) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    const sessionRow = session as ReplaySessionQueryRow;
+    const sessionDate = toNullableString(sessionRow.session_date);
+    if (!sessionDate) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    let tradesQuery = supabase
+      .from('discord_parsed_trades')
+      .select(REPLAY_TRADE_SELECT_FIELDS)
+      .eq('session_id', sessionId);
+
+    if (parsedTradeId) {
+      tradesQuery = tradesQuery.eq('id', parsedTradeId);
+    }
+
+    const [
+      { data: tradesData, error: tradesError },
+      { data: messagesData, error: messagesError },
+      { data: snapshotsData, error: snapshotsError },
+    ] = await Promise.all([
+      tradesQuery.order('trade_index', { ascending: true }),
+      supabase
+        .from('discord_messages')
+        .select(REPLAY_MESSAGE_SELECT_FIELDS)
+        .eq('session_id', sessionId)
+        .order('sent_at', { ascending: true }),
+      supabase
+        .from('replay_snapshots')
+        .select('*')
+        .eq('session_date', sessionDate)
+        .order('captured_at', { ascending: true }),
+    ]);
+
+    if (tradesError) throw tradesError;
+    if (messagesError) throw messagesError;
+    if (snapshotsError) throw snapshotsError;
+
+    const tradeRows = (Array.isArray(tradesData) ? tradesData : []) as ReplayTradeQueryRow[];
+    if (parsedTradeId && tradeRows.length === 0) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Body field "parsedTradeId" must belong to the provided sessionId.',
+      });
+    }
+
+    if (tradeRows.length === 0) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} has no parsed trades to save.`,
+      });
+    }
+
+    const mappedTrades = tradeRows.map(mapReplayTradeRow);
+    const mappedMessages = ((Array.isArray(messagesData) ? messagesData : []) as ReplayMessageQueryRow[])
+      .map(mapReplayMessageRow);
+    const snapshotRows = (Array.isArray(snapshotsData) ? snapshotsData : []) as Record<string, unknown>[];
+    const resolvedSymbol = (
+      toNullableString(mappedTrades[0]?.contract.symbol)
+      || toNullableString((snapshotRows[0] as { symbol?: unknown })?.symbol)
+      || 'SPX'
+    ).toUpperCase();
+
+    const builtEntries = buildReplayJournalEntries({
+      userId,
+      session: {
+        sessionId,
+        sessionDate,
+        symbol: resolvedSymbol,
+        channelId: toNullableString(sessionRow.channel_id),
+        channelName: toNullableString(sessionRow.channel_name),
+        caller: toNullableString(sessionRow.caller_name),
+        sessionStart: toNullableString(sessionRow.session_start),
+        sessionEnd: toNullableString(sessionRow.session_end),
+        sessionSummary: toNullableString(sessionRow.session_summary),
+      },
+      trades: mappedTrades,
+      messages: mappedMessages,
+      snapshots: snapshotRows,
+    });
+
+    const journalPayloads = builtEntries.map((entry) => entry.payload);
+    const { data: upsertedRows, error: upsertError } = await supabase
+      .from('journal_entries')
+      .upsert(journalPayloads, {
+        onConflict: 'id',
+        ignoreDuplicates: true,
+      })
+      .select('id');
+
+    if (upsertError) throw upsertError;
+
+    const createdIds = new Set(
+      (Array.isArray(upsertedRows) ? upsertedRows : [])
+        .map((row) => toNullableString((row as { id?: unknown }).id))
+        .filter((value): value is string => Boolean(value)),
+    );
+
+    const results = builtEntries.map((entry) => ({
+      journalEntryId: entry.payload.id,
+      parsedTradeId: entry.parsedTradeId,
+      importId: entry.payload.import_id,
+      replayBacklink: entry.replayBacklink,
+      status: createdIds.has(entry.payload.id) ? 'created' : 'existing',
+    }));
+    const createdCount = results.filter((row) => row.status === 'created').length;
+
+    return res.status(201).json({
+      sessionId,
+      parsedTradeId,
+      symbol: resolvedSymbol,
+      count: results.length,
+      createdCount,
+      existingCount: Math.max(0, results.length - createdCount),
+      results,
+    });
+  } catch (error) {
+    logger.error('SPX replay journal create endpoint failed', {
+      sessionId: req.params.sessionId,
+      parsedTradeId: req.body && typeof req.body === 'object'
+        ? (req.body as Record<string, unknown>).parsedTradeId
+        : null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to save replay session to journal.',
       retryAfter: 10,
     });
   }
