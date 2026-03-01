@@ -25,9 +25,9 @@
 
 | Slice | Objective | Status | Commit | Validation | Notes |
 |-------|-----------|--------|--------|------------|-------|
-| 4.1 | Playwright PWA project | COMPLETE | Pending (Phase 4 batch) | `eslint` PASS, `tsc --noEmit` PASS, `playwright (pwa-chromium)` PASS | Added `pwa-chromium` project + `e2e/pwa.spec.ts` covering manifest, SW registration, offline journal queue, and install prompt detection |
-| 4.2 | Mobile regression suite | COMPLETE (with 1 tracked fixme) | Pending (Phase 4 batch) | `playwright (chromium)` PASS (`4 passed, 1 skipped`) | Added `e2e/mobile-navigation.spec.ts` + `e2e/mobile-test-helpers.ts`; options-toggle case deferred via `fixme` due current AI Coach runtime error boundary under existing harness |
-| 4.3 | Documentation + runbook completion | COMPLETE | Pending (Phase 4 batch) | Manual review PASS | Updated phase report docs, tracker, release notes, runbook, change-control, and risk/decision logs |
+| 4.1 | Playwright PWA project | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS, `playwright (pwa-chromium)` PASS | Added `pwa-chromium` project + `e2e/pwa.spec.ts` covering manifest, SW registration, offline journal queue, and install prompt detection |
+| 4.2 | Mobile regression suite | COMPLETE (with 1 tracked fixme) | 1616fdf | `playwright (chromium)` PASS (`4 passed, 1 skipped`) | Added `e2e/mobile-navigation.spec.ts` + `e2e/mobile-test-helpers.ts`; options-toggle case deferred via `fixme` due current AI Coach runtime error boundary under existing harness |
+| 4.3 | Documentation + runbook completion | COMPLETE | 1616fdf | Manual review PASS | Updated phase report docs, tracker, release notes, runbook, change-control, and risk/decision logs |
 
 ---
 

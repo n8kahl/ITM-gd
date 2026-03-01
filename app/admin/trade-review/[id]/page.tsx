@@ -1,11 +1,18 @@
 'use client'
 
 import { use, useCallback, useEffect, useState } from 'react'
+import Image from 'next/image'
 import { ClipboardCheck } from 'lucide-react'
 import { TradeDetailPanel } from '@/components/admin/trade-review/trade-detail-panel'
 import { MarketContextPanel } from '@/components/admin/trade-review/market-context-panel'
 import { CoachWorkspace } from '@/components/admin/trade-review/coach-workspace'
-import type { CoachResponsePayload, CoachTradeNote } from '@/lib/types/coach-review'
+import type {
+  CoachDraftStatus,
+  CoachMemberStats,
+  CoachResponsePayload,
+  CoachReviewActivityEntry,
+  CoachTradeNote,
+} from '@/lib/types/coach-review'
 import type { JournalEntry } from '@/lib/types/journal'
 
 interface AdminTradeReviewDetailPageProps {
@@ -26,11 +33,13 @@ interface TradeReviewDetailResponse {
     id: string
     status: 'pending' | 'in_review' | 'completed' | 'dismissed'
     assigned_to: string | null
+    requested_at: string
     assigned_to_name?: string | null
   } | null
   coach_note: CoachTradeNote | null
-  member_stats: Record<string, unknown>
-  activity_log: Array<Record<string, unknown>>
+  draft_status?: CoachDraftStatus
+  member_stats: CoachMemberStats
+  activity_log: CoachReviewActivityEntry[]
 }
 
 interface ApiEnvelope<T> {
@@ -55,6 +64,73 @@ async function fetchApi<T>(url: string, init?: RequestInit): Promise<T> {
   }
 
   return payload.data
+}
+
+const reviewStatusClasses: Record<NonNullable<TradeReviewDetailResponse['review_request']>['status'], string> = {
+  pending: 'border-amber-400/40 bg-amber-500/10 text-amber-200',
+  in_review: 'border-sky-400/40 bg-sky-500/10 text-sky-200',
+  completed: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200',
+  dismissed: 'border-white/15 bg-white/5 text-ivory/80',
+}
+
+const draftStatusClasses: Record<CoachDraftStatus, string> = {
+  none: 'border-white/15 bg-white/5 text-ivory/80',
+  ai_draft: 'border-sky-400/40 bg-sky-500/10 text-sky-200',
+  manual_draft: 'border-amber-400/40 bg-amber-500/10 text-amber-200',
+  published: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200',
+}
+
+function formatCurrency(value: number | null | undefined): string {
+  if (value == null) return '—'
+  const sign = value >= 0 ? '+' : '-'
+  return `${sign}$${Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+function formatTradeDate(value: string | null | undefined): string {
+  if (!value) return 'Unknown date'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function formatQueueAge(value: string | null | undefined): string {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  const deltaMs = Date.now() - parsed.getTime()
+  if (deltaMs < 0) return '0m'
+  const totalMinutes = Math.floor(deltaMs / (60 * 1000))
+  const days = Math.floor(totalMinutes / (60 * 24))
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
+
+function deriveDraftStatus(detail: TradeReviewDetailResponse): CoachDraftStatus {
+  if (detail.draft_status) return detail.draft_status
+  if (!detail.coach_note) return 'none'
+  if (detail.coach_note.is_published) return 'published'
+  if (detail.coach_note.coach_response) return 'manual_draft'
+  if (detail.coach_note.ai_draft) return 'ai_draft'
+  return 'none'
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewDetailPageProps) {
@@ -217,11 +293,73 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
         </div>
       ) : detail ? (
         <>
-          {detail.review_request?.status === 'in_review' && detail.review_request.assigned_to_name ? (
-            <div className="rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
-              Claimed by {detail.review_request.assigned_to_name}
+          <div className="glass-card-heavy rounded-xl border border-white/10 p-4">
+            <div className="grid gap-4 xl:grid-cols-[1.8fr_1fr]">
+              <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                <div className="relative h-11 w-11 overflow-hidden rounded-full border border-white/15 bg-black/30">
+                  {detail.member.avatar_url ? (
+                    <Image
+                      src={detail.member.avatar_url}
+                      alt={detail.member.display_name}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-ivory/70">
+                      {detail.member.display_name.slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ivory">{detail.member.display_name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {detail.entry.symbol.toUpperCase()} {toTitleCase(detail.entry.direction)} {toTitleCase(detail.entry.contract_type)}
+                    {' · '}
+                    {formatTradeDate(detail.entry.trade_date)}
+                  </p>
+                </div>
+                {detail.member.tier ? (
+                  <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-emerald-200">
+                    {detail.member.tier}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">P&L</p>
+                  <p className={`mt-1 font-mono text-lg ${detail.entry.pnl != null && detail.entry.pnl < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
+                    {formatCurrency(detail.entry.pnl)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">P&L %</p>
+                  <p className={`mt-1 font-mono text-lg ${detail.entry.pnl_percentage != null && detail.entry.pnl_percentage < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
+                    {formatPercent(detail.entry.pnl_percentage)}
+                  </p>
+                </div>
+              </div>
             </div>
-          ) : null}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`rounded-full border px-2 py-1 text-xs ${reviewStatusClasses[detail.review_request?.status ?? 'pending']}`}>
+                Review: {toTitleCase(detail.review_request?.status ?? 'pending')}
+              </span>
+              <span className={`rounded-full border px-2 py-1 text-xs ${draftStatusClasses[deriveDraftStatus(detail)]}`}>
+                Draft: {toTitleCase(deriveDraftStatus(detail))}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-ivory/80">
+                {detail.review_request?.assigned_to_name
+                  ? `Assigned: ${detail.review_request.assigned_to_name}`
+                  : 'Assigned: Unassigned'}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-ivory/80">
+                Waiting: {formatQueueAge(detail.review_request?.requested_at)}
+              </span>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <TradeDetailPanel
               entry={detail.entry}

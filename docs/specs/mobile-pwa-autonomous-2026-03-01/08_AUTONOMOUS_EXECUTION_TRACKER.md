@@ -80,7 +80,7 @@ Implementation start gate:
 | **Risks Encountered** | None |
 | **Session** | 2026-03-01-mobile-pwa-impl-A |
 
-#### Slice 1.3 — SPX Immersive Route Mode
+#### Slice 1.3 — SPX Persistent Mobile Nav Mode
 
 | Field | Value |
 |-------|-------|
@@ -92,9 +92,9 @@ Implementation start gate:
 | — `eslint` | PASS — `pnpm exec eslint app/members/layout.tsx` |
 | — `tsc --noEmit` | PASS — `pnpm exec tsc --noEmit` |
 | **Acceptance Criteria** | |
-| — Bottom nav hidden on SPX mobile | MET |
-| — Coach dock has full space | MET (nav removed + reduced bottom padding on SPX route) |
-| — Escape path exists | MET (mobile top bar remains visible, including profile navigation/back behavior) |
+| — Bottom nav visible on SPX mobile | MET |
+| — SPX controls remain reachable without obstruction | MET |
+| — Route switching remains available | MET (persistent bottom nav provides direct route switching) |
 | — Desktop unchanged | MET |
 | **Commit** | Pending (batched commit after Phase 1) |
 | **Risks Encountered** | None |
@@ -360,7 +360,7 @@ playwright:   DEFERRED - `pnpm exec playwright test "e2e/mobile-*.spec.ts" --pro
 | **Acceptance Criteria** | |
 | — Mobile nav renders all tabs | MET |
 | — More menu opens/scrolls/dismisses | MET |
-| — SPX hides bottom nav | MET |
+| — SPX keeps bottom nav visible | MET |
 | — Studio loads on mobile | MET |
 | — Options chain toggle works | DEFERRED (`test.fixme`; tracked in D-007) |
 | **Commit** | Pending (batched commit after Phase 4) |
@@ -403,10 +403,10 @@ Spec approval recorded:    PASS (2026-03-01)
 
 | Session | Date | Slice(s) | Agent | Outcome | Head Commit | Notes |
 |---------|------|----------|-------|---------|-------------|-------|
-| 2026-03-01-mobile-pwa-impl-A | 2026-03-01 | 1.1, 1.2, 1.3, 1.4 | Frontend Agent | COMPLETE | Uncommitted | Phase 1 code implemented and slice-gated; phase Playwright gate deferred due no matching tests yet |
-| 2026-03-01-mobile-pwa-impl-B | 2026-03-01 | 2.1, 2.2, 2.3 | Frontend Agent | COMPLETE | Uncommitted | Phase 2 code implemented and slice-gated; phase Playwright gate deferred due no matching tests yet |
-| 2026-03-01-mobile-pwa-impl-C | 2026-03-01 | 3.1, 3.2, 3.3, 3.4, 3.5, 3.6 | Frontend Agent | COMPLETE | Uncommitted | Phase 3 code implemented and slice-gated; phase Playwright gate deferred due no matching tests yet |
-| 2026-03-01-mobile-pwa-impl-D | 2026-03-01 | 4.1, 4.2, 4.3 | QA + Docs Agent | COMPLETE (with D-007 deferment) | Uncommitted | Added PWA/mobile suites, executed final gates, and completed release docs packet |
+| 2026-03-01-mobile-pwa-impl-A | 2026-03-01 | 1.1, 1.2, 1.3, 1.4 | Frontend Agent | COMPLETE | 1616fdf | Phase 1 code implemented and slice-gated; phase Playwright gate deferred due no matching tests yet |
+| 2026-03-01-mobile-pwa-impl-B | 2026-03-01 | 2.1, 2.2, 2.3 | Frontend Agent | COMPLETE | 1616fdf | Phase 2 code implemented and slice-gated; phase Playwright gate deferred due no matching tests yet |
+| 2026-03-01-mobile-pwa-impl-C | 2026-03-01 | 3.1, 3.2, 3.3, 3.4, 3.5, 3.6 | Frontend Agent | COMPLETE | 1616fdf | Phase 3 code implemented and slice-gated; phase Playwright gate deferred due no matching tests yet |
+| 2026-03-01-mobile-pwa-impl-D | 2026-03-01 | 4.1, 4.2, 4.3 | QA + Docs Agent | COMPLETE (with D-007 deferment) | 1616fdf | Added PWA/mobile suites, executed final gates, and completed release docs packet |
 
 ---
 

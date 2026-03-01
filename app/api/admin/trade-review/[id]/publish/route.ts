@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { errorResponse, successResponse } from '@/lib/api/response'
 import { isAdminUser } from '@/lib/supabase-server'
+import { coachPublishPayloadSchema } from '@/lib/validation/coach-review'
 import { getCurrentAdminUserId, getSupabaseAdmin } from '@/app/api/admin/trade-review/_shared'
 
 const paramsSchema = z.object({
@@ -24,13 +25,31 @@ export async function POST(
 
     const { data: note, error: noteError } = await supabase
       .from('coach_trade_notes')
-      .select('id,review_request_id')
+      .select('id,review_request_id,coach_response,ai_draft')
       .eq('journal_entry_id', parsedParams.id)
       .maybeSingle()
 
     if (noteError) {
       console.error('[TradeReview][Publish] Failed to load note:', noteError.message)
       return errorResponse('Failed to load coach note', 500)
+    }
+
+    if (!note) {
+      return errorResponse('Cannot publish without a saved coach draft', 400)
+    }
+
+    const publishCandidate = note.coach_response ?? note.ai_draft
+    if (!publishCandidate) {
+      return errorResponse('Coach feedback is incomplete. Save or generate a draft before publishing.', 400)
+    }
+
+    const parsedPublishCandidate = coachPublishPayloadSchema.safeParse(publishCandidate)
+    if (!parsedPublishCandidate.success) {
+      return errorResponse(
+        'Coach feedback is incomplete. Fill all required sections before publishing.',
+        400,
+        parsedPublishCandidate.error.flatten(),
+      )
     }
 
     const nowIso = new Date().toISOString()
@@ -49,34 +68,19 @@ export async function POST(
       resolvedRequestId = latestRequest?.id ?? null
     }
 
-    if (note) {
-      const { error: publishNoteError } = await supabase
-        .from('coach_trade_notes')
-        .update({
-          is_published: true,
-          published_at: nowIso,
-        })
-        .eq('id', note.id)
+    const { error: publishNoteError } = await supabase
+      .from('coach_trade_notes')
+      .update({
+        coach_user_id: actorId,
+        coach_response: parsedPublishCandidate.data,
+        is_published: true,
+        published_at: nowIso,
+      })
+      .eq('id', note.id)
 
-      if (publishNoteError) {
-        console.error('[TradeReview][Publish] Failed to publish coach note:', publishNoteError.message)
-        return errorResponse('Failed to publish coach note', 500)
-      }
-    } else {
-      const { error: createPublishedNoteError } = await supabase
-        .from('coach_trade_notes')
-        .insert({
-          journal_entry_id: parsedParams.id,
-          review_request_id: resolvedRequestId,
-          coach_user_id: actorId,
-          is_published: true,
-          published_at: nowIso,
-        })
-
-      if (createPublishedNoteError) {
-        console.error('[TradeReview][Publish] Failed to create published coach note:', createPublishedNoteError.message)
-        return errorResponse('Failed to publish coach note', 500)
-      }
+    if (publishNoteError) {
+      console.error('[TradeReview][Publish] Failed to publish coach note:', publishNoteError.message)
+      return errorResponse('Failed to publish coach note', 500)
     }
 
     if (resolvedRequestId) {

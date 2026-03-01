@@ -85,6 +85,23 @@ export interface CoachTradeNote {
   updated_at: string
 }
 
+export type CoachDraftStatus = 'none' | 'ai_draft' | 'manual_draft' | 'published'
+
+export interface CoachMemberSymbolStats {
+  win_rate: number
+  avg_pnl: number
+  trade_count: number
+}
+
+export interface CoachMemberStats {
+  total_trades: number
+  win_rate: number
+  avg_pnl: number
+  symbol_stats: CoachMemberSymbolStats | null
+  recent_streak: 'winning' | 'losing' | 'mixed'
+  avg_discipline_score: number | null
+}
+
 export interface CoachMarketDataSnapshot {
   chart: {
     symbol: string
@@ -159,6 +176,7 @@ export interface CoachReviewActivityEntry {
   review_request_id: string | null
   journal_entry_id: string
   actor_id: string
+  actor_name?: string
   action: CoachReviewAction
   details: Record<string, unknown>
   created_at: string

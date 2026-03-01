@@ -281,8 +281,18 @@ export async function setupTradeReviewApiMocks(page: Page) {
       review_request: {
         id: 'request-1',
         status: state.reviewStatus ?? 'dismissed',
+        assigned_to: 'admin-user-1',
+        requested_at: '2026-03-01T10:00:00.000Z',
+        assigned_to_name: 'Coach Admin',
       },
       coach_note: state.note,
+      draft_status: state.note?.is_published
+        ? 'published'
+        : state.note?.coach_response
+          ? 'manual_draft'
+          : state.note?.ai_draft
+            ? 'ai_draft'
+            : 'none',
       member_stats: {
         total_trades: 40,
         win_rate: 57.5,

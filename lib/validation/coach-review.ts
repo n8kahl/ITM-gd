@@ -29,6 +29,8 @@ export const coachResponsePayloadSchema = z.object({
   confidence: z.enum(['high', 'medium', 'low']),
 })
 
+export const coachPublishPayloadSchema = coachResponsePayloadSchema
+
 export const coachNoteUpdateSchema = z.object({
   coach_response: coachResponsePayloadSchema.partial().optional(),
   internal_notes: z.string().max(10000).nullable().optional(),

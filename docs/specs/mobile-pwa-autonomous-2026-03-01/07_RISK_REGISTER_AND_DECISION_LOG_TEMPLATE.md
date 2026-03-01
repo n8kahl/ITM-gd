@@ -19,7 +19,7 @@
 | R5 | iOS push requires standalone mode — users may not understand | Medium | Medium | P1 | iOS-specific guidance UI in Slice 3.3 explains requirement. Link to "Install" flow from push settings. | Frontend Agent | Open |
 | R6 | Uncapping tabs causes visual overflow on very small screens | Low | Medium | P2 | "More" menu hardening in Slice 1.2 handles overflow. Tested at 320px minimum width. | Frontend Agent | Open |
 | R7 | `pwa-asset-generator` dependency size or build issues | Low | Low | P2 | devDependency only; not in production bundle. Pin version. | Frontend Agent | Open |
-| R8 | SPX immersive mode removes escape path for users | Medium | High | P1 | Require visible "back" button in top bar or gesture support. Acceptance criterion in Slice 1.3. | Frontend Agent | Open |
+| R8 | SPX persistent nav can overlap dock controls on small-height devices | Medium | High | P1 | Require collision-safe spacing and mobile regression coverage proving nav visibility + unobstructed SPX controls. | Frontend Agent | Open |
 | R9 | Execution artifacts drift (spec, phase reports, tracker out of sync) causes invalid release sign-off | Medium | Medium | P1 | Update phase slice report + tracker in same slice before advancing. Block phase transitions if documentation is stale. | Docs Agent | Open |
 | R10 | AI Coach options-panel runtime errors in current E2E harness prevent deterministic mobile options toggle assertion | Medium | Medium | P1 | Track as D-007 deferment (`test.fixme`) while preserving remaining mobile/PWA gate coverage; unblock with AI Coach options harness contract refresh. | QA Agent | Open — Tracked deferment |
 
@@ -75,17 +75,17 @@
 - **Consequences:** No offline API data except journal queue (which uses IndexedDB, not fetch cache). This is acceptable because the product is a real-time trading platform.
 - **Revisit Trigger:** If significant user complaints about offline performance outside of journal.
 
-### D-003: Immersive Mode for SPX vs Shared Bottom Inset
+### D-003: Persistent SPX Nav vs Immersive Hide Mode
 
 - **Date:** 2026-03-01
-- **Context:** SPX coach dock (z-68) collides with member bottom nav (z-40). Two approaches possible.
+- **Context:** SPX coach dock and command controls can collide with persistent member bottom nav on short mobile viewports.
 - **Options Considered:**
-  1. Shared `--mobile-bottom-inset` CSS variable — both elements aware of each other.
+  1. Persistent nav with collision-safe spacing and layout hardening.
   2. Immersive mode — hide bottom nav entirely on SPX route.
-- **Decision:** Immersive mode (Option 2).
-- **Rationale:** SPX Command Center is a focused trading environment. Full-screen real estate is more valuable than persistent nav. Precedent: mobile trading apps (Robinhood, TOS) use immersive modes. Simpler implementation.
-- **Consequences:** Must ensure clear escape path (back button or gesture). Users navigate away via top bar, not bottom nav.
-- **Revisit Trigger:** If user research shows SPX users frequently need to switch to other features mid-session.
+- **Decision:** Persistent nav (Option 1).
+- **Rationale:** User feedback prioritized direct route switching while in SPX. Keeping nav visible reduces route trapping and keeps member shell behavior consistent.
+- **Consequences:** Must continuously validate that SPX controls remain unobstructed across common mobile viewports.
+- **Revisit Trigger:** If control overlap regressions recur and cannot be resolved without immersive mode.
 
 ### D-004: No Feature Flags for This Workstream
 
