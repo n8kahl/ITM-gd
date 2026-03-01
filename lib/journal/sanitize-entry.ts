@@ -134,11 +134,20 @@ function asMood(value: unknown): JournalMood | null {
 }
 
 const DRAFT_STATUS_VALUES = new Set(['pending', 'confirmed', 'dismissed'])
+const COACH_REVIEW_STATUS_VALUES = new Set(['pending', 'in_review', 'completed'])
 
 function asDraftStatus(value: unknown): 'pending' | 'confirmed' | 'dismissed' | null {
   if (typeof value !== 'string') return null
   const normalized = value.trim().toLowerCase()
   return DRAFT_STATUS_VALUES.has(normalized) ? (normalized as 'pending' | 'confirmed' | 'dismissed') : null
+}
+
+function asCoachReviewStatus(value: unknown): 'pending' | 'in_review' | 'completed' | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  return COACH_REVIEW_STATUS_VALUES.has(normalized)
+    ? (normalized as 'pending' | 'in_review' | 'completed')
+    : null
 }
 
 function asTags(value: unknown): string[] {
@@ -321,6 +330,8 @@ export function sanitizeJournalEntry(raw: unknown, fallbackId = 'entry-0'): Jour
     is_draft: asBoolean(value.is_draft) ?? false,
     draft_status: asDraftStatus(value.draft_status),
     draft_expires_at: asDateTime(value.draft_expires_at),
+    coach_review_status: asCoachReviewStatus(value.coach_review_status),
+    coach_review_requested_at: asDateTime(value.coach_review_requested_at),
 
     created_at: asDateTime(value.created_at) ?? nowIso,
     updated_at: asDateTime(value.updated_at) ?? nowIso,
