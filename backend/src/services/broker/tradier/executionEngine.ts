@@ -4,7 +4,6 @@ import { toEasternTime } from '../../marketHours';
 import { publishCoachMessage } from '../../coachPushChannel';
 import { getContractRecommendation } from '../../spx/contractSelector';
 import type { SetupTransitionEvent } from '../../spx/tickEvaluator';
-import { recordExecutionFill } from '../../spx/executionReconciliation';
 import {
   upsertExecutionState,
   updateExecutionState,
@@ -469,18 +468,20 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
         runnerStopOrderId,
         updatedAt: new Date().toISOString(),
       });
-
-      await recordExecutionFill({
-        setupId: event.setupId,
-        side: 'partial',
-        phase: 'target1_hit',
-        source: 'broker_tradier',
-        fillPrice: event.price,
-        executedAt: event.timestamp,
-        transitionEventId: event.id,
-        brokerOrderId: partialOrder.id,
+      enqueueOrderForPolling({
+        orderId: partialOrder.id,
         userId: state.userId,
-      }).catch(() => undefined);
+        setupId: event.setupId,
+        sessionDate: state.sessionDate,
+        phase: 't1',
+        tradier,
+        totalQuantity: partialQuantity,
+        transitionEventId: event.id,
+        direction: event.direction,
+        referencePrice: event.price,
+        fillSide: 'partial',
+        fillPhase: 'target1_hit',
+      });
     } catch (error) {
       logger.warn('Tradier execution T1 routing failed', {
         userId: state.userId,
@@ -537,18 +538,20 @@ async function handleTerminalTransition(event: SetupTransitionEvent): Promise<vo
         quantity: state.remainingQuantity,
         tag: `spx:${state.setupId}:${state.sessionDate}:terminal`,
       }));
-
-      await recordExecutionFill({
-        setupId: event.setupId,
-        side: 'exit',
-        phase: event.reason === 'stop' ? 'invalidated' : 'target2_hit',
-        source: 'broker_tradier',
-        fillPrice: event.price,
-        executedAt: event.timestamp,
-        transitionEventId: event.id,
-        brokerOrderId: exitOrder.id,
+      enqueueOrderForPolling({
+        orderId: exitOrder.id,
         userId: state.userId,
-      }).catch(() => undefined);
+        setupId: event.setupId,
+        sessionDate: state.sessionDate,
+        phase: 'terminal',
+        tradier,
+        totalQuantity: state.remainingQuantity,
+        transitionEventId: event.id,
+        direction: event.direction,
+        referencePrice: event.price,
+        fillSide: 'exit',
+        fillPhase: event.reason === 'stop' ? 'invalidated' : 'target2_hit',
+      });
     } catch (error) {
       logger.warn('Tradier execution terminal routing failed', {
         userId: state.userId,

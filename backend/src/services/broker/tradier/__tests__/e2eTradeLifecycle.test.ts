@@ -409,8 +409,8 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
         }),
       );
 
-      // Fill recorded
-      expect(mockRecordExecutionFill).toHaveBeenCalledWith(
+      // T1 fill is reconciled from broker order lifecycle polling.
+      expect(mockRecordExecutionFill).not.toHaveBeenCalledWith(
         expect.objectContaining({ side: 'partial', phase: 'target1_hit' }),
       );
     });

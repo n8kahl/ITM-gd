@@ -4,7 +4,11 @@ import {
   updateExecutionState,
   markStateFailed,
 } from '../../spx/executionStateStore';
-import { recordExecutionFill } from '../../spx/executionReconciliation';
+import {
+  type ExecutionFillSide,
+  type ExecutionTransitionPhase,
+  recordExecutionFill,
+} from '../../spx/executionReconciliation';
 import type { Setup } from '../../spx/types';
 import { TradierClient } from './client';
 
@@ -22,6 +26,8 @@ interface PollEntry {
   transitionEventId?: string;
   direction?: Setup['direction'];
   referencePrice?: number;
+  fillSide?: ExecutionFillSide;
+  fillPhase?: ExecutionTransitionPhase;
 }
 
 const POLL_INTERVAL_MS = 5_000;
@@ -45,9 +51,15 @@ export function enqueueOrderForPolling(entry: {
   transitionEventId?: string;
   direction?: Setup['direction'];
   referencePrice?: number;
+  fillSide?: ExecutionFillSide;
+  fillPhase?: ExecutionTransitionPhase;
 }): void {
+  const resolvedFillMeta = resolveFillMeta(entry.phase, entry.fillSide, entry.fillPhase);
+
   pollQueue.set(entry.orderId, {
     ...entry,
+    fillSide: resolvedFillMeta.side,
+    fillPhase: resolvedFillMeta.phase,
     placedAt: Date.now(),
     pollCount: 0,
     lastRecordedFillQty: 0,
@@ -227,7 +239,7 @@ async function recordFillDelta(
     avgFillPrice: number;
   },
 ): Promise<void> {
-  if (entry.phase !== 'entry') return;
+  if (!entry.fillSide || !entry.fillPhase) return;
 
   const cumulativeFilledQty = Math.max(0, status.filledQuantity);
   const deltaQty = Math.max(0, cumulativeFilledQty - entry.lastRecordedFillQty);
@@ -251,8 +263,8 @@ async function recordFillDelta(
   try {
     await recordExecutionFill({
       setupId: entry.setupId,
-      side: 'entry',
-      phase: 'triggered',
+      side: entry.fillSide,
+      phase: entry.fillPhase,
       source: 'broker_tradier',
       fillPrice,
       fillQuantity: deltaQty,
@@ -295,4 +307,26 @@ export function resetOrderPollerState(): void {
 
 export async function pollOrderLifecycleQueueOnceForTests(): Promise<void> {
   await pollCycle();
+}
+
+function resolveFillMeta(
+  pollPhase: PollEntry['phase'],
+  side?: ExecutionFillSide,
+  phase?: ExecutionTransitionPhase,
+): { side: ExecutionFillSide | undefined; phase: ExecutionTransitionPhase | undefined } {
+  if (side && phase) {
+    return { side, phase };
+  }
+
+  if (pollPhase === 'entry') {
+    return { side: 'entry', phase: 'triggered' };
+  }
+  if (pollPhase === 't1') {
+    return { side: 'partial', phase: 'target1_hit' };
+  }
+  if (pollPhase === 'terminal') {
+    return { side: 'exit', phase: 'target2_hit' };
+  }
+
+  return { side: undefined, phase: undefined };
 }

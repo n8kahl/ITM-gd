@@ -151,4 +151,68 @@ describe('tradier/orderLifecycleManager', () => {
     );
     expect(getOrderPollQueueSize()).toBe(0);
   });
+
+  it('records non-entry phases when fill side/phase metadata is provided', async () => {
+    const getOrderStatus = jest.fn()
+      .mockResolvedValueOnce({
+        id: 't1-001',
+        status: 'filled',
+        filledQuantity: 2,
+        avgFillPrice: 6.1,
+        remainingQuantity: 0,
+        raw: {},
+      })
+      .mockResolvedValueOnce({
+        id: 'terminal-001',
+        status: 'filled',
+        filledQuantity: 1,
+        avgFillPrice: 2.4,
+        remainingQuantity: 0,
+        raw: {},
+      });
+
+    enqueueOrderForPolling({
+      orderId: 't1-001',
+      userId: 'user-3',
+      setupId: 'setup-3',
+      sessionDate: '2026-03-01',
+      phase: 't1',
+      tradier: { getOrderStatus } as any,
+      totalQuantity: 2,
+      fillSide: 'partial',
+      fillPhase: 'target1_hit',
+    });
+    enqueueOrderForPolling({
+      orderId: 'terminal-001',
+      userId: 'user-3',
+      setupId: 'setup-3',
+      sessionDate: '2026-03-01',
+      phase: 'terminal',
+      tradier: { getOrderStatus } as any,
+      totalQuantity: 1,
+      fillSide: 'exit',
+      fillPhase: 'invalidated',
+    });
+
+    await pollOrderLifecycleQueueOnceForTests();
+
+    expect(mockRecordExecutionFill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        setupId: 'setup-3',
+        side: 'partial',
+        phase: 'target1_hit',
+        fillPrice: 6.1,
+        fillQuantity: 2,
+      }),
+    );
+    expect(mockRecordExecutionFill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        setupId: 'setup-3',
+        side: 'exit',
+        phase: 'invalidated',
+        fillPrice: 2.4,
+        fillQuantity: 1,
+      }),
+    );
+  });
 });
