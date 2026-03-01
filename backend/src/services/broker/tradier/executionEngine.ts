@@ -16,6 +16,7 @@ import { buildTradierEntryOrder, buildTradierMarketExitOrder, buildTradierRunner
 import { formatTradierOccSymbol } from './occFormatter';
 import { TradierClient } from './client';
 import { decryptTradierAccessToken, isTradierProductionRuntimeEnabled } from './credentials';
+import { enqueueOrderForPolling, resetOrderPollerState } from './orderLifecycleManager';
 
 interface TradierCredentialRow {
   user_id: string;
@@ -338,17 +339,18 @@ async function handleTriggeredTransition(
         stateByUserSetup.set(key, persistedState);
       }
 
-      await recordExecutionFill({
-        setupId: event.setupId,
-        side: 'entry',
-        phase: 'triggered',
-        source: 'broker_tradier',
-        fillPrice: event.price,
-        executedAt: event.timestamp,
-        transitionEventId: event.id,
-        brokerOrderId: entryOrder.id,
+      enqueueOrderForPolling({
+        orderId: entryOrder.id,
         userId: credential.user_id,
-      }).catch(() => undefined);
+        setupId: event.setupId,
+        sessionDate,
+        phase: 'entry',
+        tradier,
+        totalQuantity: sizing.quantity,
+        transitionEventId: event.id,
+        direction: event.direction,
+        referencePrice: event.price,
+      });
 
       publishCoachMessage({
         userId: credential.user_id,
@@ -613,4 +615,5 @@ export function __resetExecutionEngineStateForTests(): void {
   stateByUserSetup.clear();
   rehydrated = false;
   cachedCredentials = null;
+  resetOrderPollerState();
 }

@@ -4,6 +4,8 @@ import {
   updateExecutionState,
   markStateFailed,
 } from '../../spx/executionStateStore';
+import { recordExecutionFill } from '../../spx/executionReconciliation';
+import type { Setup } from '../../spx/types';
 import { TradierClient } from './client';
 
 interface PollEntry {
@@ -16,6 +18,10 @@ interface PollEntry {
   pollCount: number;
   tradier: TradierClient;
   totalQuantity: number;
+  lastRecordedFillQty: number;
+  transitionEventId?: string;
+  direction?: Setup['direction'];
+  referencePrice?: number;
 }
 
 const POLL_INTERVAL_MS = 5_000;
@@ -36,11 +42,15 @@ export function enqueueOrderForPolling(entry: {
   phase: PollEntry['phase'];
   tradier: TradierClient;
   totalQuantity: number;
+  transitionEventId?: string;
+  direction?: Setup['direction'];
+  referencePrice?: number;
 }): void {
   pollQueue.set(entry.orderId, {
     ...entry,
     placedAt: Date.now(),
     pollCount: 0,
+    lastRecordedFillQty: 0,
   });
 
   ensurePollerRunning();
@@ -49,6 +59,9 @@ export function enqueueOrderForPolling(entry: {
 function ensurePollerRunning(): void {
   if (pollIntervalHandle) return;
   pollIntervalHandle = setInterval(pollCycle, POLL_INTERVAL_MS);
+  if (typeof pollIntervalHandle.unref === 'function') {
+    pollIntervalHandle.unref();
+  }
 }
 
 /**
@@ -93,6 +106,7 @@ async function pollSingleOrder(orderId: string, entry: PollEntry): Promise<void>
   const isTerminal = terminalStatuses.includes(status.status);
 
   if (status.status === 'filled') {
+    await recordFillDelta(entry, status);
     // Full fill
     pollQueue.delete(orderId);
     logger.info('Order filled', {
@@ -116,6 +130,7 @@ async function pollSingleOrder(orderId: string, entry: PollEntry): Promise<void>
   }
 
   if (status.status === 'partially_filled') {
+    await recordFillDelta(entry, status);
     logger.info('Order partially filled', {
       orderId,
       userId: entry.userId,
@@ -205,9 +220,79 @@ async function pollSingleOrder(orderId: string, entry: PollEntry): Promise<void>
   }
 }
 
+async function recordFillDelta(
+  entry: PollEntry,
+  status: {
+    filledQuantity: number;
+    avgFillPrice: number;
+  },
+): Promise<void> {
+  if (entry.phase !== 'entry') return;
+
+  const cumulativeFilledQty = Math.max(0, status.filledQuantity);
+  const deltaQty = Math.max(0, cumulativeFilledQty - entry.lastRecordedFillQty);
+  if (deltaQty <= 0) return;
+
+  const fillPrice = Number.isFinite(status.avgFillPrice) && status.avgFillPrice > 0
+    ? status.avgFillPrice
+    : entry.referencePrice;
+  if (!fillPrice || !Number.isFinite(fillPrice) || fillPrice <= 0) {
+    logger.warn('Order lifecycle: unable to resolve fill price for broker fill record', {
+      orderId: entry.orderId,
+      userId: entry.userId,
+      setupId: entry.setupId,
+      cumulativeFilledQty,
+      lastRecordedFillQty: entry.lastRecordedFillQty,
+    });
+    entry.lastRecordedFillQty = cumulativeFilledQty;
+    return;
+  }
+
+  try {
+    await recordExecutionFill({
+      setupId: entry.setupId,
+      side: 'entry',
+      phase: 'triggered',
+      source: 'broker_tradier',
+      fillPrice,
+      fillQuantity: deltaQty,
+      executedAt: new Date().toISOString(),
+      transitionEventId: entry.transitionEventId,
+      brokerOrderId: entry.orderId,
+      userId: entry.userId,
+      direction: entry.direction,
+      metadata: {
+        source: 'order_status_poll',
+        cumulativeFilledQty,
+        priorRecordedFillQty: entry.lastRecordedFillQty,
+        referencePrice: entry.referencePrice ?? null,
+      },
+    });
+  } catch (error) {
+    logger.warn('Order lifecycle: failed to record broker fill delta', {
+      orderId: entry.orderId,
+      userId: entry.userId,
+      setupId: entry.setupId,
+      deltaQty,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    entry.lastRecordedFillQty = cumulativeFilledQty;
+  }
+}
+
 /**
  * Get current poll queue size (for monitoring).
  */
 export function getOrderPollQueueSize(): number {
   return pollQueue.size;
+}
+
+export function resetOrderPollerState(): void {
+  pollQueue.clear();
+  stopOrderPoller();
+}
+
+export async function pollOrderLifecycleQueueOnceForTests(): Promise<void> {
+  await pollCycle();
 }
