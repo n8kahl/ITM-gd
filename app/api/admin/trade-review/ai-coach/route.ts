@@ -45,7 +45,7 @@ interface CoachEntryRow {
   entry_timestamp: string | null
   exit_timestamp: string | null
   strategy: string | null
-  setup_type: string | null
+  setup_type?: string | null
   followed_plan: boolean | null
   discipline_score: number | null
   mood_before: string | null
@@ -720,7 +720,7 @@ export async function POST(request: NextRequest) {
       .select(`
         id,user_id,symbol,direction,contract_type,trade_date,entry_price,exit_price,
         position_size,pnl,pnl_percentage,stop_loss,initial_target,hold_duration_min,
-        entry_timestamp,exit_timestamp,strategy,setup_type,followed_plan,discipline_score,
+        entry_timestamp,exit_timestamp,strategy,followed_plan,discipline_score,
         mood_before,mood_after,setup_notes,execution_notes,lessons_learned,rating,
         strike_price,expiration_date,dte_at_entry,iv_at_entry,delta_at_entry,theta_at_entry,gamma_at_entry,vega_at_entry
       `)
