@@ -244,14 +244,11 @@ export async function GET(request: NextRequest) {
       offset: searchParams.get('offset') ?? undefined,
     })
 
-    const now = new Date()
     const defaultStartDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
     defaultStartDate.setUTCHours(0, 0, 0, 0)
-    const defaultEndDate = new Date(now)
-    defaultEndDate.setUTCHours(23, 59, 59, 999)
 
     const startDate = parsedQuery.startDate ?? defaultStartDate.toISOString()
-    const endDate = parsedQuery.endDate ?? defaultEndDate.toISOString()
+    const endDate = parsedQuery.endDate ?? null
     const tags = parsedQuery.tags
       ? parsedQuery.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
       : []
@@ -261,7 +258,10 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact' })
       .eq('user_id', user.id)
       .gte('trade_date', startDate)
-      .lte('trade_date', endDate)
+
+    if (endDate) {
+      query = query.lte('trade_date', endDate)
+    }
 
     if (parsedQuery.includeDrafts !== 'true') {
       query = query.eq('is_draft', false)
