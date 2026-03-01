@@ -114,9 +114,9 @@ export function MarketContextPanel({ snapshot }: MarketContextPanelProps) {
   return (
     <div className="glass-card-heavy space-y-4 rounded-xl border border-white/10 p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-ivory">Market Context</h2>
+        <h2 className="font-serif text-base text-ivory">Market Context</h2>
         <span className={`rounded-full border px-2 py-0.5 text-xs ${qualityClasses(snapshot.dataQuality)}`}>
-          {snapshot.dataQuality.toUpperCase()}
+          Data Quality: {snapshot.dataQuality.toUpperCase()}
         </span>
       </div>
 
@@ -228,15 +228,15 @@ export function MarketContextPanel({ snapshot }: MarketContextPanelProps) {
           />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <div className="rounded-md border border-emerald-400/30 bg-emerald-500/10 p-2.5">
-            <p className="text-xs text-emerald-200">Entry Bar</p>
-            <p className="mt-1 text-sm text-emerald-100">
+          <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
+            <p className="text-xs text-muted-foreground">Entry Bar</p>
+            <p className="mt-1 text-sm text-ivory">
               {entryBar ? `${entryBar.v.toLocaleString('en-US')} @ ${formatTimestamp(entryBar.t)}` : '—'}
             </p>
           </div>
-          <div className="rounded-md border border-red-400/30 bg-red-500/10 p-2.5">
-            <p className="text-xs text-red-200">Exit Bar</p>
-            <p className="mt-1 text-sm text-red-100">
+          <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
+            <p className="text-xs text-muted-foreground">Exit Bar</p>
+            <p className="mt-1 text-sm text-ivory">
               {exitBar ? `${exitBar.v.toLocaleString('en-US')} @ ${formatTimestamp(exitBar.t)}` : '—'}
             </p>
           </div>

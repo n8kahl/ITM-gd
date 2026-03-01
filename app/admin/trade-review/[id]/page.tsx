@@ -1,8 +1,10 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { ClipboardCheck } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ChevronLeft, ChevronRight, ClipboardCheck } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { TradeDetailPanel } from '@/components/admin/trade-review/trade-detail-panel'
 import { MarketContextPanel } from '@/components/admin/trade-review/market-context-panel'
 import { CoachWorkspace } from '@/components/admin/trade-review/coach-workspace'
@@ -42,11 +44,19 @@ interface TradeReviewDetailResponse {
   activity_log: CoachReviewActivityEntry[]
 }
 
+interface BrowseEntry {
+  id: string
+  symbol: string
+  member_display_name: string
+}
+
 interface ApiEnvelope<T> {
   success: boolean
   data?: T
   error?: string
 }
+
+type ReferencePanelTab = 'trade_detail' | 'market_context'
 
 async function fetchApi<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -135,7 +145,9 @@ function toTitleCase(value: string): string {
 
 export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewDetailPageProps) {
   const { id: entryId } = use(params)
+  const router = useRouter()
   const [detail, setDetail] = useState<TradeReviewDetailResponse | null>(null)
+  const [referenceTab, setReferenceTab] = useState<ReferencePanelTab>('trade_detail')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -145,9 +157,14 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
   const [dismissing, setDismissing] = useState(false)
   const [uploading, setUploading] = useState(false)
 
-  const loadDetail = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const [navigationOrder, setNavigationOrder] = useState<BrowseEntry[]>([])
+
+  const loadDetail = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
 
     try {
       const data = await fetchApi<TradeReviewDetailResponse>(`/api/admin/trade-review/${entryId}`)
@@ -155,13 +172,23 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load trade review detail')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [entryId])
 
+  const loadNavigationOrder = useCallback(async () => {
+    try {
+      const rows = await fetchApi<BrowseEntry[]>('/api/admin/trade-review/browse?sortBy=trade_date&sortDir=desc&limit=200')
+      setNavigationOrder(Array.isArray(rows) ? rows : [])
+    } catch {
+      setNavigationOrder([])
+    }
+  }, [])
+
   useEffect(() => {
     void loadDetail()
-  }, [loadDetail])
+    void loadNavigationOrder()
+  }, [loadDetail, loadNavigationOrder])
 
   const handleGenerateAI = async (coachPreliminaryNotes: string) => {
     setGenerating(true)
@@ -176,7 +203,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
           }),
         },
       )
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setGenerating(false)
     }
@@ -190,7 +217,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
         method,
         body: JSON.stringify(payload),
       })
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setSaving(false)
     }
@@ -202,7 +229,8 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
       await fetchApi<{ published: boolean }>(`/api/admin/trade-review/${entryId}/publish`, {
         method: 'POST',
       })
-      await loadDetail()
+      await loadDetail({ silent: true })
+      await loadNavigationOrder()
     } finally {
       setPublishing(false)
     }
@@ -214,7 +242,8 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
       await fetchApi<{ dismissed: boolean }>(`/api/admin/trade-review/${entryId}/dismiss`, {
         method: 'POST',
       })
-      await loadDetail()
+      await loadDetail({ silent: true })
+      await loadNavigationOrder()
     } finally {
       setDismissing(false)
     }
@@ -253,7 +282,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
         throw new Error('Failed to upload screenshot to storage')
       }
 
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setUploading(false)
     }
@@ -265,18 +294,70 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
       await fetchApi<{ removed: boolean }>(`/api/admin/trade-review/${entryId}/screenshots?path=${encodeURIComponent(path)}`, {
         method: 'DELETE',
       })
-      await loadDetail()
+      await loadDetail({ silent: true })
     } finally {
       setUploading(false)
     }
   }
 
+  const handleNavigateBack = async () => {
+    router.push('/admin/trade-review')
+  }
+
+  const navigation = useMemo(() => {
+    const currentIndex = navigationOrder.findIndex((entry) => entry.id === entryId)
+    if (currentIndex < 0) {
+      return { prev: null as BrowseEntry | null, next: null as BrowseEntry | null }
+    }
+    return {
+      prev: currentIndex > 0 ? navigationOrder[currentIndex - 1] : null,
+      next: currentIndex < navigationOrder.length - 1 ? navigationOrder[currentIndex + 1] : null,
+    }
+  }, [entryId, navigationOrder])
+
   return (
     <div className="space-y-4">
       <header className="glass-card-heavy rounded-2xl border border-white/10 p-6">
-        <div className="flex items-center gap-3">
-          <ClipboardCheck className="h-5 w-5 text-emerald-400" strokeWidth={1.5} />
-          <h1 className="text-xl font-semibold text-ivory">Trade Review Detail</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <ClipboardCheck className="h-5 w-5 text-emerald-400" strokeWidth={1.5} />
+            <h1 className="text-xl font-semibold text-ivory">Trade Review Detail</h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="luxury-outline"
+              size="sm"
+              className="h-9 px-3"
+              onClick={() => router.push('/admin/trade-review')}
+            >
+              Back To Queue
+            </Button>
+            <Button
+              type="button"
+              variant="luxury-outline"
+              size="sm"
+              className="h-9 px-3"
+              onClick={() => { if (navigation.prev) router.push(`/admin/trade-review/${navigation.prev.id}`) }}
+              disabled={!navigation.prev}
+              aria-label="Previous review"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              {navigation.prev ? `Prev: ${navigation.prev.symbol} · ${navigation.prev.member_display_name}` : 'Prev Review'}
+            </Button>
+            <Button
+              type="button"
+              variant="luxury-outline"
+              size="sm"
+              className="h-9 px-3"
+              onClick={() => { if (navigation.next) router.push(`/admin/trade-review/${navigation.next.id}`) }}
+              disabled={!navigation.next}
+              aria-label="Next review"
+            >
+              {navigation.next ? `Next: ${navigation.next.symbol} · ${navigation.next.member_display_name}` : 'Next Review'}
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Entry ID: <span className="font-mono text-ivory/90">{entryId}</span>
@@ -284,9 +365,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
       </header>
 
       {loading ? (
-        <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-muted-foreground">
-          Loading trade review detail...
-        </div>
+        <LoadingTradeReviewSkeleton />
       ) : error ? (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           {error}
@@ -360,35 +439,121 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <TradeDetailPanel
-              entry={detail.entry}
-              memberDisplayName={detail.member.display_name}
-              memberDiscordUsername={detail.member.discord_username}
-              memberAvatarUrl={detail.member.avatar_url}
-              memberTier={detail.member.tier}
-            />
-            <MarketContextPanel snapshot={detail.coach_note?.market_data_snapshot ?? null} />
-            <CoachWorkspace
-              key={detail.coach_note?.updated_at ?? 'no-note'}
-              entryId={entryId}
-              note={detail.coach_note}
-              activityLog={detail.activity_log}
-              generating={generating}
-              saving={saving}
-              publishing={publishing}
-              dismissing={dismissing}
-              uploading={uploading}
-              onGenerateAI={handleGenerateAI}
-              onSaveDraft={handleSaveDraft}
-              onPublish={handlePublish}
-              onDismiss={handleDismiss}
-              onUploadScreenshot={handleUploadScreenshot}
-              onRemoveScreenshot={handleRemoveScreenshot}
-            />
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+            <section className="space-y-3 xl:col-span-2">
+              <div className="glass-card-heavy rounded-xl border border-white/10 p-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className={`h-9 rounded-lg border text-xs font-medium transition ${
+                      referenceTab === 'trade_detail'
+                        ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
+                        : 'border-white/10 bg-white/5 text-muted-foreground hover:text-ivory'
+                    }`}
+                    onClick={() => setReferenceTab('trade_detail')}
+                  >
+                    Trade Detail
+                  </button>
+                  <button
+                    type="button"
+                    className={`h-9 rounded-lg border text-xs font-medium transition ${
+                      referenceTab === 'market_context'
+                        ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
+                        : 'border-white/10 bg-white/5 text-muted-foreground hover:text-ivory'
+                    }`}
+                    onClick={() => setReferenceTab('market_context')}
+                  >
+                    Market Context
+                  </button>
+                </div>
+              </div>
+
+              {referenceTab === 'trade_detail' ? (
+                <TradeDetailPanel
+                  entry={detail.entry}
+                  memberDisplayName={detail.member.display_name}
+                  memberDiscordUsername={detail.member.discord_username}
+                  memberAvatarUrl={detail.member.avatar_url}
+                  memberTier={detail.member.tier}
+                />
+              ) : (
+                <MarketContextPanel snapshot={detail.coach_note?.market_data_snapshot ?? null} />
+              )}
+            </section>
+
+            <section className="xl:col-span-3">
+              <CoachWorkspace
+                entryId={entryId}
+                note={detail.coach_note}
+                activityLog={detail.activity_log}
+                memberName={detail.member.display_name}
+                memberSymbol={detail.entry.symbol}
+                memberStats={detail.member_stats}
+                memberNotes={{
+                  strategy: detail.entry.strategy,
+                  setupType: detail.entry.setup_type,
+                  setupNotes: detail.entry.setup_notes,
+                  executionNotes: detail.entry.execution_notes,
+                  lessonsLearned: detail.entry.lessons_learned,
+                  deviationNotes: detail.entry.deviation_notes,
+                }}
+                generating={generating}
+                saving={saving}
+                publishing={publishing}
+                dismissing={dismissing}
+                uploading={uploading}
+                onGenerateAI={handleGenerateAI}
+                onSaveDraft={handleSaveDraft}
+                onPublish={handlePublish}
+                onDismiss={handleDismiss}
+                onUploadScreenshot={handleUploadScreenshot}
+                onRemoveScreenshot={handleRemoveScreenshot}
+                onNavigateBack={handleNavigateBack}
+              />
+            </section>
           </div>
         </>
       ) : null}
+    </div>
+  )
+}
+
+function LoadingTradeReviewSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="glass-card-heavy rounded-xl border border-white/10 p-4">
+        <div className="h-5 w-48 animate-pulse rounded bg-white/10" />
+        <div className="mt-3 h-4 w-64 animate-pulse rounded bg-white/10" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+        <div className="space-y-4 xl:col-span-2">
+          <div className="glass-card-heavy rounded-xl border border-white/10 p-4">
+            <div className="h-9 w-full animate-pulse rounded bg-white/10" />
+          </div>
+          <div className="glass-card-heavy rounded-xl border border-white/10 p-5">
+            <div className="h-4 w-28 animate-pulse rounded bg-white/10" />
+            <div className="mt-4 space-y-3">
+              <div className="h-14 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-14 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-14 animate-pulse rounded-lg bg-white/10" />
+            </div>
+          </div>
+        </div>
+        <div className="xl:col-span-3">
+          <div className="glass-card-heavy rounded-xl border border-white/10 p-5">
+            <div className="flex items-center justify-between">
+              <div className="h-4 w-36 animate-pulse rounded bg-white/10" />
+              <div className="h-4 w-28 animate-pulse rounded bg-white/10" />
+            </div>
+            <div className="mt-4 space-y-3">
+              <div className="h-24 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-24 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-32 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-28 animate-pulse rounded-lg bg-white/10" />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -6,6 +6,8 @@ import type {
 } from '@/lib/types/coach-review'
 
 export const TRADE_REVIEW_ENTRY_ID = '11111111-1111-4111-8111-111111111111'
+const PREV_ENTRY_ID = '00000000-0000-4000-8000-000000000000'
+const NEXT_ENTRY_ID = '33333333-3333-4333-8333-333333333333'
 const USER_ID = '22222222-2222-4222-8222-222222222222'
 
 function createJournalEntry(overrides: Record<string, unknown> = {}) {
@@ -223,6 +225,7 @@ export async function setupTradeReviewApiMocks(page: Page) {
   const activity: Array<Record<string, unknown>> = [
     {
       id: 'log-1',
+      actor_name: 'Coach Admin',
       action: 'requested',
       created_at: '2026-03-01T10:01:00.000Z',
     },
@@ -261,7 +264,15 @@ export async function setupTradeReviewApiMocks(page: Page) {
 
   const browseData = [
     {
-      ...createJournalEntry({ symbol: 'TSLA', id: '33333333-3333-4333-8333-333333333333' }),
+      ...createJournalEntry({ symbol: 'MSFT', id: PREV_ENTRY_ID }),
+      member_display_name: 'Mock Member',
+    },
+    {
+      ...createJournalEntry({ id: TRADE_REVIEW_ENTRY_ID }),
+      member_display_name: 'Mock Member',
+    },
+    {
+      ...createJournalEntry({ symbol: 'TSLA', id: NEXT_ENTRY_ID }),
       member_display_name: 'Mock Member',
     },
   ]
@@ -372,9 +383,15 @@ export async function setupTradeReviewApiMocks(page: Page) {
         ...state.note,
         ai_draft: draft,
         market_data_snapshot: createMarketSnapshot(),
+        updated_at: new Date().toISOString(),
       }
       state.reviewStatus = 'in_review'
-      activity.unshift({ id: `log-ai-${state.aiGeneratedCount}`, action: 'ai_generated', created_at: new Date().toISOString() })
+      activity.unshift({
+        id: `log-ai-${state.aiGeneratedCount}`,
+        actor_name: 'Coach Admin',
+        action: 'ai_generated',
+        created_at: new Date().toISOString(),
+      })
 
       await route.fulfill({
         status: 200,
@@ -410,8 +427,14 @@ export async function setupTradeReviewApiMocks(page: Page) {
         ...state.note,
         coach_response: payload.coach_response ?? state.note.coach_response,
         internal_notes: payload.internal_notes ?? state.note.internal_notes,
+        updated_at: new Date().toISOString(),
       }
-      activity.unshift({ id: `log-save-${state.saveCount}`, action: 'edited', created_at: new Date().toISOString() })
+      activity.unshift({
+        id: `log-save-${state.saveCount}`,
+        actor_name: 'Coach Admin',
+        action: 'edited',
+        created_at: new Date().toISOString(),
+      })
 
       await route.fulfill({
         status: 200,
@@ -428,8 +451,14 @@ export async function setupTradeReviewApiMocks(page: Page) {
         ...state.note,
         is_published: true,
         published_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       }
-      activity.unshift({ id: `log-publish-${state.publishCount}`, action: 'published', created_at: new Date().toISOString() })
+      activity.unshift({
+        id: `log-publish-${state.publishCount}`,
+        actor_name: 'Coach Admin',
+        action: 'published',
+        created_at: new Date().toISOString(),
+      })
 
       await route.fulfill({
         status: 200,
@@ -442,7 +471,12 @@ export async function setupTradeReviewApiMocks(page: Page) {
     if (pathname === `/api/admin/trade-review/${TRADE_REVIEW_ENTRY_ID}/dismiss`) {
       state.dismissCount += 1
       state.reviewStatus = null
-      activity.unshift({ id: `log-dismiss-${state.dismissCount}`, action: 'dismissed', created_at: new Date().toISOString() })
+      activity.unshift({
+        id: `log-dismiss-${state.dismissCount}`,
+        actor_name: 'Coach Admin',
+        action: 'dismissed',
+        created_at: new Date().toISOString(),
+      })
 
       await route.fulfill({
         status: 200,
@@ -459,6 +493,7 @@ export async function setupTradeReviewApiMocks(page: Page) {
         ...state.note,
         screenshots: [...state.note.screenshots, path],
         screenshot_urls: [...(state.note.screenshot_urls ?? []), `http://127.0.0.1:3000/mock-upload/${path}`],
+        updated_at: new Date().toISOString(),
       }
       await route.fulfill({
         status: 200,
