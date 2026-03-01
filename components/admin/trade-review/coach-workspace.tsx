@@ -496,7 +496,7 @@ export function CoachWorkspace({
   const hasMemberNotes = memberNoteItems.some((item) => Boolean(item.value && item.value.trim().length > 0))
 
   return (
-    <div className="glass-card-heavy space-y-4 rounded-xl border border-white/10 p-5">
+    <div className="glass-card-heavy space-y-4 rounded-xl border border-white/5 p-5">
       <input
         ref={fileInputRef}
         type="file"
@@ -517,31 +517,31 @@ export function CoachWorkspace({
       </div>
 
       {memberStats ? (
-        <section className="rounded-lg border border-white/10 bg-white/5 p-3">
+        <section className="rounded-lg border border-white/5 bg-white/5 p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-xs uppercase tracking-wider text-muted-foreground">Trader Profile</p>
             <p className="text-[11px] text-muted-foreground">{memberName ?? 'Member'}</p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
+            <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Win Rate</p>
               <p className={`mt-1 text-sm font-semibold ${winRateTone(memberStats.win_rate)}`}>
                 {formatStatPercent(memberStats.win_rate)}
               </p>
             </div>
-            <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
+            <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total Trades</p>
               <p className="mt-1 text-sm font-semibold text-ivory">
                 {memberStats.total_trades.toLocaleString('en-US')}
               </p>
             </div>
-            <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
+            <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Avg P&L</p>
               <p className={`mt-1 text-sm font-semibold ${memberStats.avg_pnl >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
                 {formatStatCurrency(memberStats.avg_pnl)}
               </p>
             </div>
-            <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
+            <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                 {memberSymbol ? `${memberSymbol.toUpperCase()} Win Rate` : 'Symbol Win Rate'}
               </p>
@@ -549,11 +549,11 @@ export function CoachWorkspace({
                 {formatStatPercent(memberStats.symbol_stats?.win_rate)}
               </p>
             </div>
-            <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
+            <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Recent Streak</p>
               <p className="mt-1 text-sm font-semibold text-ivory">{formatStreak(memberStats.recent_streak)}</p>
             </div>
-            <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
+            <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Avg Discipline</p>
               <p className="mt-1 text-sm font-semibold text-ivory">
                 {memberStats.avg_discipline_score == null ? '—' : `${memberStats.avg_discipline_score.toFixed(1)}/5`}
@@ -563,7 +563,7 @@ export function CoachWorkspace({
         </section>
       ) : null}
 
-      <details className="rounded-lg border border-white/10 bg-white/5 p-3">
+      <details className="rounded-lg border border-white/5 bg-white/5 p-3">
         <summary className="cursor-pointer text-xs uppercase tracking-wider text-muted-foreground">
           Member Notes Reference
         </summary>
@@ -581,7 +581,7 @@ export function CoachWorkspace({
         </div>
       </details>
 
-      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+      <div className="rounded-lg border border-white/5 bg-white/5 p-3">
         <p className="text-xs uppercase tracking-wider text-muted-foreground">AI Generation</p>
         <p className="mt-1 text-xs text-muted-foreground">Notes below will guide the AI analysis.</p>
         <textarea
@@ -603,7 +603,7 @@ export function CoachWorkspace({
         </Button>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+      <div className="rounded-lg border border-white/5 bg-white/5 p-3">
         <p className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">Internal Notes (Private)</p>
         <textarea
           value={internalNotes}
@@ -617,7 +617,7 @@ export function CoachWorkspace({
         />
       </div>
 
-      <section className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
+      <section className="space-y-3 rounded-lg border border-white/5 bg-white/5 p-3">
         <div className="flex items-center justify-between">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">What Went Well</p>
           <Button
@@ -663,7 +663,7 @@ export function CoachWorkspace({
         ))}
       </section>
 
-      <section className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
+      <section className="space-y-3 rounded-lg border border-white/5 bg-white/5 p-3">
         <div className="flex items-center justify-between">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">Areas to Improve</p>
           <Button
@@ -722,7 +722,7 @@ export function CoachWorkspace({
         ))}
       </section>
 
-      <section className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
+      <section className="space-y-3 rounded-lg border border-white/5 bg-white/5 p-3">
         <div className="flex items-center justify-between">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">Specific Drills</p>
           <Button
@@ -780,7 +780,7 @@ export function CoachWorkspace({
         ))}
       </section>
 
-      <section className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
+      <section className="space-y-3 rounded-lg border border-white/5 bg-white/5 p-3">
         <p className="text-xs uppercase tracking-wider text-muted-foreground">Assessment & Grade</p>
         <textarea
           value={draft.overall_assessment}
@@ -858,7 +858,7 @@ export function CoachWorkspace({
         />
       </section>
 
-      <section className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-3">
+      <section className="space-y-3 rounded-lg border border-white/5 bg-white/5 p-3">
         <div className="flex items-center justify-between">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">Coach Screenshots</p>
           <Button
@@ -923,7 +923,7 @@ export function CoachWorkspace({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
         <Button
           type="button"
           variant="luxury-outline"
@@ -1069,7 +1069,7 @@ export function CoachWorkspace({
         </AlertDialogContent>
       </AlertDialog>
 
-      <details className="rounded-lg border border-white/10 bg-white/5 p-3">
+      <details className="rounded-lg border border-white/5 bg-white/5 p-3">
         <summary className="cursor-pointer text-xs uppercase tracking-wider text-muted-foreground">
           Activity Log ({activityLog.length})
         </summary>

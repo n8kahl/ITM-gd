@@ -279,7 +279,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
 
   return (
     <div className="space-y-4">
-      <header className="glass-card-heavy rounded-2xl border border-white/10 p-6">
+      <header className="glass-card-heavy rounded-2xl border border-white/5 p-6">
         <div className="flex items-center gap-3">
           <ClipboardCheck className="h-5 w-5 text-emerald-400" strokeWidth={1.5} />
           <h1 className="text-xl font-semibold text-ivory">Trade Review Detail</h1>
@@ -290,18 +290,16 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
       </header>
 
       {loading ? (
-        <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-muted-foreground">
-          Loading trade review detail...
-        </div>
+        <LoadingTradeReviewSkeleton />
       ) : error ? (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           {error}
         </div>
       ) : detail ? (
         <>
-          <div className="glass-card-heavy rounded-xl border border-white/10 p-4">
+          <div className="glass-card-heavy rounded-xl border border-white/5 p-4">
             <div className="grid gap-4 xl:grid-cols-[1.8fr_1fr]">
-              <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center gap-3 rounded-lg border border-white/5 bg-white/5 p-3">
                 <div className="relative h-11 w-11 overflow-hidden rounded-full border border-white/15 bg-black/30">
                   {detail.member.avatar_url ? (
                     <Image
@@ -332,7 +330,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
                 ) : null}
               </div>
 
-              <div className="grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+              <div className="grid grid-cols-2 gap-3 rounded-lg border border-white/5 bg-white/5 p-3">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">P&L</p>
                   <p className={`mt-1 font-mono text-lg ${detail.entry.pnl != null && detail.entry.pnl < 0 ? 'text-red-300' : 'text-emerald-300'}`}>
@@ -355,12 +353,12 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
               <span className={`rounded-full border px-2 py-1 text-xs ${draftStatusClasses[deriveDraftStatus(detail)]}`}>
                 Draft: {toTitleCase(deriveDraftStatus(detail))}
               </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-ivory/80">
+              <span className="rounded-full border border-white/5 bg-white/5 px-2 py-1 text-xs text-ivory/80">
                 {detail.review_request?.assigned_to_name
                   ? `Assigned: ${detail.review_request.assigned_to_name}`
                   : 'Assigned: Unassigned'}
               </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-ivory/80">
+              <span className="rounded-full border border-white/5 bg-white/5 px-2 py-1 text-xs text-ivory/80">
                 Waiting: {formatQueueAge(detail.review_request?.requested_at)}
               </span>
             </div>
@@ -368,14 +366,14 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
             <section className="space-y-3 xl:col-span-2">
-              <div className="glass-card-heavy rounded-xl border border-white/10 p-2">
+              <div className="glass-card-heavy rounded-xl border border-white/5 p-2">
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     className={`h-9 rounded-lg border text-xs font-medium transition ${
                       referenceTab === 'trade_detail'
                         ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
-                        : 'border-white/10 bg-white/5 text-muted-foreground hover:text-ivory'
+                        : 'border-white/5 bg-white/5 text-muted-foreground hover:text-ivory'
                     }`}
                     onClick={() => setReferenceTab('trade_detail')}
                   >
@@ -386,7 +384,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
                     className={`h-9 rounded-lg border text-xs font-medium transition ${
                       referenceTab === 'market_context'
                         ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-200'
-                        : 'border-white/10 bg-white/5 text-muted-foreground hover:text-ivory'
+                        : 'border-white/5 bg-white/5 text-muted-foreground hover:text-ivory'
                     }`}
                     onClick={() => setReferenceTab('market_context')}
                   >
@@ -440,6 +438,46 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
           </div>
         </>
       ) : null}
+    </div>
+  )
+}
+
+function LoadingTradeReviewSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="glass-card-heavy rounded-xl border border-white/5 p-4">
+        <div className="h-5 w-48 animate-pulse rounded bg-white/10" />
+        <div className="mt-3 h-4 w-64 animate-pulse rounded bg-white/10" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+        <div className="space-y-4 xl:col-span-2">
+          <div className="glass-card-heavy rounded-xl border border-white/5 p-4">
+            <div className="h-9 w-full animate-pulse rounded bg-white/10" />
+          </div>
+          <div className="glass-card-heavy rounded-xl border border-white/5 p-5">
+            <div className="h-4 w-28 animate-pulse rounded bg-white/10" />
+            <div className="mt-4 space-y-3">
+              <div className="h-14 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-14 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-14 animate-pulse rounded-lg bg-white/10" />
+            </div>
+          </div>
+        </div>
+        <div className="xl:col-span-3">
+          <div className="glass-card-heavy rounded-xl border border-white/5 p-5">
+            <div className="flex items-center justify-between">
+              <div className="h-4 w-36 animate-pulse rounded bg-white/10" />
+              <div className="h-4 w-28 animate-pulse rounded bg-white/10" />
+            </div>
+            <div className="mt-4 space-y-3">
+              <div className="h-24 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-24 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-32 animate-pulse rounded-lg bg-white/10" />
+              <div className="h-28 animate-pulse rounded-lg bg-white/10" />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
