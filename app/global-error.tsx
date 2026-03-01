@@ -3,6 +3,31 @@
 import { useEffect } from 'react';
 
 const CHUNK_RECOVERY_KEY = 'tradeitm:chunk-recovery-attempted';
+const CHUNK_RECOVERY_COOLDOWN_MS = 30_000;
+
+function wasRecentRecoveryAttempt(): boolean {
+  if (typeof window === 'undefined') return false;
+  const raw = sessionStorage.getItem(CHUNK_RECOVERY_KEY);
+  if (!raw) return false;
+  const attemptedAt = Number.parseInt(raw, 10);
+  if (!Number.isFinite(attemptedAt)) return false;
+  return Date.now() - attemptedAt < CHUNK_RECOVERY_COOLDOWN_MS;
+}
+
+function isWebpackRuntimeMismatch(error: Error): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  const stack = String(error?.stack || '').toLowerCase();
+  const undefinedCallSignature = (
+    message.includes("cannot read properties of undefined (reading 'call')")
+    || message.includes('cannot read property \'call\' of undefined')
+  );
+  const webpackEvidence = (
+    stack.includes('webpack-')
+    || stack.includes('__webpack_require__')
+    || stack.includes('app-pages-internals')
+  );
+  return undefinedCallSignature && webpackEvidence;
+}
 
 function isChunkLoadError(error: Error): boolean {
   const name = String(error?.name || '').toLowerCase();
@@ -13,13 +38,14 @@ function isChunkLoadError(error: Error): boolean {
     || message.includes('chunkloaderror')
     || message.includes('failed to fetch dynamically imported module')
     || message.includes('css chunk load failed')
+    || isWebpackRuntimeMismatch(error)
   );
 }
 
 async function recoverFromChunkError(): Promise<void> {
   if (typeof window === 'undefined') return;
-  if (sessionStorage.getItem(CHUNK_RECOVERY_KEY) === '1') return;
-  sessionStorage.setItem(CHUNK_RECOVERY_KEY, '1');
+  if (wasRecentRecoveryAttempt()) return;
+  sessionStorage.setItem(CHUNK_RECOVERY_KEY, String(Date.now()));
 
   try {
     if ('serviceWorker' in navigator) {
@@ -70,7 +96,7 @@ export default function GlobalError({
           <h2 className="text-xl font-semibold mb-2">Something went wrong</h2>
           <p className="text-white/60 text-sm mb-6">
             {chunkError
-              ? 'A new version is available. Reload to sync the latest homepage assets.'
+              ? 'A new version is available. Reload to sync the latest app assets.'
               : 'An unexpected error occurred. Please try again.'}
           </p>
           <button
