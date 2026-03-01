@@ -8,6 +8,13 @@ import { createNeutralFlowWindowAggregation, getFlowWindowAggregation } from './
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import { logger } from '../../lib/logger';
+import {
+  readSharedSnapshot,
+  releaseSnapshotBuildLock,
+  tryAcquireSnapshotBuildLock,
+  waitForSharedSnapshot,
+  writeSharedSnapshot,
+} from './snapshotCoordination';
 import { classifyCurrentRegime } from './regimeClassifier';
 import { detectActiveSetups, getLatestSetupEnvironmentState } from './setupDetector';
 import { applyTickStateToSetups, evaluateTickSetupTransitions, syncTickEvaluatorSetups, persistTickEvaluatorState } from './tickEvaluator';
@@ -566,13 +573,50 @@ function refreshSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   }
 
   snapshotInFlightStartedAt = Date.now();
-  snapshotInFlight = buildSnapshot(forceRefresh)
+  snapshotInFlight = (async () => {
+    const cachedSharedSnapshot = !forceRefresh
+      ? await readSharedSnapshot()
+      : null;
+    if (cachedSharedSnapshot) {
+      logger.info('SPX snapshot served from distributed shared cache');
+      return cachedSharedSnapshot;
+    }
+
+    const lockOwnerToken = await tryAcquireSnapshotBuildLock();
+    if (lockOwnerToken) {
+      try {
+        const builtSnapshot = await buildSnapshot(forceRefresh);
+        await writeSharedSnapshot(builtSnapshot);
+        return builtSnapshot;
+      } finally {
+        await releaseSnapshotBuildLock(lockOwnerToken);
+      }
+    }
+
+    const waitedSnapshot = await waitForSharedSnapshot();
+    if (waitedSnapshot) {
+      logger.info('SPX snapshot served after waiting on distributed build lock');
+      return waitedSnapshot;
+    }
+
+    logger.warn('SPX snapshot distributed coordination fallback: lock wait timed out, building locally');
+    return buildSnapshot(forceRefresh);
+  })()
     .then((snapshot) => {
       lastGoodSnapshot = snapshot;
       lastGoodSnapshotAt = Date.now();
       return snapshot;
     })
-    .catch((error) => {
+    .catch(async (error) => {
+      const sharedSnapshot = await readSharedSnapshot();
+      if (sharedSnapshot) {
+        logger.warn('SPX snapshot refresh failed; serving distributed shared snapshot', {
+          forceRefresh,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return sharedSnapshot;
+      }
+
       if (lastGoodSnapshot) {
         logger.warn('SPX snapshot refresh failed; serving last good snapshot', {
           forceRefresh,
