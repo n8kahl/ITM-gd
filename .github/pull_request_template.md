@@ -1,0 +1,6 @@
+- [ ] Links to issue(s)
+- [ ] Includes tests (or explains why not)
+- [ ] Adds/updates logs/metrics (if production path)
+- [ ] Updates docs/runbook if operational behavior changes
+- [ ] Guarded behind flag if risk > Low
+- [ ] Verified in staging (notes)

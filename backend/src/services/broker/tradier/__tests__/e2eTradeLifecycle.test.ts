@@ -76,11 +76,13 @@ jest.mock('../client', () => ({
 // --- Imports (after all mocks are declared) ---
 import {
   processTradierExecutionTransitions,
+  rehydrateExecutionStates,
   __resetExecutionEngineStateForTests,
 } from '../executionEngine';
 import { TradierClient } from '../client';
 import type { SetupTransitionEvent } from '../../../spx/tickEvaluator';
 import type { Setup, ContractRecommendation, ClusterZone } from '../../../spx/types';
+import { pollOrderLifecycleQueueOnceForTests } from '../orderLifecycleManager';
 
 // --- Fixtures ---
 const MOCK_CLUSTER_ZONE: ClusterZone = {
@@ -360,13 +362,13 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
         }),
       );
 
-      // Fill recorded
-      expect(mockRecordExecutionFill).toHaveBeenCalledWith(
+      // Entry fill is now reconciled from broker order lifecycle polling.
+      expect(mockRecordExecutionFill).not.toHaveBeenCalledWith(
         expect.objectContaining({ side: 'entry', phase: 'triggered' }),
       );
     });
 
-    it('target1_hit → scales out 2 contracts + places runner stop for 2', async () => {
+    it('target1_hit → routes partial scale order and defers runner stop resize to lifecycle polling', async () => {
       setupSupabaseMocks({
         credentials: [{
           account_id: MOCK_CREDENTIAL.account_id,
@@ -374,14 +376,12 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
           metadata: MOCK_CREDENTIAL.metadata,
         }],
       });
-      mockPlaceOrder
-        .mockResolvedValueOnce({ id: 'scale-order-001', status: 'pending', raw: {} })
-        .mockResolvedValueOnce({ id: 'runner-stop-001', status: 'pending', raw: {} });
+      mockPlaceOrder.mockResolvedValueOnce({ id: 'scale-order-001', status: 'pending', raw: {} });
 
       await processTradierExecutionTransitions([buildT1Event()]);
 
-      // Two orders: scale partial + runner stop
-      expect(mockPlaceOrder).toHaveBeenCalledTimes(2);
+      // Only the scale order is placed immediately.
+      expect(mockPlaceOrder).toHaveBeenCalledTimes(1);
 
       // Scale order: sell_to_close, limit, qty = floor(4 * 0.65) = 2
       const scalePayload = mockPlaceOrder.mock.calls[0][0];
@@ -390,32 +390,13 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       expect(scalePayload.quantity).toBe(2); // floor(4 * 0.65)
       expect(scalePayload.option_symbol).toBe(entryOrderSymbol);
 
-      // Runner stop order: sell_to_close, stop, qty = 4 - 2 = 2
-      const stopPayload = mockPlaceOrder.mock.calls[1][0];
-      expect(stopPayload.side).toBe('sell_to_close');
-      expect(stopPayload.type).toBe('stop');
-      expect(stopPayload.quantity).toBe(2);
-      // Stop price = entryLimit * 1.015 = 4.40 * 1.015 = 4.466 → rounded to 4.47
-      expect(stopPayload.stop).toBeCloseTo(4.47, 2);
-
-      // State updated with reduced remaining and runner order ID
-      expect(mockUpdateExecutionState).toHaveBeenCalledWith(
-        MOCK_CREDENTIAL.user_id,
-        MOCK_SETUP.id,
-        expect.any(String),
-        expect.objectContaining({
-          remainingQuantity: 2,
-          runnerStopOrderId: 'runner-stop-001',
-        }),
-      );
-
-      // Fill recorded
-      expect(mockRecordExecutionFill).toHaveBeenCalledWith(
+      // T1 fill is reconciled from broker order lifecycle polling.
+      expect(mockRecordExecutionFill).not.toHaveBeenCalledWith(
         expect.objectContaining({ side: 'partial', phase: 'target1_hit' }),
       );
     });
 
-    it('target2_hit → cancels runner stop + market exits 2 remaining', async () => {
+    it('target2_hit → routes market exit for remaining quantity when no T1 fill poll has reconciled yet', async () => {
       setupSupabaseMocks({
         credentials: [{
           account_id: MOCK_CREDENTIAL.account_id,
@@ -428,15 +409,16 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
 
       await processTradierExecutionTransitions([buildT2Event()]);
 
-      // Runner stop cancelled
-      expect(mockCancelOrder).toHaveBeenCalledWith('runner-stop-001');
+      // Runner stop cancellation depends on lifecycle-polled state updates.
+      expect(mockCancelOrder).not.toHaveBeenCalled();
 
-      // Market exit for remaining 2 contracts
+      // In this test path we do not run lifecycle polling between T1 and terminal,
+      // so state still carries full quantity.
       expect(mockPlaceOrder).toHaveBeenCalledTimes(1);
       const exitPayload = mockPlaceOrder.mock.calls[0][0];
       expect(exitPayload.side).toBe('sell_to_close');
       expect(exitPayload.type).toBe('market');
-      expect(exitPayload.quantity).toBe(2);
+      expect(exitPayload.quantity).toBe(4);
 
       // State closed
       expect(mockCloseExecutionState).toHaveBeenCalledWith(
@@ -458,7 +440,7 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       __resetExecutionEngineStateForTests();
     });
 
-    it('stop breach → cancels runner stop + market exits remaining', async () => {
+    it('stop breach → routes market exit for full quantity when no T1 fill poll has reconciled yet', async () => {
       // Phase 1: Entry
       mockGetContractRecommendation.mockResolvedValue(MOCK_RECOMMENDATION);
       setupSupabaseMocks({ credentials: [MOCK_CREDENTIAL], portfolio: LARGE_PORTFOLIO });
@@ -501,7 +483,6 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       mockPlaceOrder
         .mockResolvedValueOnce({ id: 'scale-order-002', status: 'pending', raw: {} })
         .mockResolvedValueOnce({ id: 'runner-stop-002', status: 'pending', raw: {} });
-      mockUpdateExecutionState.mockResolvedValue(undefined);
       mockRecordExecutionFill.mockResolvedValue(undefined);
       await processTradierExecutionTransitions([buildT1Event()]);
 
@@ -521,15 +502,16 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
 
       await processTradierExecutionTransitions([buildStopEvent()]);
 
-      // Runner stop cancelled
-      expect(mockCancelOrder).toHaveBeenCalledWith('runner-stop-002');
+      // Runner stop cancellation depends on lifecycle-polled state updates.
+      expect(mockCancelOrder).not.toHaveBeenCalled();
 
-      // Market exit for remaining
+      // In this test path we do not run lifecycle polling between T1 and stop,
+      // so state still carries full quantity.
       expect(mockPlaceOrder).toHaveBeenCalledTimes(1);
       const exitPayload = mockPlaceOrder.mock.calls[0][0];
       expect(exitPayload.side).toBe('sell_to_close');
       expect(exitPayload.type).toBe('market');
-      expect(exitPayload.quantity).toBe(2);
+      expect(exitPayload.quantity).toBe(4);
 
       // State closed with 'stop' reason
       expect(mockCloseExecutionState).toHaveBeenCalledWith(
@@ -615,6 +597,86 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       expect(mockPlaceOrder).not.toHaveBeenCalled();
     });
 
+    it('blocked gate setup never routes broker orders', async () => {
+      const blockedSetup: Setup = {
+        ...MOCK_SETUP,
+        gateStatus: 'blocked',
+        gateReasons: ['drift_control_paused:fade_at_wall|ranging'],
+      };
+      mockGetContractRecommendation.mockResolvedValue(MOCK_RECOMMENDATION);
+      setupSupabaseMocks({
+        credentials: [MOCK_CREDENTIAL],
+        portfolio: { total_equity: 100_000, day_trade_buying_power: 200_000 },
+      });
+
+      await processTradierExecutionTransitions([buildTriggeredEvent(blockedSetup)]);
+
+      expect(mockGetContractRecommendation).not.toHaveBeenCalled();
+      expect(mockPlaceOrder).not.toHaveBeenCalled();
+      expect(mockUpsertExecutionState).not.toHaveBeenCalled();
+    });
+
+    it('shadow-blocked setup never routes broker orders', async () => {
+      const shadowBlockedSetup: Setup = {
+        ...MOCK_SETUP,
+        gateStatus: 'shadow_blocked',
+        gateReasons: ['confluence_shadow_block:2.99'],
+      };
+      mockGetContractRecommendation.mockResolvedValue(MOCK_RECOMMENDATION);
+      setupSupabaseMocks({
+        credentials: [MOCK_CREDENTIAL],
+        portfolio: { total_equity: 100_000, day_trade_buying_power: 200_000 },
+      });
+
+      await processTradierExecutionTransitions([buildTriggeredEvent(shadowBlockedSetup)]);
+
+      expect(mockGetContractRecommendation).not.toHaveBeenCalled();
+      expect(mockPlaceOrder).not.toHaveBeenCalled();
+      expect(mockUpsertExecutionState).not.toHaveBeenCalled();
+    });
+
+    it('rehydration restores polling for in-flight entry orders', async () => {
+      mockLoadOpenStates.mockResolvedValue([
+        {
+          id: 'state-rehydrate-1',
+          userId: MOCK_CREDENTIAL.user_id,
+          setupId: MOCK_SETUP.id,
+          sessionDate: '2026-02-23',
+          symbol: 'SPXW260223C05870000',
+          quantity: 3,
+          remainingQuantity: 1,
+          entryOrderId: 'entry-rehydrate-001',
+          runnerStopOrderId: 'runner-stop-rehydrate-001',
+          entryLimitPrice: 4.4,
+          actualFillQty: 1,
+          avgFillPrice: 4.5,
+          status: 'partial_fill',
+          closeReason: null,
+          closedAt: null,
+          createdAt: '2026-02-23T14:45:00Z',
+          updatedAt: '2026-02-23T14:46:00Z',
+        },
+      ]);
+      setupSupabaseMocks({
+        credentials: [MOCK_CREDENTIAL],
+        portfolio: null,
+      });
+      mockGetOrderStatus.mockResolvedValue({
+        id: 'entry-rehydrate-001',
+        status: 'open',
+        filledQuantity: 1,
+        avgFillPrice: 4.5,
+        remainingQuantity: 2,
+        raw: {},
+      });
+
+      const rehydratedCount = await rehydrateExecutionStates();
+      await pollOrderLifecycleQueueOnceForTests();
+
+      expect(rehydratedCount).toBe(1);
+      expect(mockGetOrderStatus).toHaveBeenCalledWith('entry-rehydrate-001');
+    });
+
     it('single-contract position exits fully at T1 with no runner stop', async () => {
       // Setup entry with small portfolio → 1 contract
       mockGetContractRecommendation.mockResolvedValue(MOCK_RECOMMENDATION);
@@ -673,15 +735,8 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       expect(scalePayload.side).toBe('sell_to_close');
       expect(scalePayload.quantity).toBe(1);
 
-      // State updated with remaining = 0, no runner stop order
-      expect(mockUpdateExecutionState).toHaveBeenCalledWith(
-        MOCK_CREDENTIAL.user_id,
-        MOCK_SETUP.id,
-        expect.any(String),
-        expect.objectContaining({
-          remainingQuantity: 0,
-        }),
-      );
+      // Remaining/runners are now managed via lifecycle polling on actual T1 fill status.
+      expect(mockUpdateExecutionState).not.toHaveBeenCalled();
     });
   });
 });

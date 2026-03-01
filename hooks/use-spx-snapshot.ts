@@ -35,8 +35,17 @@ interface SPXSnapshotResponse {
     warnings?: string[]
   } | null
   dataQuality?: {
-    integrity: 'full' | 'degraded'
+    integrity?: 'full' | 'degraded'
     warnings?: string[]
+    generatedAt?: string
+    degraded?: boolean
+    degradedReasons?: string[]
+    stages?: Record<string, {
+      ok?: boolean
+      source?: string
+      freshnessMs?: number
+      degradedReason?: string | null
+    }>
   } | null
   levels: SPXLevel[]
   clusters: ClusterZone[]
@@ -94,6 +103,84 @@ function clearSnapshotFailureState(): void {
   snapshotCooldownUntil = 0
 }
 
+function getStageDegradedReasons(snapshot: SPXSnapshotResponse | null): string[] {
+  if (!snapshot?.dataQuality || typeof snapshot.dataQuality !== 'object') return []
+  const stageReasons = new Set<string>()
+
+  const degradedReasons = Array.isArray(snapshot.dataQuality.degradedReasons)
+    ? snapshot.dataQuality.degradedReasons
+    : []
+  for (const degradedReason of degradedReasons) {
+    if (typeof degradedReason === 'string' && degradedReason.trim().length > 0) {
+      stageReasons.add(degradedReason.trim())
+    }
+  }
+
+  const stages = snapshot.dataQuality.stages
+  if (stages && typeof stages === 'object') {
+    for (const [stage, quality] of Object.entries(stages)) {
+      if (!quality || typeof quality !== 'object') continue
+      if (quality.ok !== false) continue
+      const degradedReason = typeof quality.degradedReason === 'string' && quality.degradedReason.trim().length > 0
+        ? quality.degradedReason.trim()
+        : 'fallback'
+      stageReasons.add(`${stage}:${degradedReason}`)
+    }
+  }
+
+  return Array.from(stageReasons)
+}
+
+function resolveSnapshotDegradedState(snapshot: SPXSnapshotResponse | null): {
+  isDegraded: boolean
+  message: string | null
+} {
+  const stageDegradedReasons = getStageDegradedReasons(snapshot)
+  const dataQuality = snapshot?.dataQuality && typeof snapshot.dataQuality === 'object'
+    ? snapshot.dataQuality
+    : null
+  const legacyIntegrity = dataQuality?.integrity
+  const legacyWarnings = Array.isArray(dataQuality?.warnings)
+    ? dataQuality.warnings.filter((warning): warning is string => typeof warning === 'string' && warning.trim().length > 0)
+    : []
+  const stageDegraded = dataQuality?.degraded === true || stageDegradedReasons.length > 0
+  const legacyDegraded = legacyIntegrity === 'degraded'
+  const flagDegraded = snapshot?.degraded === true
+  const isDegraded = flagDegraded || stageDegraded || legacyDegraded
+
+  if (!isDegraded) {
+    return {
+      isDegraded: false,
+      message: null,
+    }
+  }
+
+  const explicitMessage = typeof snapshot?.message === 'string' && snapshot.message.trim().length > 0
+    ? snapshot.message.trim()
+    : null
+  if (explicitMessage) {
+    return {
+      isDegraded: true,
+      message: explicitMessage,
+    }
+  }
+
+  const reasons = stageDegradedReasons.length > 0
+    ? stageDegradedReasons
+    : legacyWarnings
+  if (reasons.length > 0) {
+    return {
+      isDegraded: true,
+      message: `SPX snapshot degraded: ${reasons.slice(0, 3).join(' · ')}`,
+    }
+  }
+
+  return {
+    isDegraded: true,
+    message: 'SPX snapshot degraded.',
+  }
+}
+
 export function useSPXSnapshot() {
   const query = useSPXQuery<SPXSnapshotResponse>('/api/spx/snapshot', {
     refreshInterval: () => getSnapshotRefreshInterval(),
@@ -106,11 +193,12 @@ export function useSPXSnapshot() {
       clearSnapshotFailureState()
     },
   })
+  const resolvedDegradedState = resolveSnapshotDegradedState(query.data || null)
 
   return {
     snapshot: query.data || null,
-    isDegraded: query.data?.degraded === true,
-    degradedMessage: typeof query.data?.message === 'string' ? query.data.message : null,
+    isDegraded: resolvedDegradedState.isDegraded,
+    degradedMessage: resolvedDegradedState.message,
     isLoading: query.isLoading,
     error: query.error,
     mutate: query.mutate,

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
+import { hasBackendAdminAccess } from '../lib/adminAccess';
 import { authenticateToken } from '../middleware/auth';
 import { requireTier } from '../middleware/requireTier';
 import { getPredictionState } from '../services/spx/aiPredictor';
@@ -38,6 +39,10 @@ import {
 } from '../services/broker/tradier/credentials';
 import { getTradierExecutionRuntimeStatus } from '../services/broker/tradier/executionEngine';
 import {
+  inferTradierUnderlyingFromOptionSymbol,
+  isTradierSPXOptionSymbol,
+} from '../services/broker/tradier/killSwitchHelpers';
+import {
   loadOpenStatesWithOrders,
   closeAllUserStates,
 } from '../services/spx/executionStateStore';
@@ -45,6 +50,7 @@ import {
 const router = Router();
 const KNOWN_MISSING_RELATIONS = new Set<string>();
 const TRADE_STREAM_STALE_THRESHOLD_MS = 30_000;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
@@ -78,6 +84,10 @@ function parsePositiveInteger(value: unknown, fallback: number, min: number, max
   if (parsed < min) return min;
   if (parsed > max) return max;
   return parsed;
+}
+
+function isUuid(value: string): boolean {
+  return UUID_REGEX.test(value);
 }
 
 function toTradeStreamFeedTrust(generatedAt: string): TradeStreamFeedTrustMetadata {
@@ -164,6 +174,96 @@ function parseSetupPayload(value: unknown): Setup | null {
 }
 
 router.use(authenticateToken, requireTier('pro'));
+
+router.get('/replay-sessions/:sessionId/snapshots', async (req: Request, res: Response) => {
+  try {
+    const sessionId = typeof req.params.sessionId === 'string' ? req.params.sessionId.trim() : '';
+    if (!isUuid(sessionId)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'sessionId must be a valid UUID.',
+      });
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const isAdmin = await hasBackendAdminAccess(userId);
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin access required.',
+      });
+    }
+
+    const symbol = typeof req.query.symbol === 'string' && req.query.symbol.trim().length > 0
+      ? req.query.symbol.trim().toUpperCase()
+      : 'SPX';
+
+    const { data: session, error: sessionError } = await supabase
+      .from('discord_trade_sessions')
+      .select('id,session_date')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (sessionError) {
+      throw sessionError;
+    }
+
+    if (!session) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    const sessionDate = typeof (session as { session_date?: unknown }).session_date === 'string'
+      ? (session as { session_date: string }).session_date
+      : String((session as { session_date?: unknown }).session_date || '');
+
+    if (!sessionDate) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    const { data: snapshots, error: snapshotsError } = await supabase
+      .from('replay_snapshots')
+      .select('*')
+      .eq('session_date', sessionDate)
+      .eq('symbol', symbol)
+      .order('captured_at', { ascending: true });
+
+    if (snapshotsError) {
+      throw snapshotsError;
+    }
+
+    const snapshotRows = Array.isArray(snapshots) ? snapshots : [];
+    return res.json({
+      sessionId,
+      sessionDate,
+      symbol,
+      snapshots: snapshotRows,
+      count: snapshotRows.length,
+    });
+  } catch (error) {
+    logger.error('SPX replay session snapshots endpoint failed', {
+      sessionId: req.params.sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load replay session snapshots.',
+      retryAfter: 10,
+    });
+  }
+});
 
 router.get('/snapshot', async (req: Request, res: Response) => {
   try {
@@ -1221,11 +1321,105 @@ router.post('/broker/tradier/kill', async (req: Request, res: Response) => {
       });
     }
 
-    logger.info('Kill switch activated', { userId, cancelledOrders });
-    return res.json({
-      success: true,
-      message: 'Kill switch activated. Execution disabled, all open orders cancelled.',
+    // S3: Flatten any remaining SPX/SPXW option positions.
+    let flattenAttempted = 0;
+    let flattenSucceeded = 0;
+    const flattenFailures: Array<{ symbol: string; quantity: number; side: 'sell_to_close' | 'buy_to_close'; error: string }> = [];
+    try {
+      const brokerPositions = await tradier.getPositions();
+      const spxPositions = brokerPositions.filter((position) =>
+        isTradierSPXOptionSymbol(position.symbol)
+        && Number.isFinite(position.quantity)
+        && position.quantity !== 0,
+      );
+
+      for (const position of spxPositions) {
+        const quantity = Math.max(0, Math.abs(Math.trunc(position.quantity)));
+        if (quantity <= 0) continue;
+
+        const side: 'sell_to_close' | 'buy_to_close' = position.quantity > 0
+          ? 'sell_to_close'
+          : 'buy_to_close';
+
+        flattenAttempted += 1;
+        try {
+          await tradier.placeOrder({
+            class: 'option',
+            symbol: inferTradierUnderlyingFromOptionSymbol(position.symbol),
+            option_symbol: position.symbol,
+            side,
+            quantity,
+            type: 'market',
+            duration: 'day',
+            tag: `spx:kill:${Date.now()}:flatten`,
+          });
+          flattenSucceeded += 1;
+        } catch (error) {
+          flattenFailures.push({
+            symbol: position.symbol,
+            quantity,
+            side,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } catch (error) {
+      flattenFailures.push({
+        symbol: 'SPX*',
+        quantity: 0,
+        side: 'sell_to_close',
+        error: `position_query_failed:${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+
+    // S3: Verify no SPX option positions remain.
+    let verificationFailed = false;
+    let remainingPositions: Array<{ symbol: string; quantity: number }> = [];
+    try {
+      const brokerPositions = await tradier.getPositions();
+      remainingPositions = brokerPositions
+        .filter((position) =>
+          isTradierSPXOptionSymbol(position.symbol)
+          && Number.isFinite(position.quantity)
+          && position.quantity !== 0,
+        )
+        .map((position) => ({
+          symbol: position.symbol,
+          quantity: position.quantity,
+        }));
+    } catch (error) {
+      verificationFailed = true;
+      flattenFailures.push({
+        symbol: 'SPX*',
+        quantity: 0,
+        side: 'sell_to_close',
+        error: `verification_failed:${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+
+    const neutralized = !verificationFailed && flattenFailures.length === 0 && remainingPositions.length === 0;
+    const statusCode = neutralized ? 200 : 503;
+    logger.info('Kill switch activated', {
+      userId,
       cancelledOrders,
+      flattenAttempted,
+      flattenSucceeded,
+      flattenFailures: flattenFailures.length,
+      remainingPositions: remainingPositions.length,
+      verificationFailed,
+    });
+
+    return res.status(statusCode).json({
+      success: neutralized,
+      message: neutralized
+        ? 'Kill switch activated. Execution disabled, open orders cancelled, and SPX positions flattened.'
+        : 'Kill switch partially completed. Review failures and remaining positions immediately.',
+      cancelledOrders,
+      flattenAttempted,
+      flattenSucceeded,
+      flattenFailures,
+      verificationFailed,
+      remainingPositions,
     });
   } catch (error) {
     logger.error('SPX Tradier kill switch failed', {

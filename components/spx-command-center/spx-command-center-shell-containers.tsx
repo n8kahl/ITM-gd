@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
+import { cn } from '@/lib/utils'
 import {
   createClassicDesktopSurfaceOrchestratorProps,
   createDesktopClassicLayoutPolicy,
@@ -44,6 +45,8 @@ type DesktopSurfaceContainerProps = SurfaceContainerProps & {
   coachPreviewFallback: ReactNode
 }
 
+const DESKTOP_CLASSIC_LAYOUT_AUTOSAVE_ID = 'spx.command_center:layout:v1'
+
 export function SPXDesktopSurfaceContainer({
   controller,
   coachPreviewFallback,
@@ -69,14 +72,27 @@ export function SPXDesktopSurfaceContainer({
 
   return (
     <motion.div variants={controller.itemVariants} className="relative h-[calc(100vh-56px)] overflow-hidden">
-      {desktopViewPolicy.isClassicView ? (
-        <>
+      <div className="absolute inset-0">
+        <div
+          aria-hidden={!desktopViewPolicy.isClassicView}
+          className={cn(
+            'absolute inset-0 transition-opacity duration-150',
+            desktopViewPolicy.isClassicView
+              ? 'opacity-100 pointer-events-auto'
+              : 'opacity-0 pointer-events-none',
+          )}
+        >
           <SPXDesktopSurfaceOrchestrator {...classicDesktopOrchestratorProps} />
           <div className="h-full pb-16 pt-16">
             {classicDesktopLayoutPolicy.showSkeleton ? (
               <SPXPanelSkeleton />
             ) : (
-              <PanelGroup direction="horizontal" className="h-full" data-testid={classicDesktopLayoutPolicy.panelGroupTestId}>
+              <PanelGroup
+                autoSaveId={DESKTOP_CLASSIC_LAYOUT_AUTOSAVE_ID}
+                direction="horizontal"
+                className="h-full"
+                data-testid={classicDesktopLayoutPolicy.panelGroupTestId}
+              >
                 <Panel
                   defaultSize={classicDesktopLayoutPolicy.mainPanelDefaultSize}
                   minSize={classicDesktopLayoutPolicy.mainPanelMinSize}
@@ -101,13 +117,20 @@ export function SPXDesktopSurfaceContainer({
               </PanelGroup>
             )}
           </div>
-        </>
-      ) : (
-        <>
+        </div>
+        <div
+          aria-hidden={desktopViewPolicy.isClassicView}
+          className={cn(
+            'absolute inset-0 transition-opacity duration-150',
+            desktopViewPolicy.isClassicView
+              ? 'opacity-0 pointer-events-none'
+              : 'opacity-100 pointer-events-auto',
+          )}
+        >
           <SPXDesktopSpatialCanvas {...desktopSpatialCanvasProps} />
           <SPXDesktopSurfaceOrchestrator {...spatialDesktopOrchestratorProps} />
-        </>
-      )}
+        </div>
+      </div>
     </motion.div>
   )
 }

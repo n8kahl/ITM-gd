@@ -597,6 +597,39 @@ export interface UnifiedGEXLandscape {
   combined: GEXProfile;
 }
 
+export type SPXSnapshotDataQualityStage =
+  | 'gex'
+  | 'flow'
+  | 'flowAggregation'
+  | 'basis'
+  | 'spyImpact'
+  | 'fib'
+  | 'levels'
+  | 'multiTF'
+  | 'regime'
+  | 'setups'
+  | 'prediction'
+  | 'coach';
+
+export interface SPXSnapshotStageQuality {
+  ok: boolean;
+  source: string;
+  freshnessMs: number;
+  degradedReason: string | null;
+}
+
+export interface SPXSnapshotDataQuality {
+  generatedAt: string;
+  degraded: boolean;
+  degradedReasons: string[];
+  stages: Partial<Record<SPXSnapshotDataQualityStage, SPXSnapshotStageQuality>>;
+}
+
+export interface SPXLevelsDataQuality {
+  integrity: 'full' | 'degraded';
+  warnings: string[];
+}
+
 export interface SPXSnapshot {
   levels: SPXLevel[];
   clusters: ClusterZone[];
@@ -610,6 +643,8 @@ export interface SPXSnapshot {
   flow: SPXFlowEvent[];
   flowAggregation?: SPXFlowWindowAggregation | null;
   coachMessages: CoachMessage[];
+  dataQuality?: SPXSnapshotDataQuality;
+  levelsDataQuality?: SPXLevelsDataQuality;
   environmentGate?: SPXEnvironmentGateDecision | null;
   standbyGuidance?: SPXStandbyGuidance | null;
   generatedAt: string;

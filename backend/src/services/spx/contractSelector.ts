@@ -19,7 +19,8 @@ const MAX_CONTRACT_RISK_STRICT = 2_500;
 const MAX_CONTRACT_RISK_RELAXED = 3_500;
 const MAX_DELTA_STRICT = 0.65;
 const MAX_DELTA_RELAXED = 0.80;
-const ZERO_DTE_ROLLOVER_MINUTE_ET = 13 * 60;
+// 0DTE rollover begins at 3:45 PM ET to avoid terminal decay/liquidity risk into the close.
+const ZERO_DTE_ROLLOVER_MINUTE_ET = (15 * 60) + 45;
 const LATE_DAY_FILTER_MINUTE_ET = 14 * 60;
 const LATE_DAY_MAX_SPREAD_PCT = 0.18;
 const LATE_DAY_MAX_ABSOLUTE_SPREAD = 0.35;

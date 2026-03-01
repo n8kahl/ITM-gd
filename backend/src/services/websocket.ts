@@ -1894,6 +1894,9 @@ export function initWebSocket(server: HTTPServer): void {
       });
     });
     broadcastTickMicrobars(tick);
+    if (normalizedSymbol !== 'SPX') {
+      return;
+    }
     const transitions = evaluateTickSetupTransitions(tick);
     for (const transition of transitions) {
       broadcastSetupTransition(transition);

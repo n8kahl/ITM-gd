@@ -4,18 +4,17 @@ import { toEasternTime } from '../../marketHours';
 import { publishCoachMessage } from '../../coachPushChannel';
 import { getContractRecommendation } from '../../spx/contractSelector';
 import type { SetupTransitionEvent } from '../../spx/tickEvaluator';
-import { recordExecutionFill } from '../../spx/executionReconciliation';
 import {
   upsertExecutionState,
-  updateExecutionState,
   closeExecutionState,
   loadOpenStates,
   type ExecutionActiveState,
 } from '../../spx/executionStateStore';
-import { buildTradierEntryOrder, buildTradierMarketExitOrder, buildTradierRunnerStopOrder, buildTradierScaleOrder } from './orderRouter';
+import { buildTradierEntryOrder, buildTradierMarketExitOrder, buildTradierScaleOrder } from './orderRouter';
 import { formatTradierOccSymbol } from './occFormatter';
 import { TradierClient } from './client';
 import { decryptTradierAccessToken, isTradierProductionRuntimeEnabled } from './credentials';
+import { enqueueOrderForPolling, resetOrderPollerState } from './orderLifecycleManager';
 
 interface TradierCredentialRow {
   user_id: string;
@@ -128,6 +127,13 @@ function resolveSandboxMode(row: TradierCredentialRow): boolean {
   return EXECUTION_SANDBOX_DEFAULT;
 }
 
+function isSetupExecutionEligible(setup: SetupTransitionEvent['setup']): boolean {
+  if (setup?.gateStatus && setup.gateStatus !== 'eligible') return false;
+  const gateReasons = Array.isArray(setup?.gateReasons) ? setup.gateReasons : [];
+  if (gateReasons.some((reason) => reason.includes('drift_control_paused'))) return false;
+  return true;
+}
+
 function createSizingResult(input: {
   ask: number;
   totalEquity: number;
@@ -204,6 +210,103 @@ export function inferTargetOptionPrice(input: {
   return Number(Math.max(0.05, expected).toFixed(2));
 }
 
+function inferEntryProtectiveStopPrice(input: {
+  entryLimitPrice: number;
+  recommendation: { delta?: number; gamma?: number };
+  setup: SetupTransitionEvent['setup'];
+}): number {
+  const fallback = Number(Math.max(0.05, input.entryLimitPrice * 0.65).toFixed(2));
+  const entryMid = input.setup?.entryZone
+    ? (input.setup.entryZone.low + input.setup.entryZone.high) / 2
+    : null;
+  const setupStop = typeof input.setup?.stop === 'number' ? input.setup.stop : null;
+  const delta = typeof input.recommendation.delta === 'number'
+    ? Math.abs(input.recommendation.delta)
+    : null;
+  const gamma = typeof input.recommendation.gamma === 'number'
+    ? Math.abs(input.recommendation.gamma)
+    : 0;
+
+  if (
+    entryMid == null
+    || setupStop == null
+    || delta == null
+    || !Number.isFinite(entryMid)
+    || !Number.isFinite(setupStop)
+    || !Number.isFinite(delta)
+  ) {
+    return fallback;
+  }
+
+  const setupRiskDistance = Math.max(0.25, Math.abs(entryMid - setupStop));
+  const gammaContribution = gamma * ((setupRiskDistance ** 2) / 2);
+  const estimatedOptionRisk = (delta * setupRiskDistance) + gammaContribution;
+  const estimatedStop = input.entryLimitPrice - (estimatedOptionRisk / 100);
+
+  if (!Number.isFinite(estimatedStop)) return fallback;
+  const capped = Math.min(input.entryLimitPrice * 0.95, estimatedStop);
+  return Number(Math.max(0.05, capped).toFixed(2));
+}
+
+function inferProtectiveStopPriceFromEntry(entryLimitPrice: number): number {
+  if (!Number.isFinite(entryLimitPrice) || entryLimitPrice <= 0) return 0;
+  return Number(Math.max(0.05, entryLimitPrice * 0.65).toFixed(2));
+}
+
+interface RehydratedPollPlan {
+  orderId: string;
+  phase: 'entry' | 'runner_stop';
+  totalQuantity: number;
+  referencePrice: number;
+  symbol: string;
+  protectiveStopPrice?: number;
+  activeStopOrderId?: string | null;
+  initialStopCoverageQuantity?: number;
+}
+
+function buildRehydratedPollPlan(state: ExecutionActiveState): RehydratedPollPlan | null {
+  if (!state.entryOrderId) return null;
+  if (state.status === 'closed' || state.status === 'failed') return null;
+
+  const entryReferencePrice = Number.isFinite(state.avgFillPrice ?? Number.NaN) && (state.avgFillPrice ?? 0) > 0
+    ? (state.avgFillPrice as number)
+    : state.entryLimitPrice;
+  const normalizedSymbol = typeof state.symbol === 'string' && state.symbol.trim().length > 0
+    ? state.symbol
+    : '';
+
+  if (!normalizedSymbol) return null;
+
+  if (state.status === 'active' || state.status === 'partial_fill') {
+    return {
+      orderId: state.entryOrderId,
+      phase: 'entry',
+      totalQuantity: Math.max(1, state.quantity),
+      referencePrice: entryReferencePrice,
+      symbol: normalizedSymbol,
+      protectiveStopPrice: inferProtectiveStopPriceFromEntry(state.entryLimitPrice),
+      activeStopOrderId: state.runnerStopOrderId,
+      initialStopCoverageQuantity: Math.max(
+        0,
+        state.actualFillQty ?? 0,
+        state.remainingQuantity ?? 0,
+      ),
+    };
+  }
+
+  if (state.status === 'filled' && state.runnerStopOrderId && state.remainingQuantity > 0) {
+    return {
+      orderId: state.runnerStopOrderId,
+      phase: 'runner_stop',
+      totalQuantity: Math.max(1, state.remainingQuantity),
+      referencePrice: entryReferencePrice,
+      symbol: normalizedSymbol,
+    };
+  }
+
+  return null;
+}
+
 async function loadActiveExecutionCredentials(): Promise<TradierCredentialRow[]> {
   const now = Date.now();
   if (cachedCredentials && cachedCredentials.expiresAt > now) {
@@ -241,12 +344,67 @@ async function loadActiveExecutionCredentials(): Promise<TradierCredentialRow[]>
 export async function rehydrateExecutionStates(): Promise<number> {
   try {
     const openStates = await loadOpenStates();
+    const credentials = await loadActiveExecutionCredentials();
+    const credentialsByUserId = new Map<string, TradierCredentialRow>();
+    for (const credential of credentials) {
+      if (!credentialsByUserId.has(credential.user_id)) {
+        credentialsByUserId.set(credential.user_id, credential);
+      }
+    }
+    const tradierByUserId = new Map<string, TradierClient>();
+    let recoveredPollCount = 0;
+
     for (const state of openStates) {
       const key = stateKey(state.userId, state.setupId, state.sessionDate);
       stateByUserSetup.set(key, state);
+
+      const plan = buildRehydratedPollPlan(state);
+      if (!plan) continue;
+
+      const credential = credentialsByUserId.get(state.userId);
+      if (!credential) {
+        logger.warn('Skipping lifecycle poll recovery for open execution state due to missing Tradier credential', {
+          userId: state.userId,
+          setupId: state.setupId,
+          sessionDate: state.sessionDate,
+          orderId: plan.orderId,
+          phase: plan.phase,
+        });
+        continue;
+      }
+
+      let tradier = tradierByUserId.get(state.userId);
+      if (!tradier) {
+        tradier = new TradierClient({
+          accountId: credential.account_id,
+          accessToken: decryptTradierAccessToken(credential.access_token_ciphertext),
+          sandbox: resolveSandboxMode(credential),
+        });
+        tradierByUserId.set(state.userId, tradier);
+      }
+
+      enqueueOrderForPolling({
+        orderId: plan.orderId,
+        userId: state.userId,
+        setupId: state.setupId,
+        sessionDate: state.sessionDate,
+        phase: plan.phase,
+        tradier,
+        totalQuantity: plan.totalQuantity,
+        referencePrice: plan.referencePrice,
+        symbol: plan.symbol,
+        protectiveStopPrice: plan.protectiveStopPrice,
+        activeStopOrderId: plan.activeStopOrderId,
+        initialStopCoverageQuantity: plan.initialStopCoverageQuantity,
+      });
+      recoveredPollCount += 1;
     }
+
     rehydrated = true;
-    logger.info('Execution states rehydrated from Supabase', { count: openStates.length });
+    logger.info('Execution states rehydrated from Supabase', {
+      count: openStates.length,
+      recoveredPolls: recoveredPollCount,
+    });
     return openStates.length;
   } catch (error) {
     logger.warn('Failed to rehydrate execution states; starting with empty cache', {
@@ -257,10 +415,29 @@ export async function rehydrateExecutionStates(): Promise<number> {
   }
 }
 
+if (EXECUTION_RUNTIME_ENABLEMENT.enabled && process.env.NODE_ENV !== 'test') {
+  // Eager rehydration closes the restart gap where in-flight orders would be unpolled
+  // until the first new transition event arrives.
+  void rehydrateExecutionStates().catch((error) => {
+    logger.warn('Tradier execution startup rehydration failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
+
 async function handleTriggeredTransition(
   event: SetupTransitionEvent,
   credentials: TradierCredentialRow[],
 ): Promise<void> {
+  if (!isSetupExecutionEligible(event.setup)) {
+    logger.info('Tradier execution skipped due to blocked setup gate', {
+      setupId: event.setupId,
+      gateStatus: event.setup?.gateStatus ?? null,
+      gateReasons: event.setup?.gateReasons ?? [],
+    });
+    return;
+  }
+
   const recommendation = await getContractRecommendation({
     setup: event.setup,
     forceRefresh: true,
@@ -303,6 +480,11 @@ async function handleTriggeredTransition(
         sandbox: resolveSandboxMode(credential),
       });
       const entryLimitPrice = Number((recommendation.ask + ENTRY_LIMIT_OFFSET).toFixed(2));
+      const protectiveStopPrice = inferEntryProtectiveStopPrice({
+        entryLimitPrice,
+        recommendation,
+        setup: event.setup,
+      });
       const entryOrder = await tradier.placeOrder(buildTradierEntryOrder({
         symbol: optionSymbol,
         quantity: sizing.quantity,
@@ -338,17 +520,20 @@ async function handleTriggeredTransition(
         stateByUserSetup.set(key, persistedState);
       }
 
-      await recordExecutionFill({
-        setupId: event.setupId,
-        side: 'entry',
-        phase: 'triggered',
-        source: 'broker_tradier',
-        fillPrice: event.price,
-        executedAt: event.timestamp,
-        transitionEventId: event.id,
-        brokerOrderId: entryOrder.id,
+      enqueueOrderForPolling({
+        orderId: entryOrder.id,
         userId: credential.user_id,
-      }).catch(() => undefined);
+        setupId: event.setupId,
+        sessionDate,
+        phase: 'entry',
+        tradier,
+        totalQuantity: sizing.quantity,
+        transitionEventId: event.id,
+        direction: event.direction,
+        referencePrice: entryLimitPrice,
+        protectiveStopPrice,
+        symbol: optionSymbol,
+      });
 
       publishCoachMessage({
         userId: credential.user_id,
@@ -386,7 +571,7 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
   const activeStates = Array.from(stateByUserSetup.entries()).filter(([key]) => key.endsWith(suffix));
   if (activeStates.length === 0) return;
 
-  for (const [key, state] of activeStates) {
+  for (const [, state] of activeStates) {
     if (state.remainingQuantity <= 0) continue;
     const partialQuantity = Math.min(
       state.remainingQuantity,
@@ -438,47 +623,26 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
         tag: `spx:${state.setupId}:${state.sessionDate}:t1`,
       }));
 
-      const nextRemaining = Math.max(0, state.remainingQuantity - partialQuantity);
-      let runnerStopOrderId: string | null = state.runnerStopOrderId;
-
       // S6: Move stop to entry + 0.15R instead of flat breakeven
       const runnerStopPrice = Math.max(0.05, state.entryLimitPrice * 1.015);
-
-      if (nextRemaining > 0) {
-        const runnerOrder = await tradier.placeOrder(buildTradierRunnerStopOrder({
-          symbol: state.symbol,
-          quantity: nextRemaining,
-          stopPrice: runnerStopPrice,
-          tag: `spx:${state.setupId}:${state.sessionDate}:runner_stop`,
-        }));
-        runnerStopOrderId = runnerOrder.id;
-      }
-
-      // S1: Persist state update to Supabase
-      await updateExecutionState(state.userId, state.setupId, state.sessionDate, {
-        remainingQuantity: nextRemaining,
-        runnerStopOrderId,
-      });
-
-      // Update in-memory cache
-      stateByUserSetup.set(key, {
-        ...state,
-        remainingQuantity: nextRemaining,
-        runnerStopOrderId,
-        updatedAt: new Date().toISOString(),
-      });
-
-      await recordExecutionFill({
-        setupId: event.setupId,
-        side: 'partial',
-        phase: 'target1_hit',
-        source: 'broker_tradier',
-        fillPrice: event.price,
-        executedAt: event.timestamp,
-        transitionEventId: event.id,
-        brokerOrderId: partialOrder.id,
+      enqueueOrderForPolling({
+        orderId: partialOrder.id,
         userId: state.userId,
-      }).catch(() => undefined);
+        setupId: event.setupId,
+        sessionDate: state.sessionDate,
+        phase: 't1',
+        tradier,
+        totalQuantity: partialQuantity,
+        transitionEventId: event.id,
+        direction: event.direction,
+        referencePrice: targetPrice,
+        symbol: state.symbol,
+        activeStopOrderId: state.runnerStopOrderId,
+        remainingBeforeOrder: state.remainingQuantity,
+        postFillStopPrice: runnerStopPrice,
+        fillSide: 'partial',
+        fillPhase: 'target1_hit',
+      });
     } catch (error) {
       logger.warn('Tradier execution T1 routing failed', {
         userId: state.userId,
@@ -535,18 +699,20 @@ async function handleTerminalTransition(event: SetupTransitionEvent): Promise<vo
         quantity: state.remainingQuantity,
         tag: `spx:${state.setupId}:${state.sessionDate}:terminal`,
       }));
-
-      await recordExecutionFill({
-        setupId: event.setupId,
-        side: 'exit',
-        phase: event.reason === 'stop' ? 'invalidated' : 'target2_hit',
-        source: 'broker_tradier',
-        fillPrice: event.price,
-        executedAt: event.timestamp,
-        transitionEventId: event.id,
-        brokerOrderId: exitOrder.id,
+      enqueueOrderForPolling({
+        orderId: exitOrder.id,
         userId: state.userId,
-      }).catch(() => undefined);
+        setupId: event.setupId,
+        sessionDate: state.sessionDate,
+        phase: 'terminal',
+        tradier,
+        totalQuantity: state.remainingQuantity,
+        transitionEventId: event.id,
+        direction: event.direction,
+        referencePrice: state.entryLimitPrice,
+        fillSide: 'exit',
+        fillPhase: event.reason === 'stop' ? 'invalidated' : 'target2_hit',
+      });
     } catch (error) {
       logger.warn('Tradier execution terminal routing failed', {
         userId: state.userId,
@@ -613,4 +779,5 @@ export function __resetExecutionEngineStateForTests(): void {
   stateByUserSetup.clear();
   rehydrated = false;
   cachedCredentials = null;
+  resetOrderPollerState();
 }

@@ -107,6 +107,11 @@ function debugPriceStream(message: string, details?: Record<string, unknown>): v
   console.info(`[price-stream] ${message}`)
 }
 
+function applyReconnectJitter(delayMs: number): number {
+  const multiplier = 0.7 + (Math.random() * 0.6)
+  return Math.max(0, Math.round(delayMs * multiplier))
+}
+
 // ============================================
 // SHARED STREAM SINGLETON
 // ============================================
@@ -414,10 +419,16 @@ function scheduleReconnect(): void {
   sharedState.connectionStatus = 'reconnecting'
   const now = Date.now()
   const backoffDelay = Math.min(1000 * (2 ** wsReconnectAttempt), 30000)
-  const targetConnectAt = Math.max(wsNextConnectAt, now + backoffDelay)
+  const jitteredBackoffDelay = applyReconnectJitter(backoffDelay)
+  const targetConnectAt = Math.max(wsNextConnectAt, now + jitteredBackoffDelay)
   const delay = Math.max(targetConnectAt - now, 0)
   wsNextConnectAt = targetConnectAt
-  debugPriceStream('Scheduling reconnect', { delayMs: delay, attempt: wsReconnectAttempt + 1 })
+  debugPriceStream('Scheduling reconnect', {
+    delayMs: delay,
+    backoffDelayMs: backoffDelay,
+    jitteredBackoffDelayMs: jitteredBackoffDelay,
+    attempt: wsReconnectAttempt + 1,
+  })
   wsReconnectAttempt += 1
   wsReconnectTimer = setTimeout(() => {
     wsReconnectTimer = null
