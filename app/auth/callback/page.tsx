@@ -7,6 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { getSafeRedirect } from '@/lib/safe-redirect'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 
 /**
@@ -28,48 +29,115 @@ function AuthCallbackContent() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Forward to server-side callback handler
-    // This preserves all query params (code, next, error, etc.)
-    const apiUrl = new URL('/api/auth/callback', window.location.origin)
+    let cancelled = false
+    const PKCE_RETRY_FLAG = 'oauth_pkce_retry_attempted'
 
-    // Copy all query params to API route
-    searchParams.forEach((value, key) => {
-      apiUrl.searchParams.set(key, value)
-    })
+    const run = async () => {
+      // Forward to server-side callback handler
+      // This preserves all query params (code, next, error, etc.)
+      const apiUrl = new URL('/api/auth/callback', window.location.origin)
 
-    // If no explicit redirect was provided in the callback URL, fall back to the
-    // pre-auth destination stored by the login page.
-    const hasNext =
-      apiUrl.searchParams.has('next') ||
-      apiUrl.searchParams.has('redirect')
+      // Copy all query params to API route
+      searchParams.forEach((value, key) => {
+        apiUrl.searchParams.set(key, value)
+      })
 
-    if (!hasNext) {
-      let stored: string | null = null
-      try {
-        stored = window.sessionStorage.getItem('post_auth_redirect')
-      } catch { }
+      // If no explicit redirect was provided in the callback URL, fall back to the
+      // pre-auth destination stored by the login page.
+      const hasNext =
+        apiUrl.searchParams.has('next') ||
+        apiUrl.searchParams.has('redirect')
 
-      if (!stored) {
+      if (!hasNext) {
+        let stored: string | null = null
         try {
-          stored = window.localStorage.getItem('post_auth_redirect')
+          stored = window.sessionStorage.getItem('post_auth_redirect')
         } catch { }
+
+        if (!stored) {
+          try {
+            stored = window.localStorage.getItem('post_auth_redirect')
+          } catch { }
+        }
+
+        if (stored) {
+          const safe = getSafeRedirect(stored)
+          apiUrl.searchParams.set('redirect', safe)
+          try {
+            window.sessionStorage.removeItem('post_auth_redirect')
+          } catch { }
+          try {
+            window.localStorage.removeItem('post_auth_redirect')
+          } catch { }
+        }
       }
 
-      if (stored) {
-        const safe = getSafeRedirect(stored)
-        apiUrl.searchParams.set('redirect', safe)
+      const code = searchParams.get('code')
+      if (code) {
         try {
-          window.sessionStorage.removeItem('post_auth_redirect')
-        } catch { }
-        try {
-          window.localStorage.removeItem('post_auth_redirect')
-        } catch { }
+          const supabase = createBrowserSupabase()
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+          if (!exchangeError) {
+            try {
+              window.sessionStorage.removeItem(PKCE_RETRY_FLAG)
+            } catch { }
+            apiUrl.searchParams.set('skip_code_exchange', '1')
+            if (!cancelled) {
+              window.location.href = apiUrl.toString()
+            }
+            return
+          }
+
+          const isVerifierMissing = /code verifier not found/i.test(exchangeError.message)
+          if (isVerifierMissing) {
+            let alreadyRetried = false
+            try {
+              alreadyRetried = window.sessionStorage.getItem(PKCE_RETRY_FLAG) === '1'
+            } catch { }
+
+            if (!alreadyRetried) {
+              try {
+                window.sessionStorage.setItem(PKCE_RETRY_FLAG, '1')
+              } catch { }
+
+              const redirectForRetry = apiUrl.searchParams.get('redirect') || '/members'
+              try {
+                window.sessionStorage.setItem('post_auth_redirect', getSafeRedirect(redirectForRetry))
+              } catch { }
+              try {
+                window.localStorage.setItem('post_auth_redirect', getSafeRedirect(redirectForRetry))
+              } catch { }
+
+              const { error: retrySignInError } = await supabase.auth.signInWithOAuth({
+                provider: 'discord',
+                options: {
+                  redirectTo: `${window.location.origin}/auth/callback`,
+                  scopes: 'identify email guilds guilds.members.read',
+                },
+              })
+
+              if (!retrySignInError) {
+                return
+              }
+            }
+          }
+        } catch (clientExchangeError) {
+          console.warn('[Auth Callback] Client-side exchange failed, falling back to server exchange:', clientExchangeError)
+        }
+      }
+
+      if (!cancelled) {
+        // Fallback to server exchange path
+        window.location.href = apiUrl.toString()
       }
     }
 
-    // Immediate redirect to server-side handler
-    // Server will exchange code, sync roles, refresh session, and redirect appropriately
-    window.location.href = apiUrl.toString()
+    void run()
+
+    return () => {
+      cancelled = true
+    }
   }, [searchParams])
 
   return (

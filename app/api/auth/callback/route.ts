@@ -25,6 +25,7 @@ import {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
+  const skipCodeExchange = searchParams.get('skip_code_exchange') === '1'
   // Support both 'next' and 'redirect' query params for backwards compatibility
   const next = searchParams.get('next') || searchParams.get('redirect')
   const error = searchParams.get('error')
@@ -39,8 +40,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Code is required for PKCE flow
-  if (!code) {
+  // Code is required unless client already exchanged it and asked us to finalize.
+  if (!skipCodeExchange && !code) {
     console.error('No code provided in OAuth callback')
     const loginUrl = getAbsoluteUrl('/login', request)
     loginUrl.searchParams.set('error', 'oauth')
@@ -69,16 +70,32 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    // STEP 1: Exchange code for session (server-side)
-    console.log('Exchanging OAuth code for session (server-side)')
-    const { data: { session }, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+    // STEP 1: Establish session
+    let session = null as Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] | null
 
-    if (exchangeError || !session) {
-      console.error('Code exchange error:', exchangeError)
-      const loginUrl = getAbsoluteUrl('/login', request)
-      loginUrl.searchParams.set('error', 'oauth')
-      loginUrl.searchParams.set('message', exchangeError?.message || 'Failed to exchange authorization code')
-      return NextResponse.redirect(loginUrl)
+    if (skipCodeExchange) {
+      console.log('Skipping server-side code exchange (client already exchanged code)')
+      const { data: { session: existingSession }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !existingSession) {
+        console.error('Session missing after client exchange:', sessionError)
+        const loginUrl = getAbsoluteUrl('/login', request)
+        loginUrl.searchParams.set('error', 'oauth')
+        loginUrl.searchParams.set('message', sessionError?.message || 'Session missing after authentication')
+        return NextResponse.redirect(loginUrl)
+      }
+      session = existingSession
+    } else {
+      console.log('Exchanging OAuth code for session (server-side)')
+      const { data: { session: exchangedSession }, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code!)
+
+      if (exchangeError || !exchangedSession) {
+        console.error('Code exchange error:', exchangeError)
+        const loginUrl = getAbsoluteUrl('/login', request)
+        loginUrl.searchParams.set('error', 'oauth')
+        loginUrl.searchParams.set('message', exchangeError?.message || 'Failed to exchange authorization code')
+        return NextResponse.redirect(loginUrl)
+      }
+      session = exchangedSession
     }
 
     console.log('✓ Session created for user:', session.user.id)
