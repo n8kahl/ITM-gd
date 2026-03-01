@@ -406,7 +406,7 @@ async function handleTriggeredTransition(
         totalQuantity: sizing.quantity,
         transitionEventId: event.id,
         direction: event.direction,
-        referencePrice: event.price,
+        referencePrice: entryLimitPrice,
         protectiveStopPrice,
         symbol: optionSymbol,
       });
@@ -511,7 +511,7 @@ async function handleTarget1Transition(event: SetupTransitionEvent): Promise<voi
         totalQuantity: partialQuantity,
         transitionEventId: event.id,
         direction: event.direction,
-        referencePrice: event.price,
+        referencePrice: targetPrice,
         symbol: state.symbol,
         activeStopOrderId: state.runnerStopOrderId,
         remainingBeforeOrder: state.remainingQuantity,
@@ -585,7 +585,7 @@ async function handleTerminalTransition(event: SetupTransitionEvent): Promise<vo
         totalQuantity: state.remainingQuantity,
         transitionEventId: event.id,
         direction: event.direction,
-        referencePrice: event.price,
+        referencePrice: state.entryLimitPrice,
         fillSide: 'exit',
         fillPhase: event.reason === 'stop' ? 'invalidated' : 'target2_hit',
       });
