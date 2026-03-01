@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Week 1 — Trade Journal Walkthrough | Trade In The Money</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --emerald: #10B981;
+    --emerald-dim: #065F46;
+    --emerald-glow: rgba(16, 185, 129, 0.15);
+    --champagne: #F3E5AB;
+    --champagne-dim: rgba(243, 229, 171, 0.1);
+    --bg-primary: #0A0A0F;
+    --bg-card: rgba(255, 255, 255, 0.03);
+    --bg-card-hover: rgba(255, 255, 255, 0.06);
+    --bg-glass: rgba(255, 255, 255, 0.04);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-highlight: rgba(16, 185, 129, 0.3);
+    --text-primary: #F1F1F1;
+    --text-secondary: #9CA3AF;
+    --text-muted: #6B7280;
+    --red: #F87171;
+    --red-dim: rgba(248, 113, 113, 0.15);
+    --amber: #FBBF24;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--emerald-dim); border-radius: 3px; }
+
+  /* Hero */
+  .hero {
+    position: relative;
+    padding: 80px 24px 60px;
+    text-align: center;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 800px;
+    background: radial-gradient(circle, var(--emerald-glow) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    border: 1px solid var(--border-highlight);
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--emerald);
+    background: var(--emerald-glow);
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 16px;
+  }
+  .hero h1 span { color: var(--emerald); }
+  .hero p {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  /* Container */
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Progress Bar */
+  .progress-track {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10, 10, 15, 0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+  }
+  .progress-inner {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .progress-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--emerald), var(--champagne));
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+  .progress-steps {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+  .progress-steps span {
+    font-size: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .progress-steps span:hover { color: var(--emerald); }
+  .progress-steps span.active { color: var(--emerald); font-weight: 600; }
+
+  /* Sections */
+  section {
+    padding: 64px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  section:last-of-type { border-bottom: none; }
+
+  .section-number {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--emerald);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 600;
+    margin-bottom: 12px;
+    line-height: 1.3;
+  }
+  .section-subtitle {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+    max-width: 640px;
+  }
+
+  /* Cards */
+  .glass-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+    transition: all 0.2s ease;
+  }
+  .glass-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-highlight);
+  }
+  .glass-card h3 {
+    font-family: 'Inter', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .glass-card p {
+    color: var(--text-secondary);
+    font-size: 0.925rem;
+  }
+
+  /* Mock UI frames */
+  .mock-frame {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 24px 0;
+  }
+  .mock-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--border);
+  }
+  .mock-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+  }
+  .mock-dot.red { background: #FF5F56; }
+  .mock-dot.yellow { background: #FFBD2E; }
+  .mock-dot.green { background: #27C93F; }
+  .mock-url {
+    flex: 1;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .mock-body { padding: 24px; }
+
+  /* Mock components */
+  .mock-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .mock-header-left h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem;
+    font-weight: 600;
+  }
+  .mock-header-left p {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .mock-breadcrumb {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .mock-breadcrumb span { color: var(--emerald); }
+  .mock-btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mock-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mock-btn:hover { border-color: var(--border-highlight); }
+  .mock-btn.primary {
+    background: var(--emerald);
+    color: #000;
+    border-color: var(--emerald);
+    font-weight: 600;
+  }
+  .mock-btn.primary:hover { opacity: 0.9; }
+
+  /* Mock subnav */
+  .mock-subnav {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .mock-subnav-item {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mock-subnav-item.active {
+    color: var(--emerald);
+    border-bottom-color: var(--emerald);
+  }
+
+  /* Mock stats row */
+  .mock-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 600px) {
+    .mock-stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  .mock-stat-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .mock-stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .mock-stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.3rem;
+    font-weight: 600;
+  }
+  .mock-stat-value.green { color: var(--emerald); }
+  .mock-stat-value.red { color: var(--red); }
+
+  /* Mock filter bar */
+  .mock-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+  .mock-filter-input {
+    flex: 1;
+    min-width: 120px;
+    padding: 7px 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: 'Inter', sans-serif;
+  }
+  .mock-filter-input::placeholder { color: var(--text-muted); }
+
+  /* Mock table */
+  .mock-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .mock-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .mock-table td {
+    padding: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .mock-table tr { position: relative; }
+  .mock-table tr.winner { border-left: 3px solid var(--emerald); }
+  .mock-table tr.loser { border-left: 3px solid var(--red); }
+  .mock-table tr:hover { background: rgba(255,255,255,0.02); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge.long { background: var(--emerald-glow); color: var(--emerald); }
+  .badge.short { background: var(--red-dim); color: var(--red); }
+  .badge.emotional { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+  .badge.planned { background: var(--emerald-glow); color: var(--emerald); }
+  .badge.fomo { background: rgba(251, 191, 36, 0.15); color: var(--amber); }
+  .badge.revenge { background: rgba(239, 68, 68, 0.2); color: #EF4444; }
+
+  /* Mock form */
+  .mock-form-section {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .mock-form-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .mock-form-header h4 {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .mock-form-header .chevron {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .mock-form-body {
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .mock-field label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .mock-field input, .mock-field select {
+    width: 100%;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Step indicator */
+  .step-list { counter-reset: steps; }
+  .step-item {
+    counter-increment: steps;
+    position: relative;
+    padding-left: 60px;
+    padding-bottom: 40px;
+  }
+  .step-item:last-child { padding-bottom: 0; }
+  .step-item::before {
+    content: counter(steps);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--emerald-glow);
+    border: 1px solid var(--border-highlight);
+    color: var(--emerald);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 40px;
+    text-align: center;
+  }
+  .step-item::after {
+    content: '';
+    position: absolute;
+    left: 19px;
+    top: 44px;
+    width: 2px;
+    height: calc(100% - 48px);
+    background: var(--border);
+  }
+  .step-item:last-child::after { display: none; }
+  .step-item h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .step-item p {
+    color: var(--text-secondary);
+    font-size: 0.925rem;
+  }
+
+  /* Callout boxes */
+  .callout {
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+    font-size: 0.925rem;
+  }
+  .callout.tip {
+    background: var(--emerald-glow);
+    border: 1px solid var(--border-highlight);
+    color: var(--text-primary);
+  }
+  .callout.warning {
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+  }
+  .callout.critical {
+    background: var(--red-dim);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+  }
+  .callout strong { color: var(--emerald); }
+  .callout.warning strong { color: var(--amber); }
+  .callout.critical strong { color: var(--red); }
+
+  /* Annotation pointers */
+  .annotated-mock { position: relative; }
+  .annotation {
+    position: absolute;
+    background: var(--emerald);
+    color: #000;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 10;
+  }
+  .annotation::after {
+    content: '';
+    position: absolute;
+    border: 5px solid transparent;
+  }
+  .annotation.bottom::after {
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-bottom-color: var(--emerald);
+  }
+  .annotation.left::after {
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-left-color: var(--emerald);
+  }
+
+  /* Category grid */
+  .category-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+  }
+  .category-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .category-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-highlight);
+  }
+  .category-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+    font-size: 20px;
+  }
+  .category-card.planned .category-icon { background: var(--emerald-glow); }
+  .category-card.emotional .category-icon { background: var(--red-dim); }
+  .category-card.fomo .category-icon { background: rgba(251, 191, 36, 0.12); }
+  .category-card.revenge .category-icon { background: rgba(239, 68, 68, 0.15); }
+  .category-card h4 { font-size: 0.95rem; margin-bottom: 6px; }
+  .category-card p { font-size: 12px; color: var(--text-muted); }
+
+  /* Formula block */
+  .formula-block {
+    background: var(--bg-card);
+    border: 1px solid var(--border-highlight);
+    border-radius: 10px;
+    padding: 24px;
+    text-align: center;
+    margin: 24px 0;
+  }
+  .formula-block .formula {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    color: var(--emerald);
+    margin: 12px 0;
+  }
+  .formula-block .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+  }
+
+  /* Two column layout */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  @media (max-width: 640px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+
+  /* Mood selector mock */
+  .mood-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .mood-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 100px;
+    font-size: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mood-chip:hover { border-color: var(--border-highlight); }
+  .mood-chip.selected {
+    background: var(--emerald-glow);
+    border-color: var(--emerald);
+    color: var(--emerald);
+  }
+
+  /* Toggle */
+  .form-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 12px 0 20px;
+    width: fit-content;
+  }
+  .form-toggle-btn {
+    padding: 8px 20px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .form-toggle-btn.active {
+    background: var(--emerald);
+    color: #000;
+    font-weight: 600;
+  }
+
+  /* Checklist */
+  .checklist { list-style: none; }
+  .checklist li {
+    padding: 10px 0 10px 32px;
+    position: relative;
+    font-size: 0.925rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .checklist li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 12px;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+  }
+  .checklist li.done::before {
+    background: var(--emerald);
+    border-color: var(--emerald);
+  }
+  .checklist li.done::after {
+    content: '\2713';
+    position: absolute;
+    left: 3px;
+    top: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #000;
+  }
+
+  /* Analytics mock */
+  .chart-placeholder {
+    height: 180px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 6px;
+    padding: 20px;
+    overflow: hidden;
+  }
+  .chart-bar {
+    width: 28px;
+    border-radius: 4px 4px 0 0;
+    transition: height 0.3s ease;
+  }
+  .chart-bar.green { background: var(--emerald); }
+  .chart-bar.red { background: var(--red); opacity: 0.7; }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 48px 24px;
+    border-top: 1px solid var(--border);
+  }
+  footer p {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  footer .logo-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.2rem;
+    color: var(--emerald);
+    margin-bottom: 8px;
+  }
+
+  /* Smooth scroll */
+  html { scroll-behavior: smooth; }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .hero { padding: 48px 16px 40px; }
+    section { padding: 40px 0; }
+    .mock-header { flex-direction: column; align-items: flex-start; }
+    .mock-body { padding: 16px; }
+    .mock-table th:nth-child(n+5),
+    .mock-table td:nth-child(n+5) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== HERO ===== -->
+<div class="hero">
+  <div class="hero-badge">Week 1 &mdash; Sniper Mentorship</div>
+  <h1>Your <span>Trade Journal</span> Walkthrough</h1>
+  <p>A step-by-step guide to completing your Week 1 assignment &mdash; the 20-trade audit, trade categorization, and setting your risk foundation.</p>
+</div>
+
+<!-- ===== PROGRESS BAR ===== -->
+<div class="progress-track" id="progressTrack">
+  <div class="progress-inner">
+    <div class="progress-label">Guide Progress</div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-steps">
+      <span class="active" onclick="scrollToSection('overview')">Overview</span>
+      <span onclick="scrollToSection('navigate')">Navigate</span>
+      <span onclick="scrollToSection('newentry')">New Entry</span>
+      <span onclick="scrollToSection('fullform')">Full Form</span>
+      <span onclick="scrollToSection('categorize')">Categorize</span>
+      <span onclick="scrollToSection('analytics')">Analytics</span>
+      <span onclick="scrollToSection('calculate')">Calculate</span>
+      <span onclick="scrollToSection('checklist')">Checklist</span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ===== SECTION 1: OVERVIEW ===== -->
+<section id="overview">
+  <div class="section-number">01 &mdash; Overview</div>
+  <div class="section-title">What You'll Do in the Trade Journal</div>
+  <div class="section-subtitle">Your Week 1 assignment requires four things. The Trade Journal handles all of them.</div>
+
+  <div class="two-col">
+    <div class="glass-card">
+      <h3><span style="color:var(--emerald)">&#9679;</span> Log Your Last 20 Trades</h3>
+      <p>Enter each trade manually using the New Entry form. Record the symbol, direction, entry/exit prices, and P&L. The Quick Form takes under 30 seconds per trade.</p>
+    </div>
+    <div class="glass-card">
+      <h3><span style="color:var(--emerald)">&#9679;</span> Categorize Each Trade</h3>
+      <p>Use the Behavioral & Psychology section to tag whether each trade was Planned, Emotional, FOMO, or Revenge. Add your mood before and after.</p>
+    </div>
+    <div class="glass-card">
+      <h3><span style="color:var(--emerald)">&#9679;</span> Calculate Your Real Numbers</h3>
+      <p>The Analytics tab auto-calculates your win rate, total P&L, profit factor, average win, average loss, and expectancy from your entries.</p>
+    </div>
+    <div class="glass-card">
+      <h3><span style="color:var(--emerald)">&#9679;</span> Set Your Risk Rules</h3>
+      <p>Document your max risk per trade and daily loss limit in your Setup Notes, so it's recorded and you can reference it every trading day.</p>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <strong>Pro tip:</strong> If you have a CSV export from your broker, you can use the <strong>Import</strong> button to bulk-upload trades from Interactive Brokers, Schwab, Robinhood, E*Trade, Fidelity, or Webull. Then go back and add the behavioral data to each entry.
+  </div>
+</section>
+
+<!-- ===== SECTION 2: NAVIGATE ===== -->
+<section id="navigate">
+  <div class="section-number">02 &mdash; Navigate</div>
+  <div class="section-title">Finding the Trade Journal</div>
+  <div class="section-subtitle">The journal lives under your member dashboard. Here's exactly what the page looks like.</div>
+
+  <div class="mock-frame">
+    <div class="mock-titlebar">
+      <div class="mock-dot red"></div>
+      <div class="mock-dot yellow"></div>
+      <div class="mock-dot green"></div>
+      <div class="mock-url">tradeitm.com/members/journal</div>
+    </div>
+    <div class="mock-body">
+      <div class="mock-breadcrumb">Dashboard <span>&rsaquo;</span> Journal</div>
+      <div class="mock-header">
+        <div class="mock-header-left">
+          <h2>Trade Journal</h2>
+          <p>Manual-first journaling with clean analytics and import workflows</p>
+        </div>
+        <div class="mock-btn-group">
+          <div class="mock-btn">&#128206; Import</div>
+          <div class="mock-btn">&#128247; Screenshot</div>
+          <div class="mock-btn primary">+ New Entry</div>
+        </div>
+      </div>
+      <div class="mock-subnav">
+        <div class="mock-subnav-item active">Entries</div>
+        <div class="mock-subnav-item">Analytics</div>
+      </div>
+      <div class="mock-stats">
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Total Trades</div>
+          <div class="mock-stat-value">0</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Win Rate</div>
+          <div class="mock-stat-value" style="color:var(--text-muted)">&mdash;</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Total P&L</div>
+          <div class="mock-stat-value" style="color:var(--text-muted)">$0.00</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Profit Factor</div>
+          <div class="mock-stat-value" style="color:var(--text-muted)">&mdash;</div>
+        </div>
+      </div>
+      <div style="text-align:center; padding: 40px 0; color: var(--text-muted); font-size: 14px;">
+        No journal entries yet. Click <strong style="color:var(--emerald)">+ New Entry</strong> to log your first trade.
+      </div>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <strong>Three ways to add trades:</strong> <strong>New Entry</strong> opens the manual form (what we'll use for Week 1). <strong>Import</strong> lets you upload a CSV from your broker. <strong>Screenshot</strong> uses AI to extract trade data from a broker screenshot.
+  </div>
+</section>
+
+<!-- ===== SECTION 3: NEW ENTRY ===== -->
+<section id="newentry">
+  <div class="section-number">03 &mdash; New Entry</div>
+  <div class="section-title">Logging a Trade: Quick Form</div>
+  <div class="section-subtitle">Click <strong style="color:var(--emerald)">+ New Entry</strong> and you'll see the entry form. It starts in Quick mode &mdash; just the essentials.</div>
+
+  <div class="mock-frame">
+    <div class="mock-titlebar">
+      <div class="mock-dot red"></div>
+      <div class="mock-dot yellow"></div>
+      <div class="mock-dot green"></div>
+      <div class="mock-url">New Trade Entry &mdash; Quick Form</div>
+    </div>
+    <div class="mock-body">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:1.1rem;">New Trade Entry</h3>
+        <span style="font-size:12px;color:var(--text-muted);cursor:pointer;">&times; Close</span>
+      </div>
+      <div class="form-toggle">
+        <button class="form-toggle-btn active">Quick Form</button>
+        <button class="form-toggle-btn">Full Form</button>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+        <div class="mock-field">
+          <label>Symbol *</label>
+          <input type="text" placeholder="SPY" readonly>
+        </div>
+        <div class="mock-field">
+          <label>Direction</label>
+          <select><option>Long</option></select>
+        </div>
+        <div class="mock-field">
+          <label>Entry Price</label>
+          <input type="text" placeholder="0.00" readonly>
+        </div>
+        <div class="mock-field">
+          <label>Exit Price</label>
+          <input type="text" placeholder="0.00" readonly>
+        </div>
+        <div class="mock-field" style="grid-column: span 2;">
+          <label>P&L (optional)</label>
+          <input type="text" placeholder="0.00" readonly>
+        </div>
+      </div>
+      <div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+        <div class="mock-btn">Cancel</div>
+        <div class="mock-btn primary">Save Entry</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-list" style="margin-top:32px;">
+    <div class="step-item">
+      <h3>Enter the Symbol</h3>
+      <p>Type the ticker: SPY, QQQ, NVDA, SPX, etc. It auto-uppercases for you.</p>
+    </div>
+    <div class="step-item">
+      <h3>Select Direction</h3>
+      <p>Choose <strong>Long</strong> (bought calls, bought stock) or <strong>Short</strong> (bought puts, sold short).</p>
+    </div>
+    <div class="step-item">
+      <h3>Enter Entry & Exit Prices</h3>
+      <p>Your fill price going in and your fill price going out. For options, use the premium price.</p>
+    </div>
+    <div class="step-item">
+      <h3>Add P&L</h3>
+      <p>Enter the dollar result. Positive for winners, negative for losers. If you leave this blank but provide entry/exit + position size in Full Form, the system can calculate it.</p>
+    </div>
+    <div class="step-item">
+      <h3>Save</h3>
+      <p>Hit <strong>Save Entry</strong>. The trade appears in your journal immediately. You can edit it anytime to add more detail.</p>
+    </div>
+  </div>
+
+  <div class="callout warning">
+    <strong>For Week 1:</strong> The Quick Form is fine for getting your 20 trades in fast. But you'll want to switch to <strong>Full Form</strong> on each entry to add the behavioral data (mood, discipline, whether you followed your plan). That's where the real self-audit happens.
+  </div>
+</section>
+
+<!-- ===== SECTION 4: FULL FORM ===== -->
+<section id="fullform">
+  <div class="section-number">04 &mdash; Full Form</div>
+  <div class="section-title">The Full Entry Form: Where Honesty Lives</div>
+  <div class="section-subtitle">Toggle to Full Form to access every field. For Week 1, the sections that matter most are highlighted below.</div>
+
+  <div class="mock-frame">
+    <div class="mock-titlebar">
+      <div class="mock-dot red"></div>
+      <div class="mock-dot yellow"></div>
+      <div class="mock-dot green"></div>
+      <div class="mock-url">New Trade Entry &mdash; Full Form</div>
+    </div>
+    <div class="mock-body">
+      <div class="form-toggle">
+        <button class="form-toggle-btn">Quick Form</button>
+        <button class="form-toggle-btn active">Full Form</button>
+      </div>
+
+      <!-- Section: Core -->
+      <div class="mock-form-section">
+        <div class="mock-form-header">
+          <h4>Core Trade Details</h4>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="mock-form-body">
+          <div class="mock-field"><label>Trade Date</label><input type="text" value="2026-02-28" readonly></div>
+          <div class="mock-field"><label>Symbol *</label><input type="text" value="SPY" readonly></div>
+          <div class="mock-field"><label>Direction</label><select><option>Long</option></select></div>
+          <div class="mock-field"><label>Contract Type</label><select><option>Call</option></select></div>
+          <div class="mock-field"><label>Entry Price</label><input type="text" value="3.45" readonly></div>
+          <div class="mock-field"><label>Exit Price</label><input type="text" value="2.10" readonly></div>
+          <div class="mock-field"><label>Position Size</label><input type="text" value="5" readonly></div>
+          <div class="mock-field"><label>P&L</label><input type="text" value="-675.00" style="color:var(--red)" readonly></div>
+        </div>
+      </div>
+
+      <!-- Section: Risk -->
+      <div class="mock-form-section">
+        <div class="mock-form-header">
+          <h4>Risk Management</h4>
+          <span class="chevron">&#9660;</span>
+        </div>
+        <div class="mock-form-body">
+          <div class="mock-field"><label>Stop Loss</label><input type="text" placeholder="Not set" style="border-color:var(--red);opacity:0.6" readonly></div>
+          <div class="mock-field"><label>Initial Target</label><input type="text" placeholder="Not set" style="border-color:var(--red);opacity:0.6" readonly></div>
+          <div class="mock-field"><label>Is Open</label><select><option>No (Closed)</option></select></div>
+        </div>
+      </div>
+
+      <!-- Section: Behavioral (HIGHLIGHTED) -->
+      <div class="mock-form-section" style="border-color: var(--emerald); box-shadow: 0 0 20px var(--emerald-glow);">
+        <div class="mock-form-header" style="background: var(--emerald-glow);">
+          <h4 style="color:var(--emerald);">&#9733; Behavioral & Psychology &mdash; CRITICAL FOR WEEK 1</h4>
+          <span class="chevron" style="color:var(--emerald)">&#9660;</span>
+        </div>
+        <div class="mock-form-body" style="display:block;">
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Mood Before Trade</label>
+            <div class="mood-grid">
+              <span class="mood-chip">&#128170; Confident</span>
+              <span class="mood-chip">&#128528; Neutral</span>
+              <span class="mood-chip selected">&#128552; Anxious</span>
+              <span class="mood-chip">&#128548; Frustrated</span>
+              <span class="mood-chip">&#129321; Excited</span>
+              <span class="mood-chip">&#128560; Fearful</span>
+            </div>
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;">Mood After Trade</label>
+            <div class="mood-grid">
+              <span class="mood-chip">&#128170; Confident</span>
+              <span class="mood-chip">&#128528; Neutral</span>
+              <span class="mood-chip">&#128552; Anxious</span>
+              <span class="mood-chip selected">&#128548; Frustrated</span>
+              <span class="mood-chip">&#129321; Excited</span>
+              <span class="mood-chip">&#128560; Fearful</span>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div class="mock-field">
+              <label>Discipline Score (1-5)</label>
+              <div style="display:flex;gap:4px;margin-top:4px;">
+                <span style="padding:6px 12px;background:var(--red-dim);border-radius:4px;font-size:12px;border:1px solid var(--border);">1</span>
+                <span style="padding:6px 12px;background:var(--red-dim);border-radius:4px;font-size:12px;border:1px solid var(--red);">2</span>
+                <span style="padding:6px 12px;background:var(--bg-card);border-radius:4px;font-size:12px;border:1px solid var(--border);">3</span>
+                <span style="padding:6px 12px;background:var(--bg-card);border-radius:4px;font-size:12px;border:1px solid var(--border);">4</span>
+                <span style="padding:6px 12px;background:var(--bg-card);border-radius:4px;font-size:12px;border:1px solid var(--border);">5</span>
+              </div>
+            </div>
+            <div class="mock-field">
+              <label>Followed Plan?</label>
+              <select><option>No</option></select>
+            </div>
+          </div>
+          <div class="mock-field">
+            <label>Deviation Notes</label>
+            <input type="text" value="Entered because SPY was dropping fast. No setup, no stop loss. Pure panic." style="font-family:'Inter',sans-serif;font-size:12px;color:var(--red);" readonly>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Narrative -->
+      <div class="mock-form-section">
+        <div class="mock-form-header">
+          <h4>Trade Narrative</h4>
+          <span class="chevron">&#9654;</span>
+        </div>
+      </div>
+
+      <!-- Section: Tags -->
+      <div class="mock-form-section" style="border-color: rgba(251,191,36,0.3);">
+        <div class="mock-form-header" style="background:rgba(251,191,36,0.05);">
+          <h4 style="color:var(--amber);">&#9733; Tags & Rating &mdash; USE FOR CATEGORIZATION</h4>
+          <span class="chevron" style="color:var(--amber)">&#9660;</span>
+        </div>
+        <div class="mock-form-body">
+          <div class="mock-field" style="grid-column:span 2;">
+            <label>Tags (comma-separated)</label>
+            <input type="text" value="emotional, no-stop-loss, revenge" style="color:var(--amber);" readonly>
+          </div>
+          <div class="mock-field">
+            <label>Rating (1-5)</label>
+            <div style="font-size:18px;margin-top:4px;letter-spacing:4px;color:var(--amber);">&#9733;&#9733;&#9734;&#9734;&#9734;</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+        <div class="mock-btn">Cancel</div>
+        <div class="mock-btn primary">Save Entry</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout critical">
+    <strong>Week 1 requirement:</strong> Every one of your 20 trades must have the <strong>Behavioral & Psychology</strong> section filled out and a <strong>tag</strong> of either <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">planned</code>, <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">emotional</code>, <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">fomo</code>, or <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">revenge</code>. This is how you build self-awareness.
+  </div>
+</section>
+
+<!-- ===== SECTION 5: CATEGORIZE ===== -->
+<section id="categorize">
+  <div class="section-number">05 &mdash; Categorize</div>
+  <div class="section-title">Tag Every Trade Honestly</div>
+  <div class="section-subtitle">Use the Tags field and Behavioral section to classify each of your 20 trades into one of these four categories.</div>
+
+  <div class="category-grid">
+    <div class="category-card planned">
+      <div class="category-icon">&#127919;</div>
+      <h4 style="color:var(--emerald)">Planned</h4>
+      <p>Identified on watchlist. Entry criteria met. Stop-loss set before entry. Followed rules.</p>
+    </div>
+    <div class="category-card emotional">
+      <div class="category-icon">&#128148;</div>
+      <h4 style="color:var(--red)">Emotional</h4>
+      <p>Entered based on fear, anxiety, or excitement. No pre-defined setup. Gut feeling trade.</p>
+    </div>
+    <div class="category-card fomo">
+      <div class="category-icon">&#128064;</div>
+      <h4 style="color:var(--amber)">FOMO</h4>
+      <p>Chased a move already in progress. Entered late because you couldn't stand missing it.</p>
+    </div>
+    <div class="category-card revenge">
+      <div class="category-icon">&#128293;</div>
+      <h4 style="color:#EF4444">Revenge</h4>
+      <p>Entered immediately after a loss to recover. Sized up. Ignored your rules to "get it back."</p>
+    </div>
+  </div>
+
+  <div class="mock-frame">
+    <div class="mock-titlebar">
+      <div class="mock-dot red"></div>
+      <div class="mock-dot yellow"></div>
+      <div class="mock-dot green"></div>
+      <div class="mock-url">Your journal after entering 20 trades</div>
+    </div>
+    <div class="mock-body">
+      <div class="mock-stats">
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Total Trades</div>
+          <div class="mock-stat-value">20</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Win Rate</div>
+          <div class="mock-stat-value green">45%</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Total P&L</div>
+          <div class="mock-stat-value red">-$1,240</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Profit Factor</div>
+          <div class="mock-stat-value red">0.72</div>
+        </div>
+      </div>
+
+      <div class="mock-filter-bar">
+        <input class="mock-filter-input" placeholder="Symbol" readonly>
+        <input class="mock-filter-input" placeholder="Direction: All" readonly>
+        <input class="mock-filter-input" placeholder="Tags: emotional" style="border-color:var(--amber);color:var(--amber);" readonly>
+        <div class="mock-btn" style="font-size:11px;">Clear All</div>
+      </div>
+
+      <table class="mock-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Symbol</th>
+            <th>Dir</th>
+            <th>Entry</th>
+            <th>Exit</th>
+            <th>P&L</th>
+            <th>Tag</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="loser">
+            <td style="font-family:Inter,sans-serif;">Feb 28</td>
+            <td><strong>SPY</strong></td>
+            <td><span class="badge long">Long</span></td>
+            <td>$3.45</td>
+            <td>$2.10</td>
+            <td style="color:var(--red)">-$675</td>
+            <td><span class="badge emotional">Emotional</span></td>
+          </tr>
+          <tr class="winner">
+            <td style="font-family:Inter,sans-serif;">Feb 27</td>
+            <td><strong>QQQ</strong></td>
+            <td><span class="badge short">Short</span></td>
+            <td>$5.20</td>
+            <td>$7.80</td>
+            <td style="color:var(--emerald)">+$520</td>
+            <td><span class="badge planned">Planned</span></td>
+          </tr>
+          <tr class="loser">
+            <td style="font-family:Inter,sans-serif;">Feb 27</td>
+            <td><strong>NVDA</strong></td>
+            <td><span class="badge long">Long</span></td>
+            <td>$12.30</td>
+            <td>$9.45</td>
+            <td style="color:var(--red)">-$570</td>
+            <td><span class="badge fomo">FOMO</span></td>
+          </tr>
+          <tr class="loser">
+            <td style="font-family:Inter,sans-serif;">Feb 27</td>
+            <td><strong>TSLA</strong></td>
+            <td><span class="badge long">Long</span></td>
+            <td>$8.90</td>
+            <td>$4.20</td>
+            <td style="color:var(--red)">-$940</td>
+            <td><span class="badge revenge">Revenge</span></td>
+          </tr>
+          <tr class="winner">
+            <td style="font-family:Inter,sans-serif;">Feb 26</td>
+            <td><strong>SPX</strong></td>
+            <td><span class="badge long">Long</span></td>
+            <td>$4.50</td>
+            <td>$8.10</td>
+            <td style="color:var(--emerald)">+$720</td>
+            <td><span class="badge planned">Planned</span></td>
+          </tr>
+          <tr>
+            <td colspan="7" style="text-align:center;color:var(--text-muted);font-family:Inter,sans-serif;padding:16px;">
+              ... 15 more entries ...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <strong>Use the filter bar</strong> to isolate trades by tag. Filter by <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">emotional</code> to see only your emotional trades &mdash; then look at the P&L. Most of the time, the pattern is clear: your emotional trades are destroying your account.
+  </div>
+</section>
+
+<!-- ===== SECTION 6: ANALYTICS ===== -->
+<section id="analytics">
+  <div class="section-number">06 &mdash; Analytics</div>
+  <div class="section-title">Read Your Analytics Dashboard</div>
+  <div class="section-subtitle">Click the <strong>Analytics</strong> tab in your journal sub-navigation. Once you have 20 trades entered, the dashboard populates automatically.</div>
+
+  <div class="mock-frame">
+    <div class="mock-titlebar">
+      <div class="mock-dot red"></div>
+      <div class="mock-dot yellow"></div>
+      <div class="mock-dot green"></div>
+      <div class="mock-url">tradeitm.com/members/journal/analytics</div>
+    </div>
+    <div class="mock-body">
+      <div class="mock-subnav">
+        <div class="mock-subnav-item">Entries</div>
+        <div class="mock-subnav-item active">Analytics</div>
+      </div>
+
+      <h3 style="font-family:'Playfair Display',serif; margin-bottom:4px;">Journal Analytics</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">Advanced performance metrics, behavioral insights, and regime analysis.</p>
+
+      <!-- Period selector -->
+      <div style="display:flex;gap:4px;margin-bottom:20px;">
+        <span style="padding:5px 12px;font-size:11px;border-radius:4px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);">7d</span>
+        <span style="padding:5px 12px;font-size:11px;border-radius:4px;background:var(--emerald-glow);border:1px solid var(--emerald);color:var(--emerald);">30d</span>
+        <span style="padding:5px 12px;font-size:11px;border-radius:4px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);">90d</span>
+        <span style="padding:5px 12px;font-size:11px;border-radius:4px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);">1y</span>
+        <span style="padding:5px 12px;font-size:11px;border-radius:4px;background:var(--bg-card);border:1px solid var(--border);color:var(--text-muted);">All</span>
+      </div>
+
+      <!-- Key stats grid -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:24px;">
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Win Rate</div>
+          <div class="mock-stat-value" style="color:var(--amber);">45%</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Avg P&L</div>
+          <div class="mock-stat-value red">-$62</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Expectancy</div>
+          <div class="mock-stat-value red">-$62</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Profit Factor</div>
+          <div class="mock-stat-value red">0.72</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Sharpe Ratio</div>
+          <div class="mock-stat-value red">-0.31</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Max Drawdown</div>
+          <div class="mock-stat-value red">-18.4%</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Winning Trades</div>
+          <div class="mock-stat-value green">9</div>
+        </div>
+        <div class="mock-stat-card">
+          <div class="mock-stat-label">Losing Trades</div>
+          <div class="mock-stat-value red">11</div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="two-col">
+        <div>
+          <div style="font-size:12px;font-weight:600;margin-bottom:8px;">Equity Curve</div>
+          <div class="chart-placeholder" style="align-items:center;">
+            <svg viewBox="0 0 300 100" style="width:100%;height:100%;">
+              <polyline points="0,30 30,25 60,40 90,35 120,55 150,50 180,65 210,60 240,70 270,75 300,80"
+                fill="none" stroke="#F87171" stroke-width="2" opacity="0.8"/>
+              <line x1="0" y1="30" x2="300" y2="30" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="4"/>
+            </svg>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;margin-bottom:8px;">P&L by Day of Week</div>
+          <div class="chart-placeholder">
+            <div class="chart-bar green" style="height:45%"></div>
+            <div class="chart-bar red" style="height:60%"></div>
+            <div class="chart-bar green" style="height:30%"></div>
+            <div class="chart-bar red" style="height:80%"></div>
+            <div class="chart-bar green" style="height:55%"></div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:22px;font-size:10px;color:var(--text-muted);margin-top:6px;">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bias insights preview -->
+      <div style="margin-top:20px;">
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px;">Behavioral Bias Detection</div>
+        <div class="glass-card" style="border-color:rgba(248,113,113,0.3);">
+          <h3 style="font-size:13px;color:var(--red);">&#9888; Revenge Trading Pattern Detected</h3>
+          <p style="font-size:12px;">Confidence: <strong style="color:var(--red);">High (87%)</strong> &mdash; You show a pattern of entering trades within minutes of a loss, often with larger position sizes. 4 of your 20 trades match this pattern.</p>
+        </div>
+        <div class="glass-card" style="border-color:rgba(251,191,36,0.3);">
+          <h3 style="font-size:13px;color:var(--amber);">&#9888; Loss Aversion Bias</h3>
+          <p style="font-size:12px;">Confidence: <strong style="color:var(--amber);">Medium (62%)</strong> &mdash; You tend to hold losing positions longer than winners, hoping for recovery instead of cutting losses at your stop.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <strong>What to look for in Week 1:</strong> Focus on your <strong>Win Rate</strong>, <strong>Expectancy</strong> (this is your EV from the lesson), <strong>Profit Factor</strong> (above 1.0 means profitable, below means losing), and the <strong>Behavioral Bias Detection</strong> section which will flag your biggest psychological patterns.
+  </div>
+</section>
+
+<!-- ===== SECTION 7: CALCULATE ===== -->
+<section id="calculate">
+  <div class="section-number">07 &mdash; Calculate</div>
+  <div class="section-title">Your Week 1 Numbers</div>
+  <div class="section-subtitle">The analytics dashboard gives you most of these automatically. Here's how to read them and what to bring to the group call.</div>
+
+  <div class="formula-block">
+    <div class="label">Expected Value (EV) per Trade</div>
+    <div class="formula">EV = (Win Rate &times; Avg Win) &minus; (Loss Rate &times; Avg Loss)</div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-top:8px;">Shown as "Expectancy" in your Analytics dashboard</p>
+  </div>
+
+  <div class="formula-block">
+    <div class="label">Risk-to-Reward Ratio</div>
+    <div class="formula">R:R = Average Win &divide; Average Loss</div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-top:8px;">Calculate manually: sum your winning P&Ls &divide; count of winners, then sum losing P&Ls &divide; count of losers</p>
+  </div>
+
+  <div class="formula-block">
+    <div class="label">Emotional Trade Percentage</div>
+    <div class="formula">Emotional % = (FOMO + Revenge + Emotional Trades) &divide; Total Trades &times; 100</div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-top:8px;">Use the Tags filter to count each category</p>
+  </div>
+
+  <div style="margin-top:32px;">
+    <h3 style="font-size:1rem;margin-bottom:16px;">The numbers you need for the Week 1 call:</h3>
+    <div class="two-col">
+      <div class="glass-card">
+        <h3 style="font-size:14px;">From Your Analytics Dashboard</h3>
+        <p><strong style="color:var(--emerald)">Win Rate</strong> &mdash; shown on the summary stats cards</p>
+        <p><strong style="color:var(--emerald)">Total P&L</strong> &mdash; shown on the summary stats cards</p>
+        <p><strong style="color:var(--emerald)">Profit Factor</strong> &mdash; above 1 = profitable, below 1 = losing</p>
+        <p><strong style="color:var(--emerald)">Expectancy</strong> &mdash; your EV per trade, shown in advanced analytics</p>
+        <p><strong style="color:var(--emerald)">Max Drawdown</strong> &mdash; how deep your account dropped</p>
+      </div>
+      <div class="glass-card">
+        <h3 style="font-size:14px;">Calculate Yourself</h3>
+        <p><strong style="color:var(--champagne)">R:R Ratio</strong> &mdash; average win $ &divide; average loss $</p>
+        <p><strong style="color:var(--champagne)">Emotional %</strong> &mdash; count emotional/FOMO/revenge tags &divide; 20</p>
+        <p><strong style="color:var(--champagne)">Max Daily Loss</strong> &mdash; define as 3-5% of your account</p>
+        <p><strong style="color:var(--champagne)">Max Risk Per Trade</strong> &mdash; define as 1-2% of your account</p>
+        <p><strong style="color:var(--champagne)">Planned vs. Unplanned</strong> &mdash; which category won more?</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION 8: CHECKLIST ===== -->
+<section id="checklist">
+  <div class="section-number">08 &mdash; Checklist</div>
+  <div class="section-title">Week 1 Completion Checklist</div>
+  <div class="section-subtitle">Check off each item as you complete it. Bring this checklist to the group call.</div>
+
+  <ul class="checklist">
+    <li>Log into the Trade Journal at <strong style="color:var(--emerald)">tradeitm.com/members/journal</strong></li>
+    <li>Click <strong>+ New Entry</strong> and log all 20 of your most recent trades</li>
+    <li>For each trade, fill in: symbol, direction, entry price, exit price, P&L</li>
+    <li>Switch to <strong>Full Form</strong> and fill in Behavioral & Psychology for every trade</li>
+    <li>Tag each trade with one of: <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">planned</code> / <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">emotional</code> / <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">fomo</code> / <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">revenge</code></li>
+    <li>Record mood before and after each trade</li>
+    <li>Rate your discipline (1-5) and whether you followed your plan for each trade</li>
+    <li>Click the <strong>Analytics</strong> tab and review your Win Rate, P&L, and Expectancy</li>
+    <li>Calculate your R:R ratio (avg win &divide; avg loss)</li>
+    <li>Calculate your emotional trade percentage</li>
+    <li>Define your max risk per trade (1-2% of account) and write it in setup notes</li>
+    <li>Define your max daily loss limit (3-5% of account) and write it in setup notes</li>
+    <li>Filter by "planned" tag and compare P&L against emotional/FOMO/revenge trades</li>
+    <li>Check the Bias Detection section for any flagged behavioral patterns</li>
+    <li>Prepare your numbers to share on the Week 1 group call</li>
+  </ul>
+
+  <div class="callout tip" style="margin-top:32px;">
+    <strong>Remember:</strong> The point of this week isn't to feel good about your numbers. It's to see the truth. Every great trader started by confronting their weaknesses. Your journal is now your mirror &mdash; use it every single trading day from here forward.
+  </div>
+
+  <div style="text-align:center; margin-top:48px; padding: 32px; background:var(--emerald-glow); border:1px solid var(--border-highlight); border-radius:12px;">
+    <div style="font-family:'Playfair Display',serif; font-size:1.4rem; margin-bottom:8px;">
+      "You don't need more trades.<br>You need <span style="color:var(--emerald)">better filters</span>."
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);">Week 2 Preview: The Setup Filter &mdash; How to build a checklist that eliminates 80% of bad trades before you enter.</p>
+  </div>
+</section>
+
+</div>
+
+<footer>
+  <div class="logo-text">Trade In The Money</div>
+  <p>8-Week Sniper Mentorship &bull; Week 1: The Trader Identity Reset</p>
+  <p style="margin-top:8px;">&copy; 2026 Trade In The Money. All rights reserved.</p>
+</footer>
+
+<script>
+  // Progress bar tracking
+  const sections = ['overview','navigate','newentry','fullform','categorize','analytics','calculate','checklist'];
+  const progressFill = document.getElementById('progressFill');
+  const progressSteps = document.querySelectorAll('.progress-steps span');
+
+  function updateProgress() {
+    const scrollTop = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = Math.min((scrollTop / docHeight) * 100, 100);
+    progressFill.style.width = progress + '%';
+
+    // Update active step
+    let currentSection = 0;
+    sections.forEach((id, i) => {
+      const el = document.getElementById(id);
+      if (el && el.getBoundingClientRect().top < window.innerHeight * 0.5) {
+        currentSection = i;
+      }
+    });
+    progressSteps.forEach((step, i) => {
+      step.classList.toggle('active', i <= currentSection);
+    });
+  }
+
+  window.addEventListener('scroll', updateProgress);
+  window.addEventListener('resize', updateProgress);
+
+  function scrollToSection(id) {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Initialize
+  updateProgress();
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import {
   Bot,
   BookOpen,
+  Crosshair,
   GraduationCap,
   LayoutDashboard,
   Palette,
@@ -29,6 +30,7 @@ const TAB_ID_ICON_MAP: Record<string, LucideIcon> = {
   social: Users,
   studio: Palette,
   profile: UserCircle,
+  mentorship: Crosshair,
 }
 
 function asLucideIcon(value: unknown): LucideIcon | null {
@@ -120,5 +122,6 @@ export function getMemberFallbackTitle(pathname: string): string {
   if (pathname.startsWith('/members/social')) return 'Social'
   if (pathname.startsWith('/members/studio')) return 'Studio'
   if (pathname.startsWith('/members/profile')) return 'Profile'
+  if (pathname.startsWith('/members/mentorship')) return 'Mentorship'
   return 'Members'
 }
