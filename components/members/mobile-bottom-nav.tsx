@@ -80,14 +80,14 @@ export function MemberBottomNav() {
   const isMoreActive = showMoreButton && moreItems.some((item) => isActivePath(pathname, item))
 
   useEffect(() => {
-    const handleClickAway = (event: MouseEvent) => {
+    const handlePointerAway = (event: PointerEvent) => {
       if (!moreMenuRef.current) return
       if (moreMenuRef.current.contains(event.target as Node)) return
       setMoreOpenPath(null)
     }
 
-    document.addEventListener('mousedown', handleClickAway)
-    return () => document.removeEventListener('mousedown', handleClickAway)
+    document.addEventListener('pointerdown', handlePointerAway)
+    return () => document.removeEventListener('pointerdown', handlePointerAway)
   }, [])
 
   return (

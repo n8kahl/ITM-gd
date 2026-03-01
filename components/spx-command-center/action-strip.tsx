@@ -128,7 +128,7 @@ export function ActionStrip(props: ActionStripProps) {
 
   return (
     <div
-      className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 px-5 py-2.5"
+      className="pointer-events-auto absolute inset-x-0 bottom-0 z-[62] px-5 py-2.5"
       data-testid="spx-action-strip"
       style={{
         background: 'linear-gradient(0deg, rgba(10,10,11,0.88) 0%, rgba(10,10,11,0.4) 70%, transparent 100%)',

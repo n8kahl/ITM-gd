@@ -1,7 +1,7 @@
 # CLAUDE.md - TradeITM Production Codex
 
 > **AI-Maintained:** This project is built and maintained by Claude Code with minimal developer intervention.
-> **Last Updated:** 2026-02-28
+> **Last Updated:** 2026-03-01
 
 ---
 
@@ -719,13 +719,180 @@ For smaller changes (single component fix, isolated bug), the standard slice cad
 
 ---
 
-## 12. Update Log
+## 12. Upgrade Execution Standard & Session Boundaries (2026-03-01)
+
+This section is the canonical operating system for medium/large upgrades (including SPX Command Center hardening).
+
+### 12.1 90-Day Upgrade Frame (Deterministic)
+
+Use a release train, not ad-hoc tasking:
+
+1. Planning window: **Monday, March 2, 2026 -> Friday, May 29, 2026**
+2. Buffer/hardening day: **Saturday, May 30, 2026**
+3. Cadence: **2-week sprints**, **Friday release gates**
+4. Risk posture:
+   - P0 work must be behind flags when blast radius is not low.
+   - P0 introduced failures cannot be deferred.
+
+### 12.2 Required In-Repo Artifacts
+
+For any audit-driven upgrade, land these files first (or confirm they already exist and are current):
+
+1. `docs/audits/<date>-<initiative>-audit.md`
+2. `docs/roadmap/<date>_90-day-plan.md`
+3. `docs/roadmap/risk-register.md`
+4. `docs/roadmap/seam-gaps.md`
+5. `docs/roadmap/definition-of-done.md`
+
+These are required before implementation starts so the plan is executable and reviewable.
+
+### 12.3 Workstream Structure (Epics)
+
+Use explicit epics so slices remain bounded:
+
+1. `EPIC-A` Execution Safety v2
+2. `EPIC-B` Data Quality Contract
+3. `EPIC-C` Setup Pipeline Correctness
+4. `EPIC-D` Database/RLS Hardening + Schema Truth
+5. `EPIC-E` Optimizer Enforcement + History UX
+6. `EPIC-F` UX Persistence + Accessibility + Performance Budget
+7. `EPIC-G` Test Harness + CI Gates + Runbooks
+
+Each ticket must include: problem, evidence, risk, acceptance criteria, test plan, rollout plan.
+
+### 12.4 Upgrade Delivery Standard (Per Slice)
+
+Use this flow for every slice:
+
+1. **Initialize**
+   - Create/continue scoped branch: `codex/<initiative>`.
+   - Capture baseline: branch, `git status`, unrelated dirty files.
+   - Confirm in-scope and out-of-scope files.
+2. **Slice**
+   - One independently verifiable unit (contract/backend/UI/tests/docs).
+   - Do not mix unrelated work in one commit.
+3. **Implement**
+   - Touch only required files.
+   - Add tests in the same slice.
+   - Maintain compatibility unless contract change is intentional and documented.
+4. **Validate (Required order)**
+```bash
+pnpm exec eslint <touched files>
+pnpm exec tsc --noEmit
+npm --prefix backend test -- --runInBand <targeted-backend-suites>
+pnpm exec playwright test <targeted-e2e-specs> --project=chromium --workers=1
+```
+5. **Classify failures**
+   - Introduced by slice: fix before commit.
+   - Pre-existing: document explicitly in session output and PR notes.
+6. **Commit**
+   - Stage only intentional files.
+   - Format: `feat|fix|test|docs(<scope>): <outcome>`.
+7. **Push/PR**
+   - Include changed files by slice, validation outcomes, residual failures, rollback plan.
+
+### 12.5 Correct Quality Process (Non-Negotiable DoD)
+
+A slice is done only if all are true:
+
+1. Acceptance criteria met.
+2. Lint + typecheck pass for touched scope.
+3. At least one non-happy-path test exists for new production logic.
+4. Telemetry/logging added for production-path behavior changes.
+5. Docs/runbook updated when operational behavior changed.
+6. Rollout/rollback path defined (flag if risk > low).
+7. Known pre-existing failures are captured with evidence.
+
+### 12.6 Mandatory Flags for Risky Upgrades
+
+For high-risk upgrade paths, implement and use:
+
+1. `executionV2`
+2. `snapshotQualityV1`
+3. `optimizerGateEnforcedV1`
+4. `setupTickSymbolGateV1`
+
+Flag behavior must be consistent across backend and frontend surfaces.
+
+### 12.7 Mandatory Session Output Contract
+
+Every implementation session must end with:
+
+1. `Changed files`
+2. `Validation commands + pass/fail`
+3. `Known pre-existing failures (if any)`
+4. `Risks/notes`
+5. `Suggested next slice`
+
+### 12.8 When to Start a New Session (Decision Matrix)
+
+Start a **new session** when any are true:
+
+1. Phase change:
+   - authoring -> validation
+   - validation -> release/push
+2. Objective change (new epic/slice family).
+3. Domain count exceeds two major areas in one pass (for example backend + DB + frontend) and context clarity drops.
+4. Clean verification pass is needed after heavy edits or context compaction.
+5. Repeated tool/runtime instability blocks reliable progress.
+6. High-risk operation requires isolated auditability (migrations, execution safety paths, kill switch logic).
+7. You are preparing handoff to another agent/person and need deterministic continuity.
+
+Stay in the **same session** when all are true:
+
+1. Same slice objective.
+2. Same domain/fileset.
+3. Validation loop is converging.
+4. No context confusion or tool instability.
+
+### 12.9 First 72-Hour Startup Sequence (New Upgrade)
+
+Day 1:
+1. Create scoped branch.
+2. Land audit/roadmap/risk/seam-gap/DoD docs.
+3. Confirm ticket + PR templates are present.
+
+Day 2:
+1. Open epics and sprint-ticket breakdown.
+2. Add/enable schema contract tests and setup-type alignment tests.
+
+Day 3:
+1. Ship highest-impact correctness/security fixes first.
+2. Deploy to staging and run smoke validation.
+
+### 12.10 Session Handoff Block (Required)
+
+When starting a new session, provide:
+
+```md
+Branch:
+Head commit:
+Slice objective:
+Files touched:
+Validation run:
+- <command>: pass/fail
+Known pre-existing failures:
+Next exact action:
+```
+
+This handoff is required for deterministic continuity across sessions.
+
+---
+
+## 13. Update Log
 
 ### 2026-02-27: Gold Standard Development Process
 - Added Section 11: Incremental Development & QA Process.
 - Documented three-session workflow (Author → Validate → Harden).
 - Added test file conventions, priority tiers, and selector iteration loop.
 - Proven across SPX Command Center (~35 tests), Trade Journal (~49 tests), and Dashboard (~40 tests) E2E audits.
+
+### 2026-03-01: Upgrade Standard + Session Boundary Rules
+- Added/expanded Section 12 as the canonical deterministic upgrade standard.
+- Added 90-day release train framing, required audit artifacts, and 7-epic structure.
+- Added non-negotiable DoD with telemetry/runbook/rollback requirements.
+- Added mandatory risk flags and first-72-hour startup sequence.
+- Added explicit new-session decision matrix and required handoff block.
 
 ### 2026-02-23: CLAUDE.md Upgrade
 - Added multi-agent orchestration guidelines (Section 7).

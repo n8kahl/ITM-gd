@@ -42,6 +42,7 @@ export type SPXDesktopSpatialCanvasProps = {
 }
 
 const OVERLAY_POLICY_REFRESH_INTERVAL_MS = 180
+const DESKTOP_TOP_SAFE_AREA_PX = 64
 
 export function SPXDesktopSpatialCanvas({
   sidebarOpen,
@@ -131,8 +132,12 @@ export function SPXDesktopSpatialCanvas({
 
   return (
     <div
-      className="absolute inset-0 transition-[right] duration-300 ease-out"
-      style={{ right: sidebarOpen ? `${sidebarWidth}px` : '0px' }}
+      className="absolute left-0 transition-[right] duration-300 ease-out"
+      style={{
+        top: `${DESKTOP_TOP_SAFE_AREA_PX}px`,
+        bottom: '0px',
+        right: sidebarOpen ? `${sidebarWidth}px` : '0px',
+      }}
       data-testid="spx-desktop-spatial"
     >
       <div ref={chartCanvasRef} className="absolute inset-0">
@@ -150,9 +155,9 @@ export function SPXDesktopSpatialCanvas({
           />
           {showGEXGlow && <GEXAmbientGlow intensity="boosted" />}
           {showGEXGlow && !spatialThrottled && <GammaTopographyOverlay coordinatesRef={coordinatesRef} />}
-          <FlowRibbon className="absolute left-4 top-[74px] z-[24] w-[320px] max-w-[46vw]" />
+          <FlowRibbon className="absolute left-4 top-3 z-[24] w-[320px] max-w-[46vw]" />
           <SpatialMarkerLegend
-            className="absolute left-4 top-[122px] z-[24]"
+            className="absolute left-4 top-[58px] z-[24]"
             showCone={showConeOverlay}
             showCoach={showCoachOverlay}
           />

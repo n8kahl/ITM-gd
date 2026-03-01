@@ -940,7 +940,7 @@ export function AICoachFeed({
       </AnimatePresence>
 
       {uxFlags.coachSurfaceV2 && (
-        <AnimatePresence initial={false} mode="wait">
+        <AnimatePresence initial={false}>
           <motion.div
             key={effectiveCoachDecision?.decisionId || scopedSetup?.id || 'coach-brief'}
             data-testid="spx-coach-decision-brief"
@@ -1164,7 +1164,7 @@ export function AICoachFeed({
         )}
       </div>
 
-      <AnimatePresence initial={false} mode="wait">
+      <AnimatePresence initial={false}>
         {historyOpen ? (
           <motion.div
             key="history-open"
