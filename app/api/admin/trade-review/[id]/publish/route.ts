@@ -24,7 +24,7 @@ export async function POST(
 
     const { data: note, error: noteError } = await supabase
       .from('coach_trade_notes')
-      .select('id,review_request_id,coach_response')
+      .select('id,review_request_id')
       .eq('journal_entry_id', parsedParams.id)
       .maybeSingle()
 
@@ -33,26 +33,8 @@ export async function POST(
       return errorResponse('Failed to load coach note', 500)
     }
 
-    if (!note || !note.coach_response) {
-      return errorResponse('Coach note with feedback is required before publish', 400)
-    }
-
     const nowIso = new Date().toISOString()
-
-    const { error: publishNoteError } = await supabase
-      .from('coach_trade_notes')
-      .update({
-        is_published: true,
-        published_at: nowIso,
-      })
-      .eq('journal_entry_id', parsedParams.id)
-
-    if (publishNoteError) {
-      console.error('[TradeReview][Publish] Failed to publish coach note:', publishNoteError.message)
-      return errorResponse('Failed to publish coach note', 500)
-    }
-
-    let resolvedRequestId = note.review_request_id as string | null
+    let resolvedRequestId = (note?.review_request_id as string | null) ?? null
 
     if (!resolvedRequestId) {
       const { data: latestRequest } = await supabase
@@ -65,6 +47,36 @@ export async function POST(
         .maybeSingle()
 
       resolvedRequestId = latestRequest?.id ?? null
+    }
+
+    if (note) {
+      const { error: publishNoteError } = await supabase
+        .from('coach_trade_notes')
+        .update({
+          is_published: true,
+          published_at: nowIso,
+        })
+        .eq('id', note.id)
+
+      if (publishNoteError) {
+        console.error('[TradeReview][Publish] Failed to publish coach note:', publishNoteError.message)
+        return errorResponse('Failed to publish coach note', 500)
+      }
+    } else {
+      const { error: createPublishedNoteError } = await supabase
+        .from('coach_trade_notes')
+        .insert({
+          journal_entry_id: parsedParams.id,
+          review_request_id: resolvedRequestId,
+          coach_user_id: actorId,
+          is_published: true,
+          published_at: nowIso,
+        })
+
+      if (createPublishedNoteError) {
+        console.error('[TradeReview][Publish] Failed to create published coach note:', createPublishedNoteError.message)
+        return errorResponse('Failed to publish coach note', 500)
+      }
     }
 
     if (resolvedRequestId) {

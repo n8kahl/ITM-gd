@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton-loader'
 import { Textarea } from '@/components/ui/textarea'
+import { ReplaySessionBrowser } from '@/components/spx-command-center/replay-session-browser'
 import { ReplayChart } from '@/components/trade-day-replay/replay-chart'
 import { SessionAnalysis } from '@/components/trade-day-replay/session-analysis'
 import type { ReplayPayload } from '@/lib/trade-day-replay/types'
@@ -230,12 +231,22 @@ export function TradeDayReplayShell() {
     <div className="space-y-4">
       <PageHeader
         title="Trade Day Replay"
-        subtitle="Paste a transcript to build a replay payload with intraday replay controls and marker overlays."
+        subtitle="Pick a recorded replay session by day, or paste a transcript to build a replay payload with intraday controls and marker overlays."
         breadcrumbs={[
           { label: 'Dashboard', href: '/members' },
           { label: 'Trade Day Replay' },
         ]}
       />
+
+      <section className="rounded-xl border border-white/10 bg-white/5 p-4 lg:p-6">
+        <div className="mb-3 space-y-1">
+          <h2 className="text-sm font-semibold text-ivory">Replay Sessions</h2>
+          <p className="text-xs text-white/60">
+            Choose a day chip, select a session, and replay it directly from this tab.
+          </p>
+        </div>
+        <ReplaySessionBrowser />
+      </section>
 
       {(healthStatus === 'checking' || isBuilding) ? <Skeleton variant="screen" /> : null}
 

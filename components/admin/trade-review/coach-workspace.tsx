@@ -525,7 +525,7 @@ export function CoachWorkspace({
           size="sm"
           className="h-9 px-3"
           onClick={() => { void handlePublish() }}
-          disabled={publishing || !onPublish || !canSave}
+          disabled={publishing || !onPublish}
         >
           {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Publish to Member
