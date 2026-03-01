@@ -10,6 +10,8 @@ import { getMassiveTickStreamStatus } from '../services/massiveTickStream';
 import { getLatestTick } from '../services/tickCache';
 import { getMarketStatus } from '../services/marketHours';
 import { getWebSocketHealth } from '../services/websocket';
+import { TradierClient } from '../services/broker/tradier/client';
+import { getTradierExecutionRuntimeStatus } from '../services/broker/tradier/executionEngine';
 
 const router = Router();
 
@@ -34,7 +36,18 @@ interface ReadinessResult {
     massive: boolean;
     massiveTick: boolean;
     openai: boolean;
+    tradier: boolean;
   };
+}
+
+const TRADIER_HEALTHCHECK_TIMEOUT_MS = 5000;
+
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return fallback;
 }
 
 async function runReadinessChecks(): Promise<ReadinessResult> {
@@ -79,6 +92,64 @@ async function runReadinessChecks(): Promise<ReadinessResult> {
     overallHealthy = false;
   }
 
+  const tradierStart = Date.now();
+  const tradierRuntime = getTradierExecutionRuntimeStatus();
+  const tradierAccountId = (
+    process.env.TRADIER_HEALTHCHECK_ACCOUNT_ID
+    || process.env.TRADIER_ACCOUNT_ID
+    || ''
+  ).trim();
+  const tradierAccessToken = (
+    process.env.TRADIER_HEALTHCHECK_ACCESS_TOKEN
+    || process.env.TRADIER_ACCESS_TOKEN
+    || ''
+  ).trim();
+  const tradierSandbox = parseBooleanEnv(
+    process.env.TRADIER_HEALTHCHECK_SANDBOX
+      || process.env.TRADIER_SANDBOX
+      || process.env.TRADIER_EXECUTION_SANDBOX,
+    true,
+  );
+  const tradierCredentialsConfigured = Boolean(tradierAccountId && tradierAccessToken);
+  const tradierCheckRequired = tradierRuntime.enabled || tradierCredentialsConfigured;
+
+  if (!tradierCheckRequired) {
+    checks.tradier = {
+      status: 'pass',
+      latency: Date.now() - tradierStart,
+      message: 'check skipped (runtime disabled and no healthcheck credentials configured)',
+    };
+  } else if (!tradierCredentialsConfigured) {
+    checks.tradier = {
+      status: 'fail',
+      latency: Date.now() - tradierStart,
+      message: 'runtime enabled but TRADIER_HEALTHCHECK_ACCOUNT_ID/TRADIER_HEALTHCHECK_ACCESS_TOKEN are not configured',
+    };
+    overallHealthy = false;
+  } else {
+    try {
+      const tradier = new TradierClient({
+        accountId: tradierAccountId,
+        accessToken: tradierAccessToken,
+        sandbox: tradierSandbox,
+        timeoutMs: TRADIER_HEALTHCHECK_TIMEOUT_MS,
+      });
+      await tradier.getBalances();
+      checks.tradier = {
+        status: 'pass',
+        latency: Date.now() - tradierStart,
+        message: `account connectivity ok (${tradierSandbox ? 'sandbox' : 'production'})`,
+      };
+    } catch (_err) {
+      checks.tradier = {
+        status: 'fail',
+        latency: Date.now() - tradierStart,
+        message: 'Tradier account connectivity failed',
+      };
+      overallHealthy = false;
+    }
+  }
+
   const tickStream = getMassiveTickStreamStatus();
   const tickConnected = tickStream.enabled && tickStream.connected;
   const latestSpxTick = getLatestTick('SPX');
@@ -113,6 +184,7 @@ async function runReadinessChecks(): Promise<ReadinessResult> {
       massive: checks.massive?.status === 'pass',
       massiveTick: tickHealthy,
       openai: checks.openai?.status === 'pass',
+      tradier: checks.tradier?.status === 'pass',
     },
   };
 }
