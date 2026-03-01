@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Command } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -27,6 +27,8 @@ function normalize(value: string): string {
 export function SPXCommandPalette({ open, commands, onOpenChange }: SPXCommandPaletteProps) {
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const previousFocusedElementRef = useRef<HTMLElement | null>(null)
 
   const filteredCommands = useMemo(() => {
     const normalizedQuery = normalize(query)
@@ -45,6 +47,17 @@ export function SPXCommandPalette({ open, commands, onOpenChange }: SPXCommandPa
   const boundedActiveIndex = filteredCommands.length === 0
     ? 0
     : Math.min(activeIndex, filteredCommands.length - 1)
+
+  useEffect(() => {
+    if (!open || typeof document === 'undefined') return undefined
+    previousFocusedElementRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    return () => {
+      previousFocusedElementRef.current?.focus?.()
+      previousFocusedElementRef.current = null
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -71,6 +84,34 @@ export function SPXCommandPalette({ open, commands, onOpenChange }: SPXCommandPa
           if (filteredCommands.length === 0) return 0
           return (previous - 1 + filteredCommands.length) % filteredCommands.length
         })
+        return
+      }
+      if (event.key === 'Tab') {
+        const dialog = dialogRef.current
+        if (!dialog) return
+
+        const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ))
+        if (focusable.length === 0) {
+          event.preventDefault()
+          return
+        }
+
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        const activeElement = document.activeElement
+
+        if (event.shiftKey && activeElement === first) {
+          event.preventDefault()
+          last.focus()
+          return
+        }
+
+        if (!event.shiftKey && activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
         return
       }
       if (event.key === 'Enter') {
@@ -104,14 +145,22 @@ export function SPXCommandPalette({ open, commands, onOpenChange }: SPXCommandPa
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="spx-command-palette-title"
+        aria-describedby="spx-command-palette-help"
         className="w-full max-w-2xl overflow-hidden rounded-xl border border-white/20 bg-[#090B0F] shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
+        <h2 id="spx-command-palette-title" className="sr-only">SPX command palette</h2>
         <div className="border-b border-white/10 px-3 py-2.5">
           <div className="flex items-center gap-2 rounded-lg border border-white/12 bg-white/[0.03] px-2 py-1.5">
             <Command className="h-4 w-4 text-white/55" />
             <input
               autoFocus
+              aria-label="Search SPX commands"
+              aria-controls="spx-command-palette-results"
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value)
@@ -121,14 +170,16 @@ export function SPXCommandPalette({ open, commands, onOpenChange }: SPXCommandPa
               className="w-full bg-transparent text-sm text-ivory placeholder:text-white/45 focus:outline-none"
             />
           </div>
-          <p className="mt-1.5 px-0.5 text-[10px] text-white/45">Arrow keys to navigate · Enter to run · Esc to close</p>
+          <p id="spx-command-palette-help" className="mt-1.5 px-0.5 text-[10px] text-white/45">
+            Arrow keys to navigate · Enter to run · Esc to close
+          </p>
         </div>
 
         <div className="max-h-[420px] overflow-auto p-2">
           {visibleCommands.length === 0 ? (
             <p className="px-2 py-3 text-sm text-white/55">No commands match this query.</p>
           ) : (
-            <ul className="space-y-1">
+            <ul id="spx-command-palette-results" className="space-y-1">
               {(() => {
                 let previousGroup: string | null = null
                 return visibleCommands.map((command, index) => {
