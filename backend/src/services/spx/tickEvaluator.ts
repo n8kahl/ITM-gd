@@ -248,6 +248,8 @@ export function evaluateTickSetupTransitions(
   tick: NormalizedMarketTick,
   options?: { minTransitionGapMs?: number; minStopBreachTicks?: number },
 ): SetupTransitionEvent[] {
+  if (tick.symbol !== 'SPX') return [];
+
   const minGapMs = Math.max(0, options?.minTransitionGapMs ?? DEFAULT_MIN_TRANSITION_GAP_MS);
   const minStopBreachTicks = Math.max(
     1,
@@ -259,7 +261,6 @@ export function evaluateTickSetupTransitions(
 
   for (const state of setupStateById.values()) {
     if (TERMINAL_PHASES.has(state.phase)) continue;
-    if (tick.symbol !== 'SPX') continue;
     const prevPrice = state.previousTickPrice;
     state.previousTickPrice = tick.price;
 

@@ -16,6 +16,24 @@ interface PDTStatus {
   reason: string | null;
 }
 
+async function fetchLatestPortfolioEquity(userId: string): Promise<number> {
+  const { data: snapshot, error } = await supabase
+    .from('portfolio_snapshots')
+    .select('total_equity')
+    .eq('user_id', userId)
+    .order('snapshot_time', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    logger.warn('PDT tracker: failed to fetch latest equity snapshot', { userId, error: error.message });
+    return 0;
+  }
+
+  const maybeSnapshot = snapshot as Record<string, unknown> | null;
+  return typeof maybeSnapshot?.total_equity === 'number' ? maybeSnapshot.total_equity as number : 0;
+}
+
 /**
  * Check if a user can place a new entry trade today (PDT gate).
  * Returns true if the trade is allowed, false if blocked by PDT rules.
@@ -38,33 +56,33 @@ export async function canTrade(userId: string): Promise<PDTStatus> {
   const { data: entryFills, error: fillError } = await supabase
     .from('spx_setup_execution_fills')
     .select('id')
-    .eq('user_id', userId)
+    .eq('reported_by_user_id', userId)
     .eq('side', 'entry')
     .gte('executed_at', `${sessionDate}T00:00:00Z`)
     .lt('executed_at', `${sessionDate}T23:59:59Z`);
 
   if (fillError) {
-    const normalized = fillError.message.toLowerCase();
-    if (normalized.includes('relation') && normalized.includes('does not exist')) {
-      // Table doesn't exist yet; allow the trade
+    logger.error('PDT tracker: failed to count fills', { userId, error: fillError.message });
+
+    const totalEquity = await fetchLatestPortfolioEquity(userId);
+    if (totalEquity >= PDT_EQUITY_THRESHOLD) {
       return {
         allowed: true,
         roundTripsToday: 0,
         limit: PDT_ROUND_TRIP_LIMIT,
-        totalEquity: 0,
+        totalEquity,
         equityThreshold: PDT_EQUITY_THRESHOLD,
         reason: null,
       };
     }
-    logger.error('PDT tracker: failed to count fills', { userId, error: fillError.message });
-    // Fail open - don't block on query error
+
     return {
-      allowed: true,
-      roundTripsToday: 0,
+      allowed: false,
+      roundTripsToday: PDT_ROUND_TRIP_LIMIT,
       limit: PDT_ROUND_TRIP_LIMIT,
-      totalEquity: 0,
+      totalEquity,
       equityThreshold: PDT_EQUITY_THRESHOLD,
-      reason: null,
+      reason: 'PDT protection: unable to validate today\'s round-trip count; blocking entry until tracking data is available.',
     };
   }
 
@@ -82,17 +100,7 @@ export async function canTrade(userId: string): Promise<PDTStatus> {
   }
 
   // At or above limit - check equity
-  const { data: snapshot } = await supabase
-    .from('portfolio_snapshots')
-    .select('total_equity')
-    .eq('user_id', userId)
-    .order('snapshot_time', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const totalEquity = typeof (snapshot as Record<string, unknown> | null)?.total_equity === 'number'
-    ? (snapshot as Record<string, unknown>).total_equity as number
-    : 0;
+  const totalEquity = await fetchLatestPortfolioEquity(userId);
 
   if (totalEquity >= PDT_EQUITY_THRESHOLD) {
     // Above PDT threshold - unlimited day trades
