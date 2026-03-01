@@ -3,7 +3,7 @@
 **Workstream:** Trade Review Detail UX Hardening  
 **Date:** 2026-03-01  
 **Governing Spec:** `docs/specs/TRADE_REVIEW_UX_HARDENING_EXECUTION_SPEC_2026-03-01.md`  
-**Branch:** `codex/trade-review-ux-hardening`
+**Branch:** `main`
 
 ---
 
@@ -81,9 +81,11 @@ Checklist:
 | Date | Slice | Change | Author | Approved By | Notes |
 |------|-------|--------|--------|-------------|-------|
 | 2026-03-01 | Planning | Prepared completeness addendum + execution packet + autonomous control docs | Orchestrator | Pending implementation kickoff | No product code changes |
-| 2026-03-01 | S0.1 / S0.2 / S1.1 | Executed Session A gates and synchronized typed activity log contract in workspace props to match new detail payload typing | Orchestrator | Self-reviewed | Gates: eslint + tsc + vitest all pass |
-| 2026-03-01 | S1.2 / S1.3 / S2.1 | Implemented reference-tab layout split (2/5 + 3/5), moved AI generation CTA into guided notes card with regenerate semantics, and added autosave + unsaved-change protections | Orchestrator | Self-reviewed | Gates: eslint + tsc + targeted playwright pass |
-| 2026-03-01 | S2.2 / S2.3 / S2.4 | Replaced native confirm dialogs with custom modal confirmations, added member-view preview dialog via shared feedback renderer, and surfaced trader profile + inline member notes within workspace | Orchestrator | Self-reviewed | Gates: eslint + tsc + full admin trade-review playwright pass |
+| 2026-03-01 | S0.1 / S0.2 / S1.1 | Added typed detail contract usage, persistent context status strip, and high-signal P&L summary in header context | Orchestrator | Self-reviewed | Foundation slices completed |
+| 2026-03-01 | S1.2 / S1.3 / S2.1 | Shifted to reference-tab + workspace-priority layout, unified AI generation card, and added dirty-state/autosave/beforeunload protections | Orchestrator | Self-reviewed | Saves now resilient to reload/navigation errors |
+| 2026-03-01 | S2.2 / S2.3 / S2.4 | Replaced `window.confirm` publish/dismiss with premium modals, added preview member view dialog, and surfaced trader profile + member notes in workspace | Orchestrator | Self-reviewed | Publish now guarded and previewable |
+| 2026-03-01 | S3.1 / S3.2 / S3.3 | Introduced segmented grade/confidence controls, larger screenshot thumbnails with zoom, richer activity entries, and loading skeleton state | Orchestrator | Self-reviewed | Accessibility labels + authoring ergonomics improved |
+| 2026-03-01 | S4.1 / S4.2 / S4.3 | Added prev/next review navigation with symbol/member labels, keyboard shortcuts (`Cmd/Ctrl+S/G/Enter`, `Esc`), and expanded admin trade-review E2E tests | Orchestrator | Self-reviewed | Final targeted gates passed |
 
 ---
 

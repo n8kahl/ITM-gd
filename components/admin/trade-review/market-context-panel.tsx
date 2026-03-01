@@ -105,14 +105,14 @@ export function MarketContextPanel({ snapshot }: MarketContextPanelProps) {
 
   if (!snapshot) {
     return (
-      <div className="glass-card-heavy rounded-xl border border-white/5 p-6 text-sm text-muted-foreground">
+      <div className="glass-card-heavy rounded-xl border border-white/10 p-6 text-sm text-muted-foreground">
         Market context is not loaded yet. Generate AI analysis to fetch and freeze market data.
       </div>
     )
   }
 
   return (
-    <div className="glass-card-heavy space-y-4 rounded-xl border border-white/5 p-5">
+    <div className="glass-card-heavy space-y-4 rounded-xl border border-white/10 p-5">
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-base text-ivory">Market Context</h2>
         <span className={`rounded-full border px-2 py-0.5 text-xs ${qualityClasses(snapshot.dataQuality)}`}>
@@ -120,7 +120,7 @@ export function MarketContextPanel({ snapshot }: MarketContextPanelProps) {
         </span>
       </div>
 
-      <div className="rounded-lg border border-white/5 bg-black/20 p-3">
+      <div className="rounded-lg border border-white/10 bg-black/20 p-3">
         <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Price Chart (1m) + EMA8/EMA21</p>
         {chartPoints.length > 1 ? (
           <div className="h-56 w-full">
@@ -178,7 +178,7 @@ export function MarketContextPanel({ snapshot }: MarketContextPanelProps) {
       </div>
 
       {snapshot.options ? (
-        <div className="rounded-lg border border-white/5 bg-white/5 p-3">
+        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
           <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Options Context</p>
           <div className="grid grid-cols-2 gap-3">
             <Metric label="Contract" value={snapshot.options.contractTicker || '—'} />
@@ -200,7 +200,7 @@ export function MarketContextPanel({ snapshot }: MarketContextPanelProps) {
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-white/5 bg-white/5 p-3">
+      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
         <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">SPX Context</p>
         <div className="grid grid-cols-2 gap-3">
           <Metric label="SPX" value={snapshot.spxContext.spxPrice.toFixed(2)} />
@@ -216,7 +216,7 @@ export function MarketContextPanel({ snapshot }: MarketContextPanelProps) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/5 bg-white/5 p-3">
+      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
         <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Volume & Tape</p>
         <div className="grid grid-cols-2 gap-3">
           <Metric label="Trade Time Volume" value={snapshot.volumeContext.tradeTimeVolume.toLocaleString('en-US')} />
@@ -228,13 +228,13 @@ export function MarketContextPanel({ snapshot }: MarketContextPanelProps) {
           />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
+          <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
             <p className="text-xs text-muted-foreground">Entry Bar</p>
             <p className="mt-1 text-sm text-ivory">
               {entryBar ? `${entryBar.v.toLocaleString('en-US')} @ ${formatTimestamp(entryBar.t)}` : '—'}
             </p>
           </div>
-          <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
+          <div className="rounded-md border border-white/10 bg-black/20 p-2.5">
             <p className="text-xs text-muted-foreground">Exit Bar</p>
             <p className="mt-1 text-sm text-ivory">
               {exitBar ? `${exitBar.v.toLocaleString('en-US')} @ ${formatTimestamp(exitBar.t)}` : '—'}
@@ -248,9 +248,9 @@ export function MarketContextPanel({ snapshot }: MarketContextPanelProps) {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/5 bg-black/20 p-2.5">
+    <div className="rounded-lg border border-white/10 bg-black/20 p-2.5">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 font-mono text-sm text-ivory">{value}</p>
+      <p className="mt-1 text-sm text-ivory">{value}</p>
     </div>
   )
 }

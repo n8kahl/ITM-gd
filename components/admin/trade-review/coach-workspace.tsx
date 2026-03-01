@@ -57,6 +57,7 @@ interface CoachWorkspaceProps {
   onDismiss?: () => Promise<void> | void
   onUploadScreenshot?: (file: File) => Promise<void> | void
   onRemoveScreenshot?: (path: string) => Promise<void> | void
+  onNavigateBack?: () => Promise<void> | void
 }
 
 function createEmptyDraft(): CoachResponsePayload {
@@ -101,6 +102,17 @@ function hasMinimumDraftContent(draft: CoachResponsePayload): boolean {
     && trimmed.specific_drills.length > 0
     && trimmed.overall_assessment.length > 0
     && trimmed.grade_reasoning.length > 0
+  )
+}
+
+function hasPreviewableDraftContent(draft: CoachResponsePayload): boolean {
+  const trimmed = trimDraft(draft)
+  return (
+    trimmed.what_went_well.length > 0
+    || trimmed.areas_to_improve.length > 0
+    || trimmed.specific_drills.length > 0
+    || trimmed.overall_assessment.length > 0
+    || trimmed.grade_reasoning.length > 0
   )
 }
 
@@ -170,15 +182,17 @@ function winRateTone(value: number | null | undefined): string {
   return 'text-red-300'
 }
 
-function hasPreviewableDraftContent(draft: CoachResponsePayload): boolean {
-  const trimmed = trimDraft(draft)
-  return (
-    trimmed.what_went_well.length > 0
-    || trimmed.areas_to_improve.length > 0
-    || trimmed.specific_drills.length > 0
-    || trimmed.overall_assessment.length > 0
-    || trimmed.grade_reasoning.length > 0
-  )
+function responseFingerprint(payload: CoachResponsePayload | null | undefined): string {
+  if (!payload) return ''
+  return [
+    payload.what_went_well.join('|'),
+    payload.areas_to_improve.map((item) => `${item.point}:${item.instruction}`).join('|'),
+    payload.specific_drills.map((item) => `${item.title}:${item.description}`).join('|'),
+    payload.overall_assessment,
+    payload.grade,
+    payload.grade_reasoning,
+    payload.confidence,
+  ].join('~')
 }
 
 function activityLabel(action: unknown): string {
@@ -239,19 +253,6 @@ const confidenceOptions: Array<{ value: CoachResponsePayload['confidence']; labe
   { value: 'low', label: 'Low' },
 ]
 
-function responseFingerprint(payload: CoachResponsePayload | null | undefined): string {
-  if (!payload) return ''
-  return [
-    payload.what_went_well.join('|'),
-    payload.areas_to_improve.map((item) => `${item.point}:${item.instruction}`).join('|'),
-    payload.specific_drills.map((item) => `${item.title}:${item.description}`).join('|'),
-    payload.overall_assessment,
-    payload.grade,
-    payload.grade_reasoning,
-    payload.confidence,
-  ].join('~')
-}
-
 export function CoachWorkspace({
   entryId,
   note,
@@ -271,6 +272,7 @@ export function CoachWorkspace({
   onDismiss,
   onUploadScreenshot,
   onRemoveScreenshot,
+  onNavigateBack,
 }: CoachWorkspaceProps) {
   const [draft, setDraft] = useState<CoachResponsePayload>(() => normalizeDraft(note))
   const [internalNotes, setInternalNotes] = useState<string>(note?.internal_notes ?? '')
@@ -383,11 +385,11 @@ export function CoachWorkspace({
     }
   }, [canSave, draft, internalNotes, onSaveDraft])
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     await persistDraft('manual')
-  }
+  }, [persistDraft])
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     if (!onGenerateAI) return
     setError(null)
     try {
@@ -395,7 +397,7 @@ export function CoachWorkspace({
     } catch (generateError) {
       setError(generateError instanceof Error ? generateError.message : 'Failed to generate AI analysis')
     }
-  }
+  }, [onGenerateAI, preliminaryNotes])
 
   useEffect(() => {
     if (!isDirty || !canSave || !onSaveDraft) return
@@ -421,9 +423,8 @@ export function CoachWorkspace({
     uploading,
   ])
 
-  const handlePublish = async () => {
+  const handlePublish = useCallback(async () => {
     if (!onPublish) return
-
     setError(null)
     try {
       await onPublish()
@@ -431,11 +432,10 @@ export function CoachWorkspace({
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : 'Failed to publish feedback')
     }
-  }
+  }, [onPublish])
 
-  const handleDismiss = async () => {
+  const handleDismiss = useCallback(async () => {
     if (!onDismiss) return
-
     setError(null)
     try {
       await onDismiss()
@@ -443,7 +443,75 @@ export function CoachWorkspace({
     } catch (dismissError) {
       setError(dismissError instanceof Error ? dismissError.message : 'Failed to dismiss request')
     }
-  }
+  }, [onDismiss])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const metaOrCtrl = event.metaKey || event.ctrlKey
+      const key = event.key.toLowerCase()
+
+      if (metaOrCtrl && key === 's') {
+        event.preventDefault()
+        void handleSave()
+      }
+
+      if (metaOrCtrl && key === 'g') {
+        event.preventDefault()
+        void handleGenerate()
+      }
+
+      if (metaOrCtrl && event.key === 'Enter') {
+        event.preventDefault()
+        if (!publishing && !saving && !autoSaving && !isDirty && onPublish) {
+          setPublishDialogOpen(true)
+        }
+      }
+
+      if (event.key === 'Escape') {
+        const target = event.target as HTMLElement | null
+        if (target?.closest('[role="dialog"]')) return
+
+        if (screenshotZoomUrl) {
+          setScreenshotZoomUrl(null)
+          return
+        }
+        if (previewOpen) {
+          setPreviewOpen(false)
+          return
+        }
+        if (publishDialogOpen) {
+          setPublishDialogOpen(false)
+          return
+        }
+        if (dismissDialogOpen) {
+          setDismissDialogOpen(false)
+          return
+        }
+        if (onNavigateBack) {
+          event.preventDefault()
+          void onNavigateBack()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, { capture: true })
+    }
+  }, [
+    autoSaving,
+    dismissDialogOpen,
+    handleGenerate,
+    handleSave,
+    isDirty,
+    onNavigateBack,
+    onPublish,
+    previewOpen,
+    publishDialogOpen,
+    publishing,
+    saving,
+    screenshotZoomUrl,
+  ])
 
   const handleChooseScreenshot = () => {
     fileInputRef.current?.click()
@@ -452,7 +520,6 @@ export function CoachWorkspace({
   const handleUploadScreenshot = async (file: File | null) => {
     if (!file || !onUploadScreenshot) return
     setError(null)
-
     try {
       await onUploadScreenshot(file)
     } catch (uploadError) {
@@ -463,7 +530,6 @@ export function CoachWorkspace({
   const handleRemoveScreenshot = async (path: string) => {
     if (!onRemoveScreenshot) return
     setError(null)
-
     try {
       await onRemoveScreenshot(path)
     } catch (removeError) {
@@ -485,6 +551,7 @@ export function CoachWorkspace({
       : lastSavedAt
         ? 'text-emerald-200'
         : 'text-muted-foreground'
+
   const memberNoteItems: Array<{ label: string; value: string | null | undefined }> = [
     { label: 'Strategy', value: memberNotes?.strategy },
     { label: 'Setup Type', value: memberNotes?.setupType },
@@ -511,10 +578,11 @@ export function CoachWorkspace({
 
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-ivory">Coach Workspace</h2>
-        <p className={`text-xs ${saveStatusClassName}`}>
-          {saveStatusLabel}
-        </p>
+        <p className={`text-xs ${saveStatusClassName}`}>{saveStatusLabel}</p>
       </div>
+      <p className="text-[11px] text-muted-foreground">
+        Shortcuts: Cmd/Ctrl+S save · Cmd/Ctrl+G generate · Cmd/Ctrl+Enter publish · Esc queue
+      </p>
 
       {memberStats ? (
         <section className="rounded-lg border border-white/5 bg-white/5 p-3">
@@ -531,9 +599,7 @@ export function CoachWorkspace({
             </div>
             <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total Trades</p>
-              <p className="mt-1 text-sm font-semibold text-ivory">
-                {memberStats.total_trades.toLocaleString('en-US')}
-              </p>
+              <p className="mt-1 text-sm font-semibold text-ivory">{memberStats.total_trades.toLocaleString('en-US')}</p>
             </div>
             <div className="rounded-md border border-white/5 bg-black/20 p-2.5">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Avg P&L</p>
@@ -1082,9 +1148,7 @@ export function CoachWorkspace({
                 <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${activityBadgeClass(entry.action)}`}>
                   {activityLabel(entry.action)}
                 </span>
-                <p className="text-[11px] text-muted-foreground">
-                  by {entry.actor_name ?? 'System'}
-                </p>
+                <p className="text-[11px] text-muted-foreground">by {entry.actor_name ?? 'System'}</p>
               </div>
               <p className="mt-1 text-[11px] text-muted-foreground">
                 {formatRelativeTimestamp(entry.created_at)} · {formatActivityTimestamp(entry.created_at)}

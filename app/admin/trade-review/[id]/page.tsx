@@ -1,8 +1,10 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { ClipboardCheck } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ChevronLeft, ChevronRight, ClipboardCheck } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { TradeDetailPanel } from '@/components/admin/trade-review/trade-detail-panel'
 import { MarketContextPanel } from '@/components/admin/trade-review/market-context-panel'
 import { CoachWorkspace } from '@/components/admin/trade-review/coach-workspace'
@@ -40,6 +42,12 @@ interface TradeReviewDetailResponse {
   draft_status?: CoachDraftStatus
   member_stats: CoachMemberStats
   activity_log: CoachReviewActivityEntry[]
+}
+
+interface BrowseEntry {
+  id: string
+  symbol: string
+  member_display_name: string
 }
 
 interface ApiEnvelope<T> {
@@ -137,6 +145,7 @@ function toTitleCase(value: string): string {
 
 export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewDetailPageProps) {
   const { id: entryId } = use(params)
+  const router = useRouter()
   const [detail, setDetail] = useState<TradeReviewDetailResponse | null>(null)
   const [referenceTab, setReferenceTab] = useState<ReferencePanelTab>('trade_detail')
   const [loading, setLoading] = useState(true)
@@ -147,6 +156,8 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
   const [publishing, setPublishing] = useState(false)
   const [dismissing, setDismissing] = useState(false)
   const [uploading, setUploading] = useState(false)
+
+  const [navigationOrder, setNavigationOrder] = useState<BrowseEntry[]>([])
 
   const loadDetail = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false
@@ -165,9 +176,19 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
     }
   }, [entryId])
 
+  const loadNavigationOrder = useCallback(async () => {
+    try {
+      const rows = await fetchApi<BrowseEntry[]>('/api/admin/trade-review/browse?sortBy=trade_date&sortDir=desc&limit=200')
+      setNavigationOrder(Array.isArray(rows) ? rows : [])
+    } catch {
+      setNavigationOrder([])
+    }
+  }, [])
+
   useEffect(() => {
     void loadDetail()
-  }, [loadDetail])
+    void loadNavigationOrder()
+  }, [loadDetail, loadNavigationOrder])
 
   const handleGenerateAI = async (coachPreliminaryNotes: string) => {
     setGenerating(true)
@@ -209,6 +230,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
         method: 'POST',
       })
       await loadDetail({ silent: true })
+      await loadNavigationOrder()
     } finally {
       setPublishing(false)
     }
@@ -221,6 +243,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
         method: 'POST',
       })
       await loadDetail({ silent: true })
+      await loadNavigationOrder()
     } finally {
       setDismissing(false)
     }
@@ -277,12 +300,64 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
     }
   }
 
+  const handleNavigateBack = async () => {
+    router.push('/admin/trade-review')
+  }
+
+  const navigation = useMemo(() => {
+    const currentIndex = navigationOrder.findIndex((entry) => entry.id === entryId)
+    if (currentIndex < 0) {
+      return { prev: null as BrowseEntry | null, next: null as BrowseEntry | null }
+    }
+    return {
+      prev: currentIndex > 0 ? navigationOrder[currentIndex - 1] : null,
+      next: currentIndex < navigationOrder.length - 1 ? navigationOrder[currentIndex + 1] : null,
+    }
+  }, [entryId, navigationOrder])
+
   return (
     <div className="space-y-4">
       <header className="glass-card-heavy rounded-2xl border border-white/5 p-6">
-        <div className="flex items-center gap-3">
-          <ClipboardCheck className="h-5 w-5 text-emerald-400" strokeWidth={1.5} />
-          <h1 className="text-xl font-semibold text-ivory">Trade Review Detail</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <ClipboardCheck className="h-5 w-5 text-emerald-400" strokeWidth={1.5} />
+            <h1 className="text-xl font-semibold text-ivory">Trade Review Detail</h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="luxury-outline"
+              size="sm"
+              className="h-9 px-3"
+              onClick={() => router.push('/admin/trade-review')}
+            >
+              Back To Queue
+            </Button>
+            <Button
+              type="button"
+              variant="luxury-outline"
+              size="sm"
+              className="h-9 px-3"
+              onClick={() => { if (navigation.prev) router.push(`/admin/trade-review/${navigation.prev.id}`) }}
+              disabled={!navigation.prev}
+              aria-label="Previous review"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              {navigation.prev ? `Prev: ${navigation.prev.symbol} · ${navigation.prev.member_display_name}` : 'Prev Review'}
+            </Button>
+            <Button
+              type="button"
+              variant="luxury-outline"
+              size="sm"
+              className="h-9 px-3"
+              onClick={() => { if (navigation.next) router.push(`/admin/trade-review/${navigation.next.id}`) }}
+              disabled={!navigation.next}
+              aria-label="Next review"
+            >
+              {navigation.next ? `Next: ${navigation.next.symbol} · ${navigation.next.member_display_name}` : 'Next Review'}
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Entry ID: <span className="font-mono text-ivory/90">{entryId}</span>
@@ -433,6 +508,7 @@ export default function AdminTradeReviewDetailPage({ params }: AdminTradeReviewD
                 onDismiss={handleDismiss}
                 onUploadScreenshot={handleUploadScreenshot}
                 onRemoveScreenshot={handleRemoveScreenshot}
+                onNavigateBack={handleNavigateBack}
               />
             </section>
           </div>

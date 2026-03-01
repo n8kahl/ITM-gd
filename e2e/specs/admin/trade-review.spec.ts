@@ -33,6 +33,11 @@ test.describe('Admin: Trade Review', () => {
     const saveDraftButton = page.getByRole('button', { name: 'Save Draft' })
     await expect(saveDraftButton).toBeEnabled({ timeout: 10_000 })
 
+    await page.getByRole('button', { name: 'Preview Member View' }).click()
+    await expect(page.getByRole('dialog', { name: 'Preview Member View' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('heading', { name: 'Trade Review Detail' })).toBeVisible()
+
     const privateNotes = page.getByPlaceholder('Private coach notes. Never shown to members.')
     await privateNotes.fill('Coach-only follow-up: reinforce early scaling discipline.')
 
@@ -46,6 +51,39 @@ test.describe('Admin: Trade Review', () => {
     await expect(page.getByText('completed').first()).toBeVisible()
   })
 
+  test('supports keyboard shortcuts in detail workspace', async ({ page }) => {
+    const state = await setupTradeReviewApiMocks(page)
+
+    await page.goto(`/admin/trade-review/${TRADE_REVIEW_ENTRY_ID}`, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: 'Trade Review Detail' })).toBeVisible()
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'g',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }))
+    })
+    await expect.poll(() => state.aiGeneratedCount, { timeout: 10_000 }).toBe(1)
+    await expect(page.getByRole('button', { name: 'Regenerate AI Analysis' })).toBeVisible()
+
+    const privateNotes = page.getByPlaceholder('Private coach notes. Never shown to members.')
+    await privateNotes.fill('Keyboard shortcut save attempt.')
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 's',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }))
+    })
+    await expect.poll(() => state.saveCount, { timeout: 10_000 }).toBeGreaterThan(0)
+
+    await expect(page.getByText('Cmd/Ctrl+S save · Cmd/Ctrl+G generate · Cmd/Ctrl+Enter publish · Esc queue')).toBeVisible()
+  })
+
   test('dismisses review request from detail workspace', async ({ page }) => {
     const state = await setupTradeReviewApiMocks(page)
 
@@ -55,6 +93,17 @@ test.describe('Admin: Trade Review', () => {
     await page.getByRole('button', { name: 'Confirm Dismiss' }).click()
 
     await expect.poll(() => state.dismissCount, { timeout: 10_000 }).toBe(1)
+  })
+
+  test('shows previous and next review navigation in header', async ({ page }) => {
+    await setupTradeReviewApiMocks(page)
+
+    await page.goto(`/admin/trade-review/${TRADE_REVIEW_ENTRY_ID}`, { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByRole('button', { name: 'Previous review' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Next review' })).toBeVisible()
+    await expect(page.getByText('Prev: MSFT · Mock Member')).toBeVisible()
+    await expect(page.getByText('Next: TSLA · Mock Member')).toBeVisible()
   })
 
   test('renders member screenshot and uploaded coach screenshot', async ({ page }) => {
