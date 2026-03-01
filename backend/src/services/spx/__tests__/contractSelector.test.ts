@@ -564,11 +564,11 @@ describe('contractSelector', () => {
 
     it('rejects 0DTE contracts after rollover cutoff', () => {
       const setup = makeSetup({ direction: 'bullish', regime: 'ranging' });
-      const nowAfterCutoff = new Date('2026-02-20T20:00:00.000Z');
+      const nowAfterCutoff = new Date('2026-02-20T21:00:00.000Z'); // 4:00 PM ET
       const sameDayContract = makeContract({
         type: 'call',
         expiry: '2026-02-20',
-        bid: 1.5,
+        bid: 1.55,
         ask: 1.8,
         delta: 0.24,
         openInterest: 800,
@@ -593,6 +593,23 @@ describe('contractSelector', () => {
       });
 
       const result = filterCandidatesProd(setup, [sameDayContract], false, nowBeforeCutoff);
+      expect(result).toHaveLength(1);
+    });
+
+    it('keeps 0DTE contracts eligible before 3:45 PM ET rollover', () => {
+      const setup = makeSetup({ direction: 'bullish', regime: 'ranging' });
+      const nowBeforeRollover = new Date('2026-02-20T20:30:00.000Z'); // 3:30 PM ET
+      const sameDayContract = makeContract({
+        type: 'call',
+        expiry: '2026-02-20',
+        bid: 1.55,
+        ask: 1.8,
+        delta: 0.24,
+        openInterest: 800,
+        volume: 120,
+      });
+
+      const result = filterCandidatesProd(setup, [sameDayContract], false, nowBeforeRollover);
       expect(result).toHaveLength(1);
     });
 
