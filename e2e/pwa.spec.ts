@@ -100,7 +100,9 @@ test.describe('PWA regression suite', () => {
 
   test('manifest link is present in document head', async ({ page }) => {
     await safeGoto(page, ROOT_URL)
-    await expect(page.locator('head link[rel="manifest"][href="/manifest.json"]')).toHaveCount(1)
+    const manifestLink = page.locator('head link[rel="manifest"]')
+    await expect(manifestLink).toHaveCount(1)
+    await expect(manifestLink).toHaveAttribute('href', /\/manifest\.json(\?v=\d+)?$/)
   })
 
   test('service worker registers successfully', async ({ page }) => {

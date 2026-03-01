@@ -113,13 +113,25 @@ export async function setupMobileShellMocks(page: Page): Promise<void> {
 
 export async function setupSpxFallbackMocks(page: Page): Promise<void> {
   await page.route('**/api/spx/**', async (route: Route) => {
+    const url = new URL(route.request().url())
+    const pathname = url.pathname
+
+    if (
+      pathname.startsWith('/api/spx/analytics/optimizer/')
+      || pathname.startsWith('/api/spx/analytics/win-rate/backtest')
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: 'null',
+      })
+      return
+    }
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        success: true,
-        data: {},
-      }),
+      body: JSON.stringify({}),
     })
   })
 }
@@ -130,10 +142,11 @@ export async function prepareMobileMemberShell(page: Page): Promise<void> {
   await setupMobileShellMocks(page)
 }
 
-export async function seedInstallPromptState(page: Page, visitCount: number = 2): Promise<void> {
-  await page.addInitScript((count: number) => {
-    localStorage.setItem('tradeitm:pwa-install-visit-count', String(count))
+export async function seedInstallPromptState(page: Page, _visitCount: number = 2): Promise<void> {
+  await page.addInitScript(() => {
     localStorage.removeItem('tradeitm:pwa-install-dismissed')
+    localStorage.removeItem('tradeitm:pwa-install-dismissed:v2')
+    localStorage.removeItem('tradeitm:pwa-install-visit-count')
     sessionStorage.removeItem('tradeitm:pwa-install-visit-counted')
-  }, visitCount)
+  })
 }

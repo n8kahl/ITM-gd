@@ -29,6 +29,15 @@ export function isIOS(): boolean {
 }
 
 /**
+ * Detects if running on Android device
+ * @returns true if Android
+ */
+export function isAndroid(): boolean {
+  if (typeof window === 'undefined') return false
+  return /Android/i.test(navigator.userAgent)
+}
+
+/**
  * Detects if running on iOS in standalone mode
  * @returns true if iOS standalone
  */

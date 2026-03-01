@@ -25,10 +25,10 @@
 
 | Slice | Objective | Status | Commit | Validation | Notes |
 |-------|-----------|--------|--------|------------|-------|
-| 1.1 | Uncap mobile tabs | COMPLETE | Pending (Phase 1 batch) | `eslint` PASS, `tsc --noEmit` PASS | Removed `slice(0, 5)` cap from `getMobileTabs()` |
-| 1.2 | Harden More overflow menu | COMPLETE | Pending (Phase 1 batch) | `eslint` PASS, `tsc --noEmit` PASS | Added max-height overflow behavior and safe-area bottom padding for More menu |
-| 1.3 | SPX immersive route mode | COMPLETE | Pending (Phase 1 batch) | `eslint` PASS, `tsc --noEmit` PASS | Hid mobile bottom nav on SPX route and reduced route padding for immersive space |
-| 1.4 | Studio mobile enablement | COMPLETE | Pending (Phase 1 batch) | `eslint` PASS, `tsc --noEmit` PASS | Removed mobile block and migrated blur controls to pointer/tap interactions with 44px touch targets |
+| 1.1 | Uncap mobile tabs | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS | Removed `slice(0, 5)` cap from `getMobileTabs()` |
+| 1.2 | Harden More overflow menu | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS | Added max-height overflow behavior and safe-area bottom padding for More menu |
+| 1.3 | SPX persistent mobile nav mode | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS | Kept mobile bottom nav visible on SPX route while preserving SPX control reachability |
+| 1.4 | Studio mobile enablement | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS | Removed mobile block and migrated blur controls to pointer/tap interactions with 44px touch targets |
 
 ---
 

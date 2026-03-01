@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   coachAIGenerateSchema,
   coachNoteUpdateSchema,
+  coachPublishPayloadSchema,
   coachQueueParamsSchema,
   coachResponsePayloadSchema,
   requestReviewSchema,
@@ -72,5 +73,16 @@ describe('coachNoteUpdateSchema', () => {
   it('accepts null internal notes', () => {
     const parsed = coachNoteUpdateSchema.safeParse({ internal_notes: null })
     expect(parsed.success).toBe(true)
+  })
+})
+
+describe('coachPublishPayloadSchema', () => {
+  it('rejects incomplete draft payloads', () => {
+    const parsed = coachPublishPayloadSchema.safeParse({
+      what_went_well: ['Needs more detail'],
+      grade: 'C',
+      confidence: 'medium',
+    })
+    expect(parsed.success).toBe(false)
   })
 })

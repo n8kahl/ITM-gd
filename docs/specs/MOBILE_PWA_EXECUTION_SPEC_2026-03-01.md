@@ -2,7 +2,7 @@
 
 **Workstream:** Mobile Reachability, Native-Feel UX, and PWA Installability
 **Date:** 2026-03-01
-**Status:** Draft — Pending Approval (Documentation Packet Complete)
+**Status:** Approved — Implemented (with tracked D-007 deferment)
 **Owner:** Orchestrator
 **Branch:** `codex/mobile-pwa`
 **Release Train:** March 2 – May 29, 2026 (90-day frame per §12.1)
@@ -24,7 +24,7 @@
 | Risk register + decision log | `docs/specs/mobile-pwa-autonomous-2026-03-01/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md` | Present |
 | Autonomous execution tracker | `docs/specs/mobile-pwa-autonomous-2026-03-01/08_AUTONOMOUS_EXECUTION_TRACKER.md` | Present |
 
-Implementation remains blocked until this spec is explicitly approved and the tracker is updated to `IN PROGRESS` for Slice 1.1.
+Historical start gate was completed on 2026-03-01 before Slice 1.1 execution.
 
 ---
 
@@ -53,7 +53,7 @@ Transform TradeITM from a responsive web app into a native-grade mobile experien
 
 | Area | Description |
 |------|-------------|
-| Mobile Navigation | Uncap `getMobileTabs()`, harden "More" overflow menu, add immersive route mode for SPX |
+| Mobile Navigation | Uncap `getMobileTabs()`, harden "More" overflow menu, keep SPX nav visible without dock collisions |
 | Studio Mobile | Remove hard block, convert mouse events to pointer events, tap-to-select controls |
 | AI Coach Mobile | Options chain mobile layout, remove hover-only critical actions |
 | Mobile Polish | `dvh` + safe-area normalization, touch target audit, connection status indicator |
@@ -161,21 +161,21 @@ Transform TradeITM from a responsive web app into a native-grade mobile experien
 - **Rollback:** Revert file.
 - **Risk:** Low.
 
-#### Slice 1.3 — SPX Immersive Route Mode
+#### Slice 1.3 — SPX Persistent Mobile Nav Mode
 
-- **Objective:** Hide member bottom nav on `/members/spx-command-center` to eliminate z-index collision with coach dock.
+- **Objective:** Keep member bottom nav visible on `/members/spx-command-center` while preventing control collisions.
 - **Agent:** Frontend Agent
 - **Target Files:**
   - `app/members/layout.tsx`
 - **Requirements:**
   1. Use `usePathname()` to detect SPX route.
-  2. Set `const hideMobileNav = pathname.startsWith('/members/spx-command-center')`.
-  3. Conditionally render `<MobileBottomNav />` and optionally `<MobileTopBar />`.
-  4. Ensure a clear "back/escape" path exists (e.g., top-bar back button or gesture).
+  2. Keep mobile nav rendered on SPX route (`hideMobileNav` must remain `false` for SPX).
+  3. Ensure SPX mobile controls and coach dock remain reachable with nav present (no overlap trap).
+  4. Ensure route switching remains available directly through persistent nav tabs.
 - **Acceptance Criteria:**
-  - On `/members/spx-command-center`, bottom nav is hidden on mobile.
-  - Coach dock has full bottom-screen space without collision.
-  - User can navigate back to other member routes.
+  - On `/members/spx-command-center`, bottom nav remains visible on mobile.
+  - SPX controls are reachable and not obscured by nav.
+  - User can navigate to other member routes directly from nav.
   - Desktop layout unchanged.
 - **Validation:**
   ```bash
@@ -481,7 +481,7 @@ Transform TradeITM from a responsive web app into a native-grade mobile experien
 - **Requirements:**
   1. Test mobile bottom nav renders all visible tabs.
   2. Test "More" menu opens, scrolls, and dismisses on touch.
-  3. Test SPX route hides bottom nav.
+  3. Test SPX route keeps bottom nav visible.
   4. Test Studio loads on mobile viewport.
   5. Test options chain toggle (Calls/Puts) on mobile.
   6. Use mobile viewport preset (390x844 iPhone 14).

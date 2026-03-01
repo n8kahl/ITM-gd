@@ -83,7 +83,7 @@ Common failures:
 
 1. Verify all `mobile_visible` tabs are reachable on 390x844 viewport.
 2. Verify overflow `More` menu scrolls and dismisses on pointer input.
-3. Verify SPX route hides mobile bottom nav and still has clear escape path.
+3. Verify SPX route keeps mobile bottom nav visible and controls remain unobstructed.
 4. Verify Studio is usable on touch with select/move/resize/delete.
 
 ---

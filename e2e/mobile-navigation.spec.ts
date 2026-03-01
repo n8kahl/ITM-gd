@@ -65,9 +65,11 @@ test.describe('Mobile navigation regression suite', () => {
     await expect(moreMenu).not.toBeVisible()
   })
 
-  test('SPX route hides bottom nav on mobile', async ({ page }) => {
+  test('SPX route keeps bottom nav visible on mobile', async ({ page }) => {
     await page.goto(MOBILE_SPX_URL, { waitUntil: 'domcontentloaded' })
-    await expect(page.locator('[data-mobile-bottom-nav]')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/members\/spx-command-center/)
+    await expect(page.locator('[data-mobile-bottom-nav]')).toHaveCount(1)
+    await expect(page.locator('[data-mobile-bottom-nav]')).toBeVisible()
   })
 
   test('Studio route loads successfully on mobile viewport', async ({ page }) => {

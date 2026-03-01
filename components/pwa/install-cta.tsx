@@ -10,7 +10,7 @@ interface InstallCtaProps {
 }
 
 export function InstallCta({ immersive = false }: InstallCtaProps) {
-  const { canInstall, isIOSDevice, isStandalone, shouldShow, promptInstall, dismiss } = usePwaInstall()
+  const { canInstall, isIOSDevice, isAndroidDevice, isStandalone, shouldShow, promptInstall, dismiss } = usePwaInstall()
   const [installing, setInstalling] = useState(false)
 
   if (!shouldShow) return null
@@ -52,6 +52,13 @@ export function InstallCta({ immersive = false }: InstallCtaProps) {
                     <Plus className="h-3.5 w-3.5" />
                     Add to Home Screen
                   </span>
+                </p>
+              </div>
+            ) : isAndroidDevice && !isStandalone ? (
+              <div className="mt-1 text-xs text-white/60 space-y-1">
+                <p>On Android, install from browser menu:</p>
+                <p className="text-white/70">
+                  Open the browser menu, then tap <span className="text-emerald-300">Add to Home screen</span> or <span className="text-emerald-300">Install app</span>.
                 </p>
               </div>
             ) : null}

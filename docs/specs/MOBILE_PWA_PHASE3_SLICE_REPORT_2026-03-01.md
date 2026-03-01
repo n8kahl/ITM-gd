@@ -25,12 +25,12 @@
 
 | Slice | Objective | Status | Commit | Validation | Notes |
 |-------|-----------|--------|--------|------------|-------|
-| 3.1 | Manifest overhaul + icon pipeline | COMPLETE | Pending (Phase 3 batch) | `eslint` PASS, `tsc --noEmit` PASS, `build` PASS | Added full icon matrix, maskable icons, shortcuts, screenshots, and richer manifest metadata |
-| 3.2 | Service worker caching policy fix | COMPLETE | Pending (Phase 3 batch) | `build` PASS | Switched default `/api/*` strategy to network-only and retained explicit allowlist cache behavior |
-| 3.3 | Push notifications toggle | COMPLETE | Pending (Phase 3 batch) | `eslint` PASS, `tsc --noEmit` PASS | Added push enable/disable controls with permission/error/install-state guidance |
-| 3.4 | Custom install prompt (A2HS) | COMPLETE | Pending (Phase 3 batch) | `eslint` PASS, `tsc --noEmit` PASS | Added reusable install hook + CTA for Chromium prompt and iOS manual install path |
-| 3.5 | iOS splash screen pipeline | COMPLETE | Pending (Phase 3 batch) | `tsc --noEmit` PASS, `build` PASS | Added generated splash asset matrix, startup-image links, and script/dev dependency |
-| 3.6 | Standalone-mode CSS | COMPLETE | Pending (Phase 3 batch) | `eslint` PASS, `build` PASS | Added standalone display-mode behavior for safe-area nav layout and interaction polish |
+| 3.1 | Manifest overhaul + icon pipeline | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS, `build` PASS | Added full icon matrix, maskable icons, shortcuts, screenshots, and richer manifest metadata |
+| 3.2 | Service worker caching policy fix | COMPLETE | 1616fdf | `build` PASS | Switched default `/api/*` strategy to network-only and retained explicit allowlist cache behavior |
+| 3.3 | Push notifications toggle | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS | Added push enable/disable controls with permission/error/install-state guidance |
+| 3.4 | Custom install prompt (A2HS) | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS | Added reusable install hook + CTA for Chromium prompt and iOS manual install path |
+| 3.5 | iOS splash screen pipeline | COMPLETE | 1616fdf | `tsc --noEmit` PASS, `build` PASS | Added generated splash asset matrix, startup-image links, and script/dev dependency |
+| 3.6 | Standalone-mode CSS | COMPLETE | 1616fdf | `eslint` PASS, `build` PASS | Added standalone display-mode behavior for safe-area nav layout and interaction polish |
 
 ---
 

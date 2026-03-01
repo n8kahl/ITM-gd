@@ -25,9 +25,9 @@
 
 | Slice | Objective | Status | Commit | Validation | Notes |
 |-------|-----------|--------|--------|------------|-------|
-| 2.1 | Options chain mobile layout | COMPLETE | Pending (Phase 2 batch) | `eslint` PASS, `tsc --noEmit` PASS | Added mobile Calls/Puts segmented toggle, responsive stack, sticky table headers, horizontal table scroll, and mobile column condensation |
-| 2.2 | Remove hover-only critical actions | COMPLETE | Pending (Phase 2 batch) | `eslint` PASS, `tsc --noEmit` PASS | Exposed critical delete actions on touch devices while preserving hover reveal on desktop |
-| 2.3 | `dvh` + safe-area normalization | COMPLETE | Pending (Phase 2 batch) | `eslint` PASS, `tsc --noEmit` PASS | Added shared dvh/safe-area utilities and applied them to journal sheets/actions |
+| 2.1 | Options chain mobile layout | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS | Added mobile Calls/Puts segmented toggle, responsive stack, sticky table headers, horizontal table scroll, and mobile column condensation |
+| 2.2 | Remove hover-only critical actions | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS | Exposed critical delete actions on touch devices while preserving hover reveal on desktop |
+| 2.3 | `dvh` + safe-area normalization | COMPLETE | 1616fdf | `eslint` PASS, `tsc --noEmit` PASS | Added shared dvh/safe-area utilities and applied them to journal sheets/actions |
 
 ---
 

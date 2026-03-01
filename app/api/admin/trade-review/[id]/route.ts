@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { errorResponse, successResponse } from '@/lib/api/response'
 import { isAdminUser } from '@/lib/supabase-server'
+import type { CoachDraftStatus, CoachMemberStats, CoachReviewActivityEntry } from '@/lib/types/coach-review'
 import { getSupabaseAdmin } from '@/app/api/admin/trade-review/_shared'
 
 const paramsSchema = z.object({
@@ -17,6 +18,9 @@ interface UserTradeSummaryRow {
 
 interface CoachNoteWithScreenshots {
   screenshots?: unknown
+  coach_response?: unknown
+  ai_draft?: unknown
+  is_published?: boolean
   [key: string]: unknown
 }
 
@@ -24,7 +28,17 @@ interface ReviewRequestWithAssignment {
   id: string
   status: 'pending' | 'in_review' | 'completed' | 'dismissed'
   assigned_to: string | null
-  [key: string]: unknown
+  requested_at: string
+}
+
+interface ActivityLogRow {
+  id: string
+  review_request_id: string | null
+  journal_entry_id: string
+  actor_id: string
+  action: CoachReviewActivityEntry['action'] | string
+  details: unknown
+  created_at: string
 }
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24
@@ -52,6 +66,18 @@ function deriveRecentStreak(pnls: number[]): 'winning' | 'losing' | 'mixed' {
   if (sample.every((value) => value > 0)) return 'winning'
   if (sample.every((value) => value < 0)) return 'losing'
   return 'mixed'
+}
+
+function hasObjectContent(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function deriveDraftStatus(note: CoachNoteWithScreenshots | null): CoachDraftStatus {
+  if (!note) return 'none'
+  if (note.is_published === true) return 'published'
+  if (hasObjectContent(note.coach_response)) return 'manual_draft'
+  if (hasObjectContent(note.ai_draft)) return 'ai_draft'
+  return 'none'
 }
 
 export async function GET(
@@ -103,7 +129,7 @@ export async function GET(
         .maybeSingle(),
       supabase
         .from('coach_review_requests')
-        .select('*')
+        .select('id,status,assigned_to,requested_at')
         .eq('journal_entry_id', parsedParams.id)
         .order('requested_at', { ascending: false })
         .limit(1)
@@ -117,7 +143,7 @@ export async function GET(
         .maybeSingle(),
       supabase
         .from('coach_review_activity_log')
-        .select('*')
+        .select('id,review_request_id,journal_entry_id,actor_id,action,details,created_at')
         .eq('journal_entry_id', parsedParams.id)
         .order('created_at', { ascending: false })
         .limit(100),
@@ -134,6 +160,7 @@ export async function GET(
     const reviewRequest = (reviewRequestResult.data ?? null) as ReviewRequestWithAssignment | null
     const tradeSummaryRows = (tradeSummaryResult.data ?? []) as UserTradeSummaryRow[]
     const coachNote = (coachNoteResult.data ?? null) as CoachNoteWithScreenshots | null
+    const activityRows = (activityResult.data ?? []) as ActivityLogRow[]
     let assignedToName: string | null = null
 
     if (reviewRequest?.assigned_to) {
@@ -153,6 +180,45 @@ export async function GET(
       assignedToName = assignedMemberProfile.data?.display_name
         ?? assignedDiscordProfile.data?.discord_username
         ?? null
+    }
+
+    const actorIds = Array.from(new Set(activityRows
+      .map((row) => row.actor_id)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)))
+
+    const actorNameById = new Map<string, string>()
+    if (actorIds.length > 0) {
+      const [actorMemberProfiles, actorDiscordProfiles] = await Promise.all([
+        supabase
+          .from('member_profiles')
+          .select('user_id,display_name')
+          .in('user_id', actorIds),
+        supabase
+          .from('user_discord_profiles')
+          .select('user_id,discord_username')
+          .in('user_id', actorIds),
+      ])
+
+      const displayNameById = new Map<string, string>()
+      for (const row of actorMemberProfiles.data ?? []) {
+        if (row.user_id && row.display_name) {
+          displayNameById.set(row.user_id, row.display_name)
+        }
+      }
+
+      const discordNameById = new Map<string, string>()
+      for (const row of actorDiscordProfiles.data ?? []) {
+        if (row.user_id && row.discord_username) {
+          discordNameById.set(row.user_id, row.discord_username)
+        }
+      }
+
+      for (const actorId of actorIds) {
+        const resolvedName = displayNameById.get(actorId)
+          ?? discordNameById.get(actorId)
+          ?? `User ${actorId.slice(0, 8)}`
+        actorNameById.set(actorId, resolvedName)
+      }
     }
 
     let coachNoteWithSignedScreenshots = coachNote
@@ -198,7 +264,7 @@ export async function GET(
       .map((row) => row.discipline_score)
       .filter((value): value is number => value != null)
 
-    const memberStats = {
+    const memberStats: CoachMemberStats = {
       total_trades: tradeSummaryRows.length,
       win_rate: resolvedPnls.length > 0 ? round((wins / resolvedPnls.length) * 100, 2) : 0,
       avg_pnl: avgPnl,
@@ -246,6 +312,19 @@ export async function GET(
       screenshot_url: resolvedMemberScreenshotUrl,
     }
 
+    const activityLog: CoachReviewActivityEntry[] = activityRows.map((row) => ({
+      id: row.id,
+      review_request_id: row.review_request_id,
+      journal_entry_id: row.journal_entry_id,
+      actor_id: row.actor_id,
+      actor_name: actorNameById.get(row.actor_id) ?? `User ${row.actor_id.slice(0, 8)}`,
+      action: row.action as CoachReviewActivityEntry['action'],
+      details: typeof row.details === 'object' && row.details !== null
+        ? row.details as Record<string, unknown>
+        : {},
+      created_at: row.created_at,
+    }))
+
     return successResponse({
       entry: entryWithResolvedScreenshot,
       member: {
@@ -258,13 +337,17 @@ export async function GET(
       },
       review_request: reviewRequest
         ? {
-            ...reviewRequest,
+            id: reviewRequest.id,
+            status: reviewRequest.status,
+            assigned_to: reviewRequest.assigned_to,
+            requested_at: reviewRequest.requested_at,
             assigned_to_name: assignedToName,
           }
         : null,
       coach_note: coachNoteWithSignedScreenshots ?? null,
+      draft_status: deriveDraftStatus(coachNoteWithSignedScreenshots),
       member_stats: memberStats,
-      activity_log: activityResult.data ?? [],
+      activity_log: activityLog,
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

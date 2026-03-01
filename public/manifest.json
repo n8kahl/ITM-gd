@@ -10,95 +10,95 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/icons/icon-72x72.png",
+      "src": "/icons/icon-72x72.png?v=20260301",
       "sizes": "72x72",
       "type": "image/png"
     },
     {
-      "src": "/icons/icon-96x96.png",
+      "src": "/icons/icon-96x96.png?v=20260301",
       "sizes": "96x96",
       "type": "image/png"
     },
     {
-      "src": "/icons/icon-128x128.png",
+      "src": "/icons/icon-128x128.png?v=20260301",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-144x144.png",
+      "src": "/icons/icon-144x144.png?v=20260301",
       "sizes": "144x144",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-152x152.png",
+      "src": "/icons/icon-152x152.png?v=20260301",
       "sizes": "152x152",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-192x192.png",
+      "src": "/icons/icon-192x192.png?v=20260301",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-384x384.png",
+      "src": "/icons/icon-384x384.png?v=20260301",
       "sizes": "384x384",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "/icons/icon-512x512.png?v=20260301",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/maskable-icon-72x72.png",
+      "src": "/icons/maskable-icon-72x72.png?v=20260301",
       "sizes": "72x72",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/maskable-icon-96x96.png",
+      "src": "/icons/maskable-icon-96x96.png?v=20260301",
       "sizes": "96x96",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/maskable-icon-128x128.png",
+      "src": "/icons/maskable-icon-128x128.png?v=20260301",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/maskable-icon-144x144.png",
+      "src": "/icons/maskable-icon-144x144.png?v=20260301",
       "sizes": "144x144",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/maskable-icon-152x152.png",
+      "src": "/icons/maskable-icon-152x152.png?v=20260301",
       "sizes": "152x152",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/maskable-icon-192x192.png",
+      "src": "/icons/maskable-icon-192x192.png?v=20260301",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/maskable-icon-384x384.png",
+      "src": "/icons/maskable-icon-384x384.png?v=20260301",
       "sizes": "384x384",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/maskable-icon-512x512.png",
+      "src": "/icons/maskable-icon-512x512.png?v=20260301",
       "sizes": "512x512",
       "type": "image/png"
       ,
@@ -112,7 +112,7 @@
       "url": "/members",
       "icons": [
         {
-          "src": "/icons/icon-96x96.png",
+          "src": "/icons/icon-96x96.png?v=20260301",
           "sizes": "96x96",
           "type": "image/png"
         }
@@ -124,7 +124,7 @@
       "url": "/members/journal",
       "icons": [
         {
-          "src": "/icons/icon-96x96.png",
+          "src": "/icons/icon-96x96.png?v=20260301",
           "sizes": "96x96",
           "type": "image/png"
         }
@@ -136,7 +136,7 @@
       "url": "/members/ai-coach",
       "icons": [
         {
-          "src": "/icons/icon-96x96.png",
+          "src": "/icons/icon-96x96.png?v=20260301",
           "sizes": "96x96",
           "type": "image/png"
         }
@@ -148,7 +148,7 @@
       "url": "/members/spx-command-center",
       "icons": [
         {
-          "src": "/icons/icon-96x96.png",
+          "src": "/icons/icon-96x96.png?v=20260301",
           "sizes": "96x96",
           "type": "image/png"
         }
@@ -157,14 +157,14 @@
   ],
   "screenshots": [
     {
-      "src": "/screenshots/mobile-dashboard.png",
+      "src": "/screenshots/mobile-dashboard.png?v=20260301",
       "sizes": "1080x1920",
       "type": "image/png",
       "label": "TradeITM mobile dashboard",
       "form_factor": "narrow"
     },
     {
-      "src": "/screenshots/desktop-dashboard.png",
+      "src": "/screenshots/desktop-dashboard.png?v=20260301",
       "sizes": "1200x630",
       "type": "image/png",
       "label": "TradeITM desktop dashboard",
