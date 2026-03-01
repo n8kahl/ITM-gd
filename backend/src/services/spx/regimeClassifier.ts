@@ -4,12 +4,14 @@ import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
+import type { SymbolProfile } from './symbolProfile';
+import { resolveSymbolProfile, toLegacyRegimeSignalThresholds } from './symbolProfile';
 import type { ClusterZone, RegimeState, SPXLevel, UnifiedGEXLandscape } from './types';
 import { classifyRegimeFromSignals, ema, nowIso, round } from './utils';
 
 const REGIME_CACHE_KEY = 'spx_command_center:regime';
 const REGIME_CACHE_TTL_SECONDS = 15;
-let regimeInFlight: Promise<RegimeState> | null = null;
+const regimeInFlightBySymbol = new Map<string, Promise<RegimeState>>();
 type LevelData = {
   levels: SPXLevel[];
   clusters: ClusterZone[];
@@ -18,6 +20,15 @@ type LevelData = {
 interface SessionTrendContext {
   volumeTrend: 'rising' | 'flat' | 'falling';
   trendStrength: number;
+}
+interface RegimeComputationConfig {
+  ticker: string;
+  emaFastPeriod: number;
+  emaSlowPeriod: number;
+  trendSpreadPoints: number;
+  trendSlopePoints: number;
+  breakoutThreshold: number;
+  compressionThreshold: number;
 }
 
 const REGIME_EMA_FAST_PERIOD = 21;
@@ -33,22 +44,22 @@ function getDateKey(): string {
   return toEasternTime(new Date()).dateStr;
 }
 
-function trendStrengthFromBars(bars: Array<{ c: number }>): number {
+function trendStrengthFromBars(bars: Array<{ c: number }>, config: RegimeComputationConfig): number {
   const closes = bars
     .map((bar) => bar.c)
     .filter((value) => Number.isFinite(value) && value > 0);
   if (closes.length < 8) return 0;
 
-  const emaFast = ema(closes, Math.min(REGIME_EMA_FAST_PERIOD, closes.length));
-  const emaSlow = ema(closes, Math.min(REGIME_EMA_SLOW_PERIOD, closes.length));
+  const emaFast = ema(closes, Math.min(config.emaFastPeriod, closes.length));
+  const emaSlow = ema(closes, Math.min(config.emaSlowPeriod, closes.length));
 
   const priorCloses = closes.slice(0, -3);
   const emaFastPrior = priorCloses.length > 0
-    ? ema(priorCloses, Math.min(REGIME_EMA_FAST_PERIOD, priorCloses.length))
+    ? ema(priorCloses, Math.min(config.emaFastPeriod, priorCloses.length))
     : emaFast;
 
-  const spreadScore = clamp(Math.abs(emaFast - emaSlow) / REGIME_TREND_SPREAD_POINTS, 0, 1);
-  const slopeScore = clamp(Math.abs(emaFast - emaFastPrior) / REGIME_TREND_SLOPE_POINTS, 0, 1);
+  const spreadScore = clamp(Math.abs(emaFast - emaSlow) / config.trendSpreadPoints, 0, 1);
+  const slopeScore = clamp(Math.abs(emaFast - emaFastPrior) / config.trendSlopePoints, 0, 1);
   return round((spreadScore * 0.55) + (slopeScore * 0.45), 4);
 }
 
@@ -67,9 +78,9 @@ function volumeTrendFromBars(bars: Array<{ v: number }>): 'rising' | 'flat' | 'f
   return 'flat';
 }
 
-async function getSessionTrendContext(): Promise<SessionTrendContext> {
+async function getSessionTrendContext(config: RegimeComputationConfig): Promise<SessionTrendContext> {
   try {
-    const bars = await getMinuteAggregates('I:SPX', getDateKey());
+    const bars = await getMinuteAggregates(config.ticker, getDateKey());
     if (!Array.isArray(bars) || bars.length < 8) {
       return {
         volumeTrend: 'flat',
@@ -79,7 +90,7 @@ async function getSessionTrendContext(): Promise<SessionTrendContext> {
 
     return {
       volumeTrend: volumeTrendFromBars(bars),
-      trendStrength: trendStrengthFromBars(bars),
+      trendStrength: trendStrengthFromBars(bars, config),
     };
   } catch {
     return {
@@ -87,6 +98,24 @@ async function getSessionTrendContext(): Promise<SessionTrendContext> {
       trendStrength: 0,
     };
   }
+}
+
+function cacheKeyForSymbol(baseKey: string, symbol: string): string {
+  const normalized = symbol.trim().toUpperCase();
+  return normalized === 'SPX' ? baseKey : `${baseKey}:${normalized}`;
+}
+
+function resolveRegimeComputationConfig(profile: SymbolProfile): RegimeComputationConfig {
+  const thresholds = toLegacyRegimeSignalThresholds(profile);
+  return {
+    ticker: profile.tickers.massiveTicker,
+    emaFastPeriod: Math.max(1, Math.round(profile.multiTF.emaFast || REGIME_EMA_FAST_PERIOD)),
+    emaSlowPeriod: Math.max(1, Math.round(profile.multiTF.emaSlow || REGIME_EMA_SLOW_PERIOD)),
+    trendSpreadPoints: REGIME_TREND_SPREAD_POINTS,
+    trendSlopePoints: REGIME_TREND_SLOPE_POINTS,
+    breakoutThreshold: thresholds.breakout,
+    compressionThreshold: thresholds.compression,
+  };
 }
 
 function computeDirectionProbability(input: {
@@ -134,7 +163,16 @@ export async function classifyCurrentRegime(options?: {
   levelData?: LevelData;
   volumeTrend?: 'rising' | 'flat' | 'falling';
   trendStrength?: number;
+  symbol?: string;
+  profile?: SymbolProfile | null;
 }): Promise<RegimeState> {
+  const profile = await resolveSymbolProfile({
+    symbol: options?.symbol,
+    profile: options?.profile ?? null,
+  });
+  const symbol = profile.symbol;
+  const cacheKey = cacheKeyForSymbol(REGIME_CACHE_KEY, symbol);
+  const computationConfig = resolveRegimeComputationConfig(profile);
   const gexLandscape = options?.gexLandscape;
   const levelData = options?.levelData;
   const providedVolumeTrend = options?.volumeTrend;
@@ -146,13 +184,14 @@ export async function classifyCurrentRegime(options?: {
       || providedVolumeTrend
       || Number.isFinite(providedTrendStrength),
   );
-  if (!forceRefresh && regimeInFlight) {
-    return regimeInFlight;
+  const inFlight = regimeInFlightBySymbol.get(symbol);
+  if (!forceRefresh && inFlight) {
+    return inFlight;
   }
 
   const run = async (): Promise<RegimeState> => {
   if (!forceRefresh && !hasPrecomputedDependencies) {
-    const cached = await cacheGet<RegimeState>(REGIME_CACHE_KEY);
+    const cached = await cacheGet<RegimeState>(cacheKey);
     if (cached) {
       return cached;
     }
@@ -163,7 +202,7 @@ export async function classifyCurrentRegime(options?: {
     || !Number.isFinite(providedTrendStrength)
   );
   const trendContextPromise = shouldFetchTrendContext
-    ? getSessionTrendContext()
+    ? getSessionTrendContext(computationConfig)
     : Promise.resolve<SessionTrendContext>({
       volumeTrend: providedVolumeTrend as SessionTrendContext['volumeTrend'],
       trendStrength: clamp(providedTrendStrength as number, 0, 1),
@@ -172,10 +211,10 @@ export async function classifyCurrentRegime(options?: {
   const [gex, levels, trendContext] = await Promise.all([
     gexLandscape
       ? Promise.resolve(gexLandscape)
-      : computeUnifiedGEXLandscape({ forceRefresh }),
+      : computeUnifiedGEXLandscape({ forceRefresh, profile }),
     levelData
       ? Promise.resolve(levelData)
-      : getMergedLevels({ forceRefresh }),
+      : getMergedLevels({ forceRefresh, profile }),
     trendContextPromise,
   ]);
   const volumeTrend = providedVolumeTrend ?? trendContext.volumeTrend;
@@ -207,6 +246,10 @@ export async function classifyCurrentRegime(options?: {
     breakoutStrength,
     zoneContainment,
     trendStrength,
+    thresholds: {
+      breakout: computationConfig.breakoutThreshold,
+      compression: computationConfig.compressionThreshold,
+    },
   });
 
   const directionStats = computeDirectionProbability({
@@ -224,9 +267,10 @@ export async function classifyCurrentRegime(options?: {
     timestamp: nowIso(),
   };
 
-  await cacheSet(REGIME_CACHE_KEY, state, REGIME_CACHE_TTL_SECONDS);
+  await cacheSet(cacheKey, state, REGIME_CACHE_TTL_SECONDS);
 
   logger.info('SPX regime classified', {
+    symbol,
     regime: state.regime,
     direction: state.direction,
     probability: state.probability,
@@ -241,10 +285,11 @@ export async function classifyCurrentRegime(options?: {
     return run();
   }
 
-  regimeInFlight = run();
+  const promise = run();
+  regimeInFlightBySymbol.set(symbol, promise);
   try {
-    return await regimeInFlight;
+    return await promise;
   } finally {
-    regimeInFlight = null;
+    regimeInFlightBySymbol.delete(symbol);
   }
 }

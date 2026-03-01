@@ -168,6 +168,58 @@ describe('spx/multiTFConfluence', () => {
     expect(context.tf1h.bars.length).toBeGreaterThanOrEqual(21);
   });
 
+  it('uses symbol-profile ticker and EMA period overrides when building frame context', async () => {
+    const evaluationDate = new Date('2026-03-02T16:00:00.000Z');
+    const baseMs = Date.parse('2026-03-02T14:30:00.000Z');
+
+    mockGetAggregates
+      .mockImplementationOnce(() => mockAggregatesResponse(buildAggregateSeries({
+        startMs: baseMs,
+        count: 10,
+        stepMs: 60_000,
+        base: 15_000,
+      })))
+      .mockImplementationOnce(() => mockAggregatesResponse(buildAggregateSeries({
+        startMs: baseMs - (5 * 60_000 * 10),
+        count: 10,
+        stepMs: 5 * 60_000,
+        base: 15_000,
+      })))
+      .mockImplementationOnce(() => mockAggregatesResponse(buildAggregateSeries({
+        startMs: baseMs - (15 * 60_000 * 10),
+        count: 10,
+        stepMs: 15 * 60_000,
+        base: 15_000,
+      })))
+      .mockImplementationOnce(() => mockAggregatesResponse(buildAggregateSeries({
+        startMs: baseMs - (60 * 60_000 * 10),
+        count: 10,
+        stepMs: 60 * 60_000,
+        base: 15_000,
+      })));
+
+    const context = await getMultiTFConfluenceContext({
+      forceRefresh: true,
+      evaluationDate,
+      profile: {
+        symbol: 'NDX',
+        displayName: 'Nasdaq 100',
+        level: { roundNumberInterval: 50, openingRangeMinutes: 30, clusterRadiusPoints: 3 },
+        gex: { scalingFactor: 0.1, crossSymbol: 'QQQ', strikeWindowPoints: 220 },
+        flow: { minPremium: 10_000, minVolume: 10, directionalMinPremium: 50_000 },
+        multiTF: { emaFast: 8, emaSlow: 13, weight1h: 0.55, weight15m: 0.2, weight5m: 0.15, weight1m: 0.1 },
+        regime: { breakoutThreshold: 0.7, compressionThreshold: 0.65 },
+        tickers: { massiveTicker: 'I:NDX', massiveOptionsTicker: 'O:NDX*' },
+        isActive: true,
+        createdAt: null,
+        updatedAt: null,
+      } as any,
+    });
+
+    expect(mockGetAggregates).toHaveBeenCalledWith('I:NDX', 1, 'minute', '2026-03-02', '2026-03-02');
+    expect(context.tf1m.emaReliable).toBe(true); // 10 bars meets profile fast EMA period (8)
+  });
+
   it('scores aligned bullish context as high quality', () => {
     const context = buildContext();
     const score = scoreMultiTFConfluence({
@@ -205,5 +257,34 @@ describe('spx/multiTFConfluence', () => {
     expect(score.aligned).toBe(false);
     expect(score.composite).toBe(24);
     expect(score.tf1mMicrostructure).toBe(4);
+  });
+
+  it('applies multi-timeframe weight overrides when computing composite score', () => {
+    const context = buildContext();
+    const baseline = scoreMultiTFConfluence({
+      context,
+      direction: 'bullish',
+      currentPrice: 6040,
+    });
+    const weighted = scoreMultiTFConfluence({
+      context,
+      direction: 'bullish',
+      currentPrice: 6040,
+      profile: {
+        symbol: 'SPX',
+        displayName: 'S&P 500 Index',
+        level: { roundNumberInterval: 50, openingRangeMinutes: 30, clusterRadiusPoints: 3 },
+        gex: { scalingFactor: 0.1, crossSymbol: 'SPY', strikeWindowPoints: 220 },
+        flow: { minPremium: 10_000, minVolume: 10, directionalMinPremium: 50_000 },
+        multiTF: { emaFast: 21, emaSlow: 55, weight1h: 0.85, weight15m: 0.05, weight5m: 0.05, weight1m: 0.05 },
+        regime: { breakoutThreshold: 0.7, compressionThreshold: 0.65 },
+        tickers: { massiveTicker: 'I:SPX', massiveOptionsTicker: 'O:SPX*' },
+        isActive: true,
+        createdAt: null,
+        updatedAt: null,
+      } as any,
+    });
+
+    expect(weighted.composite).not.toBe(baseline.composite);
   });
 });

@@ -55,6 +55,8 @@ function makeEntry(overrides: Partial<JournalEntry> = {}): JournalEntry {
     is_draft: false,
     draft_status: null,
     draft_expires_at: null,
+    coach_review_status: null,
+    coach_review_requested_at: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,

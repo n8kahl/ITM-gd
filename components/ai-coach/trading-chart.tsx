@@ -62,6 +62,7 @@ interface TradingChartProps {
   openingRangeMinutes?: 5 | 15 | 30
   positionOverlays?: PositionOverlay[]
   eventMarkers?: ChartEventMarker[]
+  onEventMarkerClick?: (marker: ChartEventMarker) => void
   symbol: string
   timeframe: string
   futureOffsetBars?: number
@@ -93,10 +94,14 @@ export interface PositionOverlay {
 }
 
 export interface ChartEventMarker {
+  id?: string
   label: string
   date?: string
   impact?: 'high' | 'medium' | 'low' | 'info'
   source?: string
+  kind?: string
+  sessionId?: string
+  markerTimeSec?: number | null
 }
 
 interface NormalizedIndicatorPoint {
@@ -205,6 +210,7 @@ export function TradingChart({
   openingRangeMinutes = 15,
   positionOverlays = [],
   eventMarkers = [],
+  onEventMarkerClick,
   symbol,
   timeframe,
   futureOffsetBars = 12,
@@ -273,20 +279,23 @@ export function TradingChart({
     }
 
     const barsCount = safeBars.length
-    const maxMarkers = 6
+    const hasLifecycleMarkers = eventMarkers.some((marker) => typeof marker.kind === 'string' && marker.kind.length > 0)
+    const maxMarkers = hasLifecycleMarkers ? 24 : 6
     const dedupe = new Set<string>()
     const markers: Array<{
+      id: string
       label: string
       leftPct: number
       impact: 'high' | 'medium' | 'low' | 'info'
       source?: string
+      marker: ChartEventMarker
     }> = []
 
-    for (const marker of eventMarkers.slice(0, maxMarkers)) {
+    for (const [index, marker] of eventMarkers.slice(0, maxMarkers).entries()) {
       const rawLabel = String(marker.label || '').trim()
       if (!rawLabel) continue
 
-      const key = `${rawLabel.toLowerCase()}|${(marker.date || '').toLowerCase()}`
+      const key = `${rawLabel.toLowerCase()}|${(marker.date || '').toLowerCase()}|${marker.kind || 'base'}|${marker.id || index}`
       if (dedupe.has(key)) continue
       dedupe.add(key)
 
@@ -305,10 +314,12 @@ export function TradingChart({
       const leftPct = barsCount <= 1 ? 50 : (nearestIndex / (barsCount - 1)) * 100
       const impact = marker.impact || 'info'
       markers.push({
+        id: marker.id || key,
         label: rawLabel.length > 22 ? `${rawLabel.slice(0, 22)}...` : rawLabel,
         leftPct,
         impact,
         source: marker.source,
+        marker,
       })
     }
 
@@ -1313,26 +1324,45 @@ export function TradingChart({
         <div className="relative min-h-0 flex-1">
           <div ref={containerRef} className="h-full w-full" />
           {timelineMarkers.length > 0 && (
-            <div className="pointer-events-none absolute inset-0 z-20">
+            <div className={cn('absolute inset-0 z-20', onEventMarkerClick ? 'pointer-events-auto' : 'pointer-events-none')}>
               {timelineMarkers.map((marker, index) => (
                 <div
-                  key={`${marker.label}-${index}`}
-                  className="absolute bottom-0 top-0"
+                  key={`${marker.id}-${index}`}
+                  className={cn('absolute bottom-0 top-0', onEventMarkerClick ? 'pointer-events-auto' : 'pointer-events-none')}
                   style={{ left: `${marker.leftPct}%` }}
                   title={marker.source || marker.label}
                 >
-                  <div className={cn(
-                    'absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded border px-1.5 py-0.5 text-[9px] font-medium',
-                    marker.impact === 'high'
-                      ? 'border-red-500/35 bg-red-500/15 text-red-200'
-                      : marker.impact === 'medium'
-                        ? 'border-amber-500/35 bg-amber-500/15 text-amber-200'
-                        : marker.impact === 'low'
-                          ? 'border-sky-500/35 bg-sky-500/15 text-sky-200'
-                          : 'border-white/20 bg-black/40 text-white/70',
-                  )}>
-                    {marker.label}
-                  </div>
+                  {onEventMarkerClick ? (
+                    <button
+                      type="button"
+                      onClick={() => onEventMarkerClick(marker.marker)}
+                      className={cn(
+                        'absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded border px-1.5 py-0.5 text-[9px] font-medium outline-none transition-colors focus-visible:ring-1 focus-visible:ring-champagne/45',
+                        marker.impact === 'high'
+                          ? 'border-red-500/35 bg-red-500/15 text-red-200 hover:bg-red-500/25'
+                          : marker.impact === 'medium'
+                            ? 'border-amber-500/35 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                            : marker.impact === 'low'
+                              ? 'border-sky-500/35 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25'
+                              : 'border-white/20 bg-black/40 text-white/70 hover:bg-black/55',
+                      )}
+                    >
+                      {marker.label}
+                    </button>
+                  ) : (
+                    <div className={cn(
+                      'absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded border px-1.5 py-0.5 text-[9px] font-medium',
+                      marker.impact === 'high'
+                        ? 'border-red-500/35 bg-red-500/15 text-red-200'
+                        : marker.impact === 'medium'
+                          ? 'border-amber-500/35 bg-amber-500/15 text-amber-200'
+                          : marker.impact === 'low'
+                            ? 'border-sky-500/35 bg-sky-500/15 text-sky-200'
+                            : 'border-white/20 bg-black/40 text-white/70',
+                    )}>
+                      {marker.label}
+                    </div>
+                  )}
                   <div className={cn(
                     'absolute left-1/2 top-6 bottom-0 -translate-x-1/2 border-l border-dashed',
                     marker.impact === 'high'

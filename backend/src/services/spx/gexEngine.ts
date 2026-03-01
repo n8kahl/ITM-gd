@@ -2,6 +2,8 @@ import { cacheGet, cacheSet } from '../../config/redis';
 import { logger } from '../../lib/logger';
 import { calculateGEXProfile } from '../options/gexCalculator';
 import type { GEXProfile as OptionsGEXProfile, GEXStrikeData } from '../options/types';
+import type { SymbolProfile } from './symbolProfile';
+import { resolveSymbolProfile } from './symbolProfile';
 import type { GEXProfile } from './types';
 import { nowIso, round } from './utils';
 
@@ -11,13 +13,16 @@ const GEX_STALE_CACHE_KEY = 'spx_command_center:gex:unified:stale';
 const GEX_STALE_CACHE_TTL_SECONDS = 300;
 const SPY_TO_SPX_GEX_SCALE = 0.1;
 const COMBINED_GEX_SPOT_WINDOW_POINTS = 220;
+const DEFAULT_PRIMARY_STRIKE_RANGE = 10;
+const DEFAULT_CROSS_STRIKE_RANGE = 12;
+const DEFAULT_MAX_EXPIRATIONS = 1;
 export interface UnifiedGEXLandscapePayload {
   spx: GEXProfile;
   spy: GEXProfile;
   combined: GEXProfile;
 }
 
-let gexInFlight: Promise<UnifiedGEXLandscapePayload> | null = null;
+const gexInFlightBySymbol = new Map<string, Promise<UnifiedGEXLandscapePayload>>();
 
 function timeoutAfter(ms: number): Promise<never> {
   return new Promise((_, reject) => {
@@ -89,6 +94,7 @@ function mergeStrikeMaps(
   spx: GEXStrikeData[],
   spy: GEXStrikeData[],
   basis: number,
+  spyToSpxScale: number,
 ): Array<{ strike: number; gex: number }> {
   const merged = new Map<number, number>();
 
@@ -105,7 +111,7 @@ function mergeStrikeMaps(
     const convertedStrike = level.strike * 10 + basis;
     // Convert SPY gamma exposure into SPX-point context.
     // SPY is ~1/10th SPX index level, so 1 SPX point ~= 0.1 SPY point.
-    addValue(convertedStrike, level.gexValue * SPY_TO_SPX_GEX_SCALE);
+    addValue(convertedStrike, level.gexValue * spyToSpxScale);
   }
 
   return Array.from(merged.entries())
@@ -116,11 +122,17 @@ function mergeStrikeMaps(
 function buildCombinedProfile(
   spxProfile: OptionsGEXProfile,
   spyProfile: OptionsGEXProfile,
+  config?: {
+    strikeWindowPoints?: number;
+    spyToSpxScale?: number;
+  },
 ): GEXProfile {
+  const strikeWindowPoints = config?.strikeWindowPoints ?? COMBINED_GEX_SPOT_WINDOW_POINTS;
+  const spyToSpxScale = config?.spyToSpxScale ?? SPY_TO_SPX_GEX_SCALE;
   const basis = spxProfile.spotPrice - spyProfile.spotPrice * 10;
-  const mergedStrikePairs = mergeStrikeMaps(spxProfile.gexByStrike, spyProfile.gexByStrike, basis);
+  const mergedStrikePairs = mergeStrikeMaps(spxProfile.gexByStrike, spyProfile.gexByStrike, basis, spyToSpxScale);
   const contextualStrikePairs = mergedStrikePairs.filter((item) => (
-    Math.abs(item.strike - spxProfile.spotPrice) <= COMBINED_GEX_SPOT_WINDOW_POINTS
+    Math.abs(item.strike - spxProfile.spotPrice) <= strikeWindowPoints
   ));
   const strikePairs = contextualStrikePairs.length >= 16 ? contextualStrikePairs : mergedStrikePairs;
 
@@ -162,71 +174,93 @@ function buildCombinedProfile(
   };
 }
 
-function buildSyntheticSpyProfile(spxProfile: OptionsGEXProfile): OptionsGEXProfile {
+function buildSyntheticSpyProfile(spxProfile: OptionsGEXProfile, crossSymbol: string): OptionsGEXProfile {
   const estimatedSpySpot = round(spxProfile.spotPrice / 10, 2);
   const estimatedSpyFlip = spxProfile.flipPoint != null ? round(spxProfile.flipPoint / 10, 2) : estimatedSpySpot;
   const estimatedSpyMaxGex = spxProfile.maxGEXStrike != null ? round(spxProfile.maxGEXStrike / 10, 2) : estimatedSpySpot;
 
   return {
-    symbol: 'SPY',
+    symbol: crossSymbol,
     spotPrice: estimatedSpySpot,
     gexByStrike: [],
     flipPoint: estimatedSpyFlip,
     maxGEXStrike: estimatedSpyMaxGex,
     keyLevels: [],
     regime: spxProfile.regime,
-    implication: 'Synthetic SPY profile fallback (derived from SPX context).',
+    implication: `Synthetic ${crossSymbol} profile fallback (derived from SPX context).`,
     calculatedAt: nowIso(),
     expirationsAnalyzed: spxProfile.expirationsAnalyzed,
   };
+}
+
+function cacheKeyForSymbol(baseKey: string, symbol: string): string {
+  const normalized = symbol.trim().toUpperCase();
+  return normalized === 'SPX' ? baseKey : `${baseKey}:${normalized}`;
 }
 
 export async function computeUnifiedGEXLandscape(options?: {
   forceRefresh?: boolean;
   strikeRange?: number;
   maxExpirations?: number;
+  symbol?: string;
+  profile?: SymbolProfile | null;
 }): Promise<UnifiedGEXLandscapePayload> {
-  if (gexInFlight) {
-    return gexInFlight;
+  const profile = await resolveSymbolProfile({
+    symbol: options?.symbol,
+    profile: options?.profile ?? null,
+  });
+  const symbol = profile.symbol;
+  const cacheKey = cacheKeyForSymbol(GEX_CACHE_KEY, symbol);
+  const staleCacheKey = cacheKeyForSymbol(GEX_STALE_CACHE_KEY, symbol);
+
+  const inFlight = gexInFlightBySymbol.get(symbol);
+  if (inFlight) {
+    return inFlight;
   }
+
   const forceRefresh = options?.forceRefresh === true;
 
   const run = async (): Promise<UnifiedGEXLandscapePayload> => {
     if (!forceRefresh) {
-      const cached = await cacheGet<UnifiedGEXLandscapePayload>(GEX_CACHE_KEY);
+      const cached = await cacheGet<UnifiedGEXLandscapePayload>(cacheKey);
       if (cached) {
         return cached;
       }
 
-      const staleCached = await cacheGet<UnifiedGEXLandscapePayload>(GEX_STALE_CACHE_KEY);
+      const staleCached = await cacheGet<UnifiedGEXLandscapePayload>(staleCacheKey);
       if (staleCached) {
         return staleCached;
       }
     }
 
-    const spxStrikeRange = options?.strikeRange ?? 10;
-    const spyStrikeRange = options?.strikeRange ?? 12;
-    const maxExpirations = options?.maxExpirations ?? 1;
+    const crossSymbol = profile.gex.crossSymbol;
+    const primaryStrikeRange = options?.strikeRange ?? DEFAULT_PRIMARY_STRIKE_RANGE;
+    const crossStrikeRange = options?.strikeRange ?? DEFAULT_CROSS_STRIKE_RANGE;
+    const maxExpirations = options?.maxExpirations ?? DEFAULT_MAX_EXPIRATIONS;
+    const crossScale = profile.gex.scalingFactor;
+    const strikeWindowPoints = profile.gex.strikeWindowPoints;
 
-    const spxRaw = await withTimeout(calculateGEXProfile('SPX', {
-      strikeRange: spxStrikeRange,
+    const spxRaw = await withTimeout(calculateGEXProfile(symbol, {
+      strikeRange: primaryStrikeRange,
       maxExpirations,
       forceRefresh,
     }), 22_000);
 
     let spyRaw: OptionsGEXProfile;
     try {
-      spyRaw = await withTimeout(calculateGEXProfile('SPY', {
-        strikeRange: spyStrikeRange,
+      spyRaw = await withTimeout(calculateGEXProfile(crossSymbol, {
+        strikeRange: crossStrikeRange,
         maxExpirations,
         // Prefer cached SPY profile during force refresh to keep SPX snapshot latency bounded.
         forceRefresh: false,
       }), 8_000);
     } catch (error) {
-      logger.warn('SPX unified GEX using synthetic SPY fallback', {
+      logger.warn('SPX unified GEX using synthetic cross-symbol fallback', {
+        symbol,
+        crossSymbol,
         error: error instanceof Error ? error.message : String(error),
       });
-      spyRaw = buildSyntheticSpyProfile(spxRaw);
+      spyRaw = buildSyntheticSpyProfile(spxRaw, crossSymbol);
     }
 
     const basis = spxRaw.spotPrice - spyRaw.spotPrice * 10;
@@ -242,17 +276,22 @@ export async function computeUnifiedGEXLandscape(options?: {
       expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
     };
     const combined = {
-      ...buildCombinedProfile(spxRaw, spyRaw),
+      ...buildCombinedProfile(spxRaw, spyRaw, {
+        strikeWindowPoints,
+        spyToSpxScale: crossScale,
+      }),
       expirationBreakdown: {} as Record<string, { netGex: number; callWall: number; putWall: number }>,
     };
 
     const payload = { spx, spy, combined };
     await Promise.all([
-      cacheSet(GEX_CACHE_KEY, payload, GEX_CACHE_TTL_SECONDS),
-      cacheSet(GEX_STALE_CACHE_KEY, payload, GEX_STALE_CACHE_TTL_SECONDS),
+      cacheSet(cacheKey, payload, GEX_CACHE_TTL_SECONDS),
+      cacheSet(staleCacheKey, payload, GEX_STALE_CACHE_TTL_SECONDS),
     ]);
 
     logger.info('SPX command center GEX landscape updated', {
+      symbol,
+      crossSymbol,
       spxNetGex: spx.netGex,
       spyNetGex: spy.netGex,
       combinedNetGex: combined.netGex,
@@ -263,19 +302,31 @@ export async function computeUnifiedGEXLandscape(options?: {
     return payload;
   };
 
-  gexInFlight = run();
+  const promise = run();
+  gexInFlightBySymbol.set(symbol, promise);
   try {
-    return await gexInFlight;
+    return await promise;
   } finally {
-    gexInFlight = null;
+    gexInFlightBySymbol.delete(symbol);
   }
 }
 
-export async function getCachedUnifiedGEXLandscape(): Promise<UnifiedGEXLandscapePayload | null> {
-  const cached = await cacheGet<UnifiedGEXLandscapePayload>(GEX_CACHE_KEY);
+export async function getCachedUnifiedGEXLandscape(options?: {
+  symbol?: string;
+  profile?: SymbolProfile | null;
+}): Promise<UnifiedGEXLandscapePayload | null> {
+  const profile = await resolveSymbolProfile({
+    symbol: options?.symbol,
+    profile: options?.profile ?? null,
+  });
+  const symbol = profile.symbol;
+  const cacheKey = cacheKeyForSymbol(GEX_CACHE_KEY, symbol);
+  const staleCacheKey = cacheKeyForSymbol(GEX_STALE_CACHE_KEY, symbol);
+
+  const cached = await cacheGet<UnifiedGEXLandscapePayload>(cacheKey);
   if (cached) {
     return cached;
   }
-  const staleCached = await cacheGet<UnifiedGEXLandscapePayload>(GEX_STALE_CACHE_KEY);
+  const staleCached = await cacheGet<UnifiedGEXLandscapePayload>(staleCacheKey);
   return staleCached || null;
 }

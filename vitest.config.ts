@@ -8,9 +8,9 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     passWithNoTests: true,
     include: [
-      'lib/**/__tests__/**/*.test.ts',
-      'lib/validation/**/__tests__/**/*.test.ts',
-      'components/**/__tests__/**/*.test.ts',
+      'lib/**/__tests__/**/*.test.ts?(x)',
+      'lib/validation/**/__tests__/**/*.test.ts?(x)',
+      'components/**/__tests__/**/*.test.ts?(x)',
     ],
     exclude: [
       'backend/**',

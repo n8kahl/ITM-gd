@@ -7,6 +7,27 @@
 
 ---
 
+## 0. Documentation Packet Status (Pre-Implementation)
+
+| Artifact | Path | Status |
+|----------|------|--------|
+| Master execution spec | `docs/specs/MOBILE_PWA_EXECUTION_SPEC_2026-03-01.md` | COMPLETE |
+| Phase 1 slice report | `docs/specs/MOBILE_PWA_PHASE1_SLICE_REPORT_2026-03-01.md` | COMPLETE (template) |
+| Phase 2 slice report | `docs/specs/MOBILE_PWA_PHASE2_SLICE_REPORT_2026-03-01.md` | COMPLETE (template) |
+| Phase 3 slice report | `docs/specs/MOBILE_PWA_PHASE3_SLICE_REPORT_2026-03-01.md` | COMPLETE (template) |
+| Phase 4 slice report | `docs/specs/MOBILE_PWA_PHASE4_SLICE_REPORT_2026-03-01.md` | COMPLETE (template) |
+| Release notes | `docs/specs/MOBILE_PWA_RELEASE_NOTES_2026-03-01.md` | COMPLETE (template) |
+| Runbook | `docs/specs/MOBILE_PWA_RUNBOOK_2026-03-01.md` | COMPLETE (template) |
+| Change control standard | `docs/specs/mobile-pwa-autonomous-2026-03-01/06_CHANGE_CONTROL_AND_PR_STANDARD.md` | COMPLETE |
+| Risk register + decision log | `docs/specs/mobile-pwa-autonomous-2026-03-01/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md` | COMPLETE |
+| Autonomous tracker | `docs/specs/mobile-pwa-autonomous-2026-03-01/08_AUTONOMOUS_EXECUTION_TRACKER.md` | COMPLETE |
+
+Implementation start gate:
+- Spec approval: PENDING
+- Slice 1.1 authorized: PENDING
+
+---
+
 ## 1. Overall Status
 
 | Phase | Status | Target | Actual | Notes |
@@ -355,6 +376,7 @@ playwright:   —
 | **Branch** | `codex/mobile-pwa` |
 | **Files Changed** | — |
 | **Acceptance Criteria** | |
+| — Phase slice report docs updated | — |
 | — Release notes current | — |
 | — Runbook covers all ops procedures | — |
 | **Commit** | — |
@@ -369,6 +391,10 @@ vitest:                    —
 playwright (chromium):     —
 playwright (pwa-chromium): —
 Node version:              —
+Phase slice report docs:   —
+Release notes:             —
+Runbook:                   —
+Spec approval recorded:    —
 ```
 
 ---

@@ -6,6 +6,8 @@ import type { LevelItem } from '../levels';
 import { getBasisState } from './crossReference';
 import { getFibLevels } from './fibEngine';
 import { computeUnifiedGEXLandscape } from './gexEngine';
+import type { SymbolProfile } from './symbolProfile';
+import { resolveSymbolProfile } from './symbolProfile';
 import type { BasisState, ClusterZone, FibLevel, LevelCategory, SPXLevel, UnifiedGEXLandscape } from './types';
 import {
   CATEGORY_WEIGHT,
@@ -19,11 +21,11 @@ import {
 
 const LEVEL_CACHE_KEY = 'spx_command_center:levels';
 const LEVEL_CACHE_TTL_SECONDS = 15; // Reduced from 30s to limit compound staleness (Audit #7 HIGH-1)
-let levelsInFlight: Promise<{
+const levelsInFlightBySymbol = new Map<string, Promise<{
   levels: SPXLevel[];
   clusters: ClusterZone[];
   generatedAt: string;
-}> | null = null;
+}>>();
 
 function toChartStyle(category: LevelCategory): SPXLevel['chartStyle'] {
   switch (category) {
@@ -155,7 +157,6 @@ const OR_CACHE_KEY = 'spx_command_center:opening_range';
 const OR_CACHE_TTL_SECONDS = 60;
 const MARKET_OPEN_HOUR = 9;
 const MARKET_OPEN_MINUTE = 30;
-const OR_END_MINUTE = 60; // 30 minutes after open = 10:00 AM
 
 interface OpeningRange {
   high: number;
@@ -163,11 +164,18 @@ interface OpeningRange {
   computedAt: string;
 }
 
-async function calculateOpeningRange(asOfDate?: string): Promise<OpeningRange | null> {
-  const dateStr = asOfDate || new Date().toISOString().slice(0, 10);
+async function calculateOpeningRange(input: {
+  ticker: string;
+  openingRangeMinutes: number;
+  asOfDate?: string;
+  cacheScope?: string;
+}): Promise<OpeningRange | null> {
+  const dateStr = input.asOfDate || new Date().toISOString().slice(0, 10);
+  const openingRangeMinutes = Math.max(1, Math.round(input.openingRangeMinutes));
+  const cacheScope = input.cacheScope || input.ticker || 'SPX';
 
   // Check cache first
-  const cacheKey = `${OR_CACHE_KEY}:${dateStr}`;
+  const cacheKey = `${OR_CACHE_KEY}:${cacheScope}:${dateStr}:${openingRangeMinutes}`;
   const cached = await cacheGet<OpeningRange>(cacheKey);
   if (cached) return cached;
 
@@ -176,19 +184,19 @@ async function calculateOpeningRange(asOfDate?: string): Promise<OpeningRange | 
   const isToday = dateStr === new Date(nowET).toISOString().slice(0, 10);
   if (isToday) {
     const currentMinutesSinceOpen = (nowET.getHours() - MARKET_OPEN_HOUR) * 60 + (nowET.getMinutes() - MARKET_OPEN_MINUTE);
-    if (currentMinutesSinceOpen < OR_END_MINUTE - MARKET_OPEN_MINUTE) {
+    if (currentMinutesSinceOpen < openingRangeMinutes) {
       // Not yet 10:00 AM ET — OR is still forming
       return null;
     }
   }
 
   try {
-    const bars = await getMinuteAggregates('I:SPX', dateStr);
+    const bars = await getMinuteAggregates(input.ticker, dateStr);
     if (!Array.isArray(bars) || bars.length === 0) return null;
 
     // Filter to first 30 minutes of trading (9:30-10:00 AM ET)
     const openMs = new Date(`${dateStr}T09:30:00-05:00`).getTime();
-    const orEndMs = openMs + 30 * 60 * 1000; // +30 minutes
+    const orEndMs = openMs + (openingRangeMinutes * 60 * 1000);
 
     const orBars = bars.filter((bar: { t: number }) =>
       bar.t >= openMs && bar.t < orEndMs
@@ -213,11 +221,18 @@ async function calculateOpeningRange(asOfDate?: string): Promise<OpeningRange | 
 
     // Cache for 60s (OR doesn't change after 10 AM)
     await cacheSet(cacheKey, result, OR_CACHE_TTL_SECONDS);
-    logger.info('SPX Opening Range calculated', { date: dateStr, high: result.high, low: result.low });
+    logger.info('SPX Opening Range calculated', {
+      ticker: input.ticker,
+      date: dateStr,
+      high: result.high,
+      low: result.low,
+      openingRangeMinutes,
+    });
     return result;
   } catch (error) {
     logger.warn('Failed to calculate Opening Range', {
       error: error instanceof Error ? error.message : String(error),
+      ticker: input.ticker,
       date: dateStr,
     });
     return null;
@@ -428,7 +443,7 @@ function mergeOverlappingZones(zones: ClusterZone[]): ClusterZone[] {
   return merged;
 }
 
-export function buildClusterZones(levels: SPXLevel[]): ClusterZone[] {
+export function buildClusterZones(levels: SPXLevel[], clusterRadiusPoints = CLUSTER_RADIUS_POINTS): ClusterZone[] {
   if (levels.length === 0) return [];
 
   const sorted = [...levels].sort((a, b) => a.price - b.price);
@@ -439,7 +454,7 @@ export function buildClusterZones(levels: SPXLevel[]): ClusterZone[] {
     const current = sorted[i];
     const bucketMax = bucket[bucket.length - 1].price;
 
-    if (current.price - bucketMax <= CLUSTER_RADIUS_POINTS) {
+    if (current.price - bucketMax <= clusterRadiusPoints) {
       bucket.push(current);
       continue;
     }
@@ -500,20 +515,34 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function cacheKeyForSymbol(baseKey: string, symbol: string): string {
+  const normalized = symbol.trim().toUpperCase();
+  return normalized === 'SPX' ? baseKey : `${baseKey}:${normalized}`;
+}
+
 export async function getMergedLevels(options?: {
   forceRefresh?: boolean;
   basisState?: BasisState;
   gexLandscape?: UnifiedGEXLandscape;
   fibLevels?: FibLevel[];
+  symbol?: string;
+  profile?: SymbolProfile | null;
 }): Promise<{
   levels: SPXLevel[];
   clusters: ClusterZone[];
   generatedAt: string;
 }> {
+  const profile = await resolveSymbolProfile({
+    symbol: options?.symbol,
+    profile: options?.profile ?? null,
+  });
+  const symbol = profile.symbol;
+  const cacheKey = cacheKeyForSymbol(LEVEL_CACHE_KEY, symbol);
   const forceRefresh = options?.forceRefresh === true;
   const hasPrecomputedDependencies = Boolean(options?.basisState || options?.gexLandscape || options?.fibLevels);
-  if (!forceRefresh && levelsInFlight) {
-    return levelsInFlight;
+  const inFlight = levelsInFlightBySymbol.get(symbol);
+  if (!forceRefresh && inFlight) {
+    return inFlight;
   }
 
   const run = async (): Promise<{
@@ -522,15 +551,16 @@ export async function getMergedLevels(options?: {
     generatedAt: string;
   }> => {
     if (!forceRefresh && !hasPrecomputedDependencies) {
-      const cached = await cacheGet<{ levels: SPXLevel[]; clusters: ClusterZone[]; generatedAt: string }>(LEVEL_CACHE_KEY);
+      const cached = await cacheGet<{ levels: SPXLevel[]; clusters: ClusterZone[]; generatedAt: string }>(cacheKey);
       if (cached) {
         return cached;
       }
     }
 
+    const crossSymbol = profile.gex.crossSymbol;
     const [spxLegacy, spyLegacy] = await Promise.all([
-      calculateLevels('SPX', 'intraday'),
-      calculateLevels('SPY', 'intraday'),
+      calculateLevels(symbol, 'intraday'),
+      calculateLevels(crossSymbol, 'intraday'),
     ]);
 
     let basis: BasisState | null = options?.basisState ?? null;
@@ -549,7 +579,7 @@ export async function getMergedLevels(options?: {
 
     if (!gex) {
       try {
-        gex = await computeUnifiedGEXLandscape({ forceRefresh });
+        gex = await computeUnifiedGEXLandscape({ forceRefresh, profile });
       } catch (error) {
         logger.warn('GEX landscape failed, continuing without GEX-derived levels', {
           error: toErrorMessage(error),
@@ -585,7 +615,11 @@ export async function getMergedLevels(options?: {
     // Opening Range levels (OR-High / OR-Low) — Audit #8 CRITICAL-2
     let orLevels: SPXLevel[] = [];
     try {
-      const openingRange = await calculateOpeningRange();
+      const openingRange = await calculateOpeningRange({
+        ticker: profile.tickers.massiveTicker,
+        openingRangeMinutes: profile.level.openingRangeMinutes,
+        cacheScope: symbol,
+      });
       orLevels = buildOpeningRangeLevels(openingRange);
     } catch (error) {
       logger.debug('Opening Range levels unavailable', {
@@ -596,7 +630,7 @@ export async function getMergedLevels(options?: {
     const allLevels = [...spxLevels, ...spyDerivedLevels, ...optionLevels, ...fibMappedLevels, ...orLevels]
       .sort((a, b) => a.price - b.price);
 
-    const clusters = buildClusterZones(allLevels);
+    const clusters = buildClusterZones(allLevels, profile.level.clusterRadiusPoints);
 
     const payload = {
       levels: allLevels,
@@ -604,9 +638,11 @@ export async function getMergedLevels(options?: {
       generatedAt: nowIso(),
     };
 
-    await cacheSet(LEVEL_CACHE_KEY, payload, LEVEL_CACHE_TTL_SECONDS);
+    await cacheSet(cacheKey, payload, LEVEL_CACHE_TTL_SECONDS);
 
     logger.info('SPX command center levels updated', {
+      symbol,
+      crossSymbol,
       levels: allLevels.length,
       clusters: clusters.length,
       generatedAt: payload.generatedAt,
@@ -619,10 +655,11 @@ export async function getMergedLevels(options?: {
     return run();
   }
 
-  levelsInFlight = run();
+  const promise = run();
+  levelsInFlightBySymbol.set(symbol, promise);
   try {
-    return await levelsInFlight;
+    return await promise;
   } finally {
-    levelsInFlight = null;
+    levelsInFlightBySymbol.delete(symbol);
   }
 }

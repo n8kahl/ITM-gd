@@ -11,6 +11,7 @@ import { logger } from '../../lib/logger';
 import { getMultiTFConfluenceContext, type SPXMultiTFConfluenceContext } from './multiTFConfluence';
 import { replaySnapshotWriter } from './replaySnapshotWriter';
 import { classifyCurrentRegime } from './regimeClassifier';
+import { resolveSymbolProfile } from './symbolProfile';
 import {
   readSharedSnapshot,
   releaseSnapshotBuildLock,
@@ -418,19 +419,20 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     });
   }
 
+  const symbolProfile = await resolveSymbolProfile({ symbol: 'SPX' });
   const stageQuality: SPXSnapshotDataQuality['stages'] = {};
 
   const [gexResult, flowResult] = await Promise.all([
     withStageFallback({
       stage: 'gex',
       forceRefresh,
-      run: () => computeUnifiedGEXLandscape({ forceRefresh }),
+      run: () => computeUnifiedGEXLandscape({ forceRefresh, profile: symbolProfile }),
       fallback: () => fallbackSnapshot?.gex || createNeutralGexLandscape(fallbackSnapshot),
     }),
     withStageFallback({
       stage: 'flow',
       forceRefresh,
-      run: () => getFlowEvents({ forceRefresh }),
+      run: () => getFlowEvents({ forceRefresh, profile: symbolProfile }),
       fallback: () => fallbackSnapshot?.flow || [],
     }),
   ]);
@@ -494,6 +496,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
         }
         return getMergedLevels({
           forceRefresh: false,
+          profile: symbolProfile,
           basisState: basis,
           gexLandscape: gex,
           fibLevels,
@@ -501,6 +504,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
       }
       return getMergedLevels({
         forceRefresh,
+        profile: symbolProfile,
         basisState: basis,
         gexLandscape: gex,
         fibLevels,
@@ -518,7 +522,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   const regimeResult = await withStageFallback({
     stage: 'regime',
     forceRefresh,
-    run: () => classifyCurrentRegime({ forceRefresh, gexLandscape: gex, levelData }),
+    run: () => classifyCurrentRegime({ forceRefresh, profile: symbolProfile, gexLandscape: gex, levelData }),
     fallback: () => createNeutralRegimeState(fallbackSnapshot),
   });
   stageQuality.regime = regimeResult.quality;
@@ -529,7 +533,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     ? await withStageFallback({
       stage: 'multiTF',
       forceRefresh,
-      run: () => getMultiTFConfluenceContext({ forceRefresh }),
+      run: () => getMultiTFConfluenceContext({ forceRefresh, profile: symbolProfile }),
       fallback: () => null as SPXMultiTFConfluenceContext | null,
     })
     : {
@@ -547,11 +551,12 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   const setupsRawResult = await withStageFallback({
     stage: 'setups',
     forceRefresh,
-    run: () => detectActiveSetups({
-      forceRefresh,
-      levelData,
-      gexLandscape: gex,
-      fibLevels,
+      run: () => detectActiveSetups({
+        forceRefresh,
+        profile: symbolProfile,
+        levelData,
+        gexLandscape: gex,
+        fibLevels,
       regimeState: regime,
       flowEvents: flow,
       ...(multiTFContextForReplay ? { multiTFConfluenceOverride: multiTFContextForReplay } : {}),

@@ -2,8 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { postSPX, SPXRequestError, useSPXQuery } from '@/hooks/use-spx-api'
-import { createBrowserSupabase } from '@/lib/supabase-browser'
+import {
+  publishReplaySessionSync,
+  subscribeReplayCursorTime,
+  subscribeReplayTranscriptJump,
+  type ReplaySessionSyncLifecycleEvent,
+  type ReplaySessionSyncPayload,
+} from '@/lib/spx/replay-session-sync'
 import { cn } from '@/lib/utils'
+import { createBrowserSupabase } from '@/lib/supabase-browser'
+import {
+  ReplayDrillMode,
+  type ReplayDrillHistoryEntry,
+  type ReplayDrillSubmissionPayload,
+  type ReplayDrillSubmissionResponse,
+} from '@/components/spx-command-center/replay-drill-mode'
+import { ReplayConfluencePanel, type ReplayConfluenceSnapshotRow } from '@/components/spx-command-center/replay-confluence-panel'
+import { ReplayTranscriptSidebar } from '@/components/spx-command-center/replay-transcript-sidebar'
 
 type ReplaySessionListRow = {
   sessionId: string
@@ -40,12 +55,50 @@ type ReplayDetailTrade = {
     timestamp: string | null
     sizing: string | null
   }
+  stop?: {
+    initial: number | null
+  }
+  targets?: {
+    target1: number | null
+    target2: number | null
+  }
   outcome: {
     finalPnlPct: number | null
     isWinner: boolean | null
     fullyExited: boolean | null
     exitTimestamp: string | null
   }
+  entrySnapshotId?: string | null
+  thesis?: {
+    text: string | null
+    entryCondition?: string | null
+    messageRef?: string | null
+  }
+  lifecycle?: {
+    events?: Array<Record<string, unknown>> | null
+  }
+}
+
+type ReplayDetailSnapshot = ReplayConfluenceSnapshotRow
+type ReplayDetailMessage = {
+  id: string | null
+  discordMessageId?: string | null
+  authorName: string | null
+  authorId: string | null
+  content: string | null
+  sentAt: string | null
+  isSignal: boolean | null
+  signalType: string | null
+  parsedTradeId: string | null
+  createdAt?: string | null
+}
+type ReplayDetailBar = {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
 }
 
 type ReplaySessionDetailResponse = {
@@ -57,7 +110,15 @@ type ReplaySessionDetailResponse = {
     trades: number
     messages: number
   }
+  snapshots: ReplayDetailSnapshot[]
   trades: ReplayDetailTrade[]
+  messages?: ReplayDetailMessage[]
+  bars?: ReplayDetailBar[]
+}
+
+type ReplayDrillHistoryResponse = {
+  count: number
+  history: ReplayDrillHistoryEntry[]
 }
 
 type ReplayJournalSaveResponse = {
@@ -110,6 +171,13 @@ function buildReplaySessionDetailEndpoint(sessionId: string, symbol: string): st
   const params = new URLSearchParams()
   params.set('symbol', symbol.trim().toUpperCase() || 'SPX')
   return `/api/spx/replay-sessions/${sessionId}?${params.toString()}`
+}
+
+function buildReplayDrillHistoryEndpoint(sessionId: string): string {
+  const params = new URLSearchParams()
+  params.set('sessionId', sessionId)
+  params.set('limit', '25')
+  return `/api/spx/drill-results/history?${params.toString()}`
 }
 
 function asReadableDate(value: string | null): string {
@@ -175,6 +243,37 @@ function asTimeSortValue(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function toNullableString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function normalizeLifecycleEvents(value: unknown): ReplaySessionSyncLifecycleEvent[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((event) => {
+      if (!event || typeof event !== 'object' || Array.isArray(event)) return null
+      const row = event as Record<string, unknown>
+      return {
+        type: toNullableString(row.type),
+        value: toFiniteNumber(row.value),
+        timestamp: toNullableString(row.timestamp),
+        messageRef: toNullableString(row.messageRef),
+      }
+    })
+    .filter((event): event is ReplaySessionSyncLifecycleEvent => event != null)
+}
+
 function resolveSessionDayKey(sessionDate: string | null): string {
   const value = sessionDate?.trim()
   if (!value) return UNKNOWN_DAY_KEY
@@ -235,12 +334,34 @@ function resolveDetailErrorCopy(error: Error | undefined): string {
   return error.message || 'Unable to load replay detail.'
 }
 
+function resolveDrillHistoryErrorCopy(error: Error | undefined): string {
+  if (!error) return 'Unable to load drill history.'
+  if (error instanceof SPXRequestError && error.status === 403) {
+    return 'Drill history is restricted to backend admins.'
+  }
+  return error.message || 'Unable to load drill history.'
+}
+
 export function ReplaySessionBrowser() {
+  const transcriptJumpSequenceRef = useRef(0)
   const journalSaveLockRef = useRef(false)
   const [draftFilters, setDraftFilters] = useState<LocalFilters>(DEFAULT_FILTERS)
   const [appliedFilters, setAppliedFilters] = useState<LocalFilters>(DEFAULT_FILTERS)
   const [selectedDayKeyPreference, setSelectedDayKeyPreference] = useState<string | null>(null)
   const [selectedSessionIdPreference, setSelectedSessionIdPreference] = useState<string | null>(null)
+  const [transcriptCursorSelection, setTranscriptCursorSelection] = useState<{
+    sessionId: string
+    cursorTimeIso: string | null
+  } | null>(null)
+  const [transcriptJumpSelection, setTranscriptJumpSelection] = useState<{
+    sessionId: string
+    requestId: number
+    timeIso: string | null
+  } | null>(null)
+  const [snapshotCursorSelection, setSnapshotCursorSelection] = useState<{
+    sessionId: string
+    snapshotKey: string | null
+  } | null>(null)
   const [journalSaveState, setJournalSaveState] = useState<{
     status: 'idle' | 'saving' | 'success' | 'error'
     message: string | null
@@ -306,6 +427,46 @@ export function ReplaySessionBrowser() {
     revalidateOnFocus: false,
     dedupingInterval: 15_000,
   })
+  const drillHistoryEndpoint = useMemo(
+    () => (selectedSessionId ? buildReplayDrillHistoryEndpoint(selectedSessionId) : null),
+    [selectedSessionId],
+  )
+  const drillHistoryQuery = useSPXQuery<ReplayDrillHistoryResponse>(drillHistoryEndpoint, {
+    revalidateOnFocus: false,
+    dedupingInterval: 15_000,
+  })
+  const submitDrillResult = useCallback(async (
+    payload: ReplayDrillSubmissionPayload,
+  ): Promise<ReplayDrillSubmissionResponse> => {
+    const browserSupabase = createBrowserSupabase()
+    const {
+      data: { session },
+    } = await browserSupabase.auth.getSession()
+
+    const token = session?.access_token
+    if (!token) {
+      throw new Error('You must be signed in to submit drill results.')
+    }
+
+    const requestBody: Record<string, unknown> = {
+      sessionId: payload.sessionId,
+      parsedTradeId: payload.parsedTradeId,
+      decisionAt: payload.decisionAt,
+      direction: payload.direction,
+      strike: payload.strike,
+      stopLevel: payload.stopLevel,
+      targetLevel: payload.targetLevel,
+      actualPnlPct: payload.actualPnlPct,
+      engineDirection: payload.engineDirection,
+    }
+    const response = await postSPX<ReplayDrillSubmissionResponse>(
+      '/api/spx/drill-results',
+      token,
+      requestBody,
+    )
+    await drillHistoryQuery.mutate()
+    return response
+  }, [drillHistoryQuery])
   const submitReplayJournalSave = useCallback(async (parsedTradeId: string | null): Promise<void> => {
     if (!selectedSessionId || journalSaveLockRef.current) return
     journalSaveLockRef.current = true
@@ -351,6 +512,27 @@ export function ReplaySessionBrowser() {
       journalSaveLockRef.current = false
     }
   }, [selectedSessionId])
+  const selectedSnapshotCursorKeyPreference = (
+    snapshotCursorSelection != null
+    && snapshotCursorSelection.sessionId === selectedSessionId
+  )
+    ? snapshotCursorSelection.snapshotKey
+    : null
+  const selectedTranscriptCursorTimeIso = (
+    transcriptCursorSelection != null
+    && transcriptCursorSelection.sessionId === selectedSessionId
+  )
+    ? transcriptCursorSelection.cursorTimeIso
+    : null
+  const selectedTranscriptJumpRequest = (
+    transcriptJumpSelection != null
+    && transcriptJumpSelection.sessionId === selectedSessionId
+  )
+    ? {
+      requestId: transcriptJumpSelection.requestId,
+      timeIso: transcriptJumpSelection.timeIso,
+    }
+    : null
 
   const onApplyFilters = () => {
     setAppliedFilters({
@@ -361,6 +543,9 @@ export function ReplaySessionBrowser() {
     })
     setSelectedDayKeyPreference(null)
     setSelectedSessionIdPreference(null)
+    setSnapshotCursorSelection(null)
+    setTranscriptCursorSelection(null)
+    setTranscriptJumpSelection(null)
   }
 
   const onResetFilters = () => {
@@ -368,10 +553,89 @@ export function ReplaySessionBrowser() {
     setAppliedFilters(DEFAULT_FILTERS)
     setSelectedDayKeyPreference(null)
     setSelectedSessionIdPreference(null)
+    setSnapshotCursorSelection(null)
+    setTranscriptCursorSelection(null)
+    setTranscriptJumpSelection(null)
   }
 
   const listErrorCopy = resolveErrorCopy(sessionsQuery.error)
   const detailErrorCopy = resolveDetailErrorCopy(detailQuery.error)
+  const drillHistoryErrorCopy = resolveDrillHistoryErrorCopy(drillHistoryQuery.error)
+
+  useEffect(() => {
+    const unsubscribeCursor = subscribeReplayCursorTime((payload) => {
+      if (!payload) return
+      setTranscriptCursorSelection({
+        sessionId: payload.sessionId,
+        cursorTimeIso: payload.cursorTimeIso,
+      })
+    })
+    const unsubscribeJump = subscribeReplayTranscriptJump((payload) => {
+      if (!payload) return
+      transcriptJumpSequenceRef.current += 1
+      setTranscriptJumpSelection({
+        sessionId: payload.sessionId,
+        requestId: transcriptJumpSequenceRef.current,
+        timeIso: payload.jumpTimeIso,
+      })
+    })
+
+    return () => {
+      unsubscribeCursor()
+      unsubscribeJump()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      publishReplaySessionSync(null)
+      return
+    }
+
+    const detail = detailQuery.data
+    if (!detail || detail.sessionId !== selectedSessionId) {
+      publishReplaySessionSync(null)
+      return
+    }
+
+    const payload: ReplaySessionSyncPayload = {
+      sessionId: selectedSessionId,
+      bars: Array.isArray(detail.bars) ? detail.bars : [],
+      snapshots: Array.isArray(detail.snapshots) ? detail.snapshots : [],
+      messages: Array.isArray(detail.messages)
+        ? detail.messages.map((message) => ({
+          id: message.id || null,
+          discordMessageId: message.discordMessageId || null,
+          authorName: message.authorName || null,
+          authorId: message.authorId || null,
+          content: message.content || null,
+          sentAt: message.sentAt || null,
+          isSignal: typeof message.isSignal === 'boolean' ? message.isSignal : null,
+          signalType: message.signalType || null,
+          parsedTradeId: message.parsedTradeId || null,
+        }))
+        : [],
+      trades: Array.isArray(detail.trades)
+        ? detail.trades.map((trade) => ({
+          id: trade.id || null,
+          tradeIndex: Number.isFinite(trade.tradeIndex) ? trade.tradeIndex : 0,
+          entryTimestamp: trade.entry?.timestamp || null,
+          exitTimestamp: trade.outcome?.exitTimestamp || null,
+          thesisText: trade.thesis?.text || null,
+          thesisMessageRef: toNullableString(trade.thesis?.messageRef),
+          lifecycleEvents: normalizeLifecycleEvents(trade.lifecycle?.events),
+        }))
+        : [],
+    }
+
+    publishReplaySessionSync(payload)
+  }, [detailQuery.data, selectedSessionId])
+
+  useEffect(() => {
+    return () => {
+      publishReplaySessionSync(null)
+    }
+  }, [])
 
   useEffect(() => {
     journalSaveLockRef.current = false
@@ -468,6 +732,9 @@ export function ReplaySessionBrowser() {
                   onClick={() => {
                     setSelectedDayKeyPreference(dayKey)
                     setSelectedSessionIdPreference(null)
+                    setSnapshotCursorSelection(null)
+                    setTranscriptCursorSelection(null)
+                    setTranscriptJumpSelection(null)
                   }}
                   className={cn(
                     'inline-flex items-center gap-1 rounded border px-1.5 py-1 text-[9px] transition-colors',
@@ -523,7 +790,11 @@ export function ReplaySessionBrowser() {
                   <button
                     key={session.sessionId}
                     type="button"
-                    onClick={() => setSelectedSessionIdPreference(session.sessionId)}
+                    onClick={() => {
+                      setSelectedSessionIdPreference(session.sessionId)
+                      setSnapshotCursorSelection(null)
+                      setTranscriptJumpSelection(null)
+                    }}
                     className={cn(
                       'w-full rounded border px-2 py-1.5 text-left transition-colors',
                       isSelected
@@ -677,6 +948,32 @@ export function ReplaySessionBrowser() {
                   ))
                 )}
               </div>
+
+              <ReplayDrillMode
+                sessionId={detailQuery.data.sessionId}
+                symbol={detailQuery.data.symbol || selectedSymbol}
+                trades={detailQuery.data.trades ?? []}
+                snapshots={detailQuery.data.snapshots ?? []}
+                history={drillHistoryQuery.data?.history ?? []}
+                historyLoading={Boolean(selectedSessionId) && drillHistoryQuery.isLoading}
+                historyError={drillHistoryQuery.error ? drillHistoryErrorCopy : null}
+                onSubmit={submitDrillResult}
+              />
+
+              <ReplayConfluencePanel
+                snapshots={detailQuery.data.snapshots ?? []}
+                selectedSnapshotKey={selectedSnapshotCursorKeyPreference}
+                onSelectedSnapshotKeyChange={(snapshotKey) => {
+                  if (!selectedSessionId) return
+                  setSnapshotCursorSelection({ sessionId: selectedSessionId, snapshotKey })
+                }}
+              />
+              <ReplayTranscriptSidebar
+                sessionId={selectedSessionId}
+                messages={detailQuery.data.messages ?? []}
+                cursorTimeIso={selectedTranscriptCursorTimeIso}
+                jumpRequest={selectedTranscriptJumpRequest}
+              />
             </div>
           ) : (
             <p className="text-[10px] text-white/55">Select a session to preview snapshots, trades, and messages.</p>
