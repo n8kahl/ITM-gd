@@ -135,6 +135,7 @@ export function SPXDesktopSpatialCanvas({
       className="absolute left-0 transition-[right] duration-300 ease-out"
       style={{
         top: `${DESKTOP_TOP_SAFE_AREA_PX}px`,
+        bottom: '0px',
         right: sidebarOpen ? `${sidebarWidth}px` : '0px',
       }}
       data-testid="spx-desktop-spatial"

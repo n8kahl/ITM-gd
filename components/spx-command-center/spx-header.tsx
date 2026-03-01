@@ -138,7 +138,7 @@ export function SPXHeader({
 
   return (
     <header
-      className="pointer-events-auto absolute inset-x-0 top-0 z-40 flex items-center justify-between px-3 py-2 md:px-5 md:py-3"
+      className="pointer-events-auto absolute inset-x-0 top-0 z-[62] flex items-center justify-between px-3 py-2 md:px-5 md:py-3"
       style={{
         background: 'linear-gradient(180deg, rgba(10,10,11,0.88) 0%, rgba(10,10,11,0.4) 70%, transparent 100%)',
         backdropFilter: 'blur(8px)',
