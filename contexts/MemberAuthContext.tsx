@@ -125,6 +125,162 @@ const ADMIN_TRADE_DAY_REPLAY_TAB_CONFIG: TabConfig = {
   is_active: true,
 }
 
+const FALLBACK_TAB_CONFIGS: TabConfig[] = [
+  {
+    id: 'dashboard',
+    tab_id: 'dashboard',
+    label: 'Dashboard',
+    icon: 'LayoutDashboard',
+    path: '/members',
+    required_tier: 'core',
+    badge_text: null,
+    badge_variant: null,
+    description: null,
+    mobile_visible: true,
+    sort_order: 1,
+    is_required: true,
+    is_active: true,
+  },
+  {
+    id: 'journal',
+    tab_id: 'journal',
+    label: 'Journal',
+    icon: 'BookOpen',
+    path: '/members/journal',
+    required_tier: 'core',
+    badge_text: null,
+    badge_variant: null,
+    description: null,
+    mobile_visible: true,
+    sort_order: 2,
+    is_required: false,
+    is_active: true,
+  },
+  {
+    id: 'spx-command-center',
+    tab_id: 'spx-command-center',
+    label: 'SPX Command Center',
+    icon: 'Target',
+    path: '/members/spx-command-center',
+    required_tier: 'pro',
+    badge_text: null,
+    badge_variant: null,
+    description: null,
+    mobile_visible: true,
+    sort_order: 3,
+    is_required: false,
+    is_active: true,
+  },
+  {
+    id: 'ai-coach',
+    tab_id: 'ai-coach',
+    label: 'AI Coach',
+    icon: 'Bot',
+    path: '/members/ai-coach',
+    required_tier: 'pro',
+    badge_text: null,
+    badge_variant: null,
+    description: null,
+    mobile_visible: true,
+    sort_order: 4,
+    is_required: false,
+    is_active: true,
+  },
+  {
+    id: 'library',
+    tab_id: 'library',
+    label: 'Academy',
+    icon: 'GraduationCap',
+    path: '/members/academy',
+    required_tier: 'pro',
+    badge_text: null,
+    badge_variant: null,
+    description: null,
+    mobile_visible: true,
+    sort_order: 5,
+    is_required: false,
+    is_active: true,
+  },
+  {
+    id: 'social',
+    tab_id: 'social',
+    label: 'Social',
+    icon: 'Users',
+    path: '/members/social',
+    required_tier: 'core',
+    badge_text: null,
+    badge_variant: null,
+    description: null,
+    mobile_visible: true,
+    sort_order: 6,
+    is_required: false,
+    is_active: true,
+  },
+  {
+    id: 'studio',
+    tab_id: 'studio',
+    label: 'Studio',
+    icon: 'Palette',
+    path: '/members/studio',
+    required_tier: 'executive',
+    badge_text: null,
+    badge_variant: null,
+    description: null,
+    mobile_visible: false,
+    sort_order: 7,
+    is_required: false,
+    is_active: true,
+  },
+  {
+    id: 'profile',
+    tab_id: 'profile',
+    label: 'Profile',
+    icon: 'UserCircle',
+    path: '/members/profile',
+    required_tier: 'core',
+    badge_text: null,
+    badge_variant: null,
+    description: null,
+    mobile_visible: true,
+    sort_order: 8,
+    is_required: true,
+    is_active: true,
+  },
+]
+
+const FALLBACK_TAB_CONFIG_MAP = new Map(FALLBACK_TAB_CONFIGS.map((tab) => [tab.tab_id, tab]))
+
+function toFallbackTabLabel(tabId: string): string {
+  return tabId
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function buildFallbackTabConfig(tabId: string, sortOrder: number): TabConfig {
+  const existing = FALLBACK_TAB_CONFIG_MAP.get(tabId)
+  if (existing) {
+    return { ...existing }
+  }
+
+  return {
+    id: tabId,
+    tab_id: tabId,
+    label: toFallbackTabLabel(tabId),
+    icon: 'LayoutDashboard',
+    path: tabId === 'dashboard' ? '/members' : `/members/${tabId}`,
+    required_tier: 'core',
+    badge_text: null,
+    badge_variant: null,
+    description: null,
+    mobile_visible: true,
+    sort_order: sortOrder,
+    is_required: false,
+    is_active: true,
+  }
+}
+
 function ensureAdminReplayTabIds(tabIds: string[], isAdmin: boolean): string[] {
   if (!isAdmin || tabIds.includes(ADMIN_TRADE_DAY_REPLAY_TAB_ID)) {
     return tabIds
@@ -403,11 +559,13 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // Fetch role mapping and tab configurations from config APIs on mount
   useEffect(() => {
     discordGuildRolesTableMissingRef.current = readCachedMissingDiscordGuildRolesFlag()
+    let cancelled = false
 
     // Fetch role mapping
     fetch('/api/config/roles')
       .then(res => res.json())
       .then(data => {
+        if (cancelled) return
         if (data && typeof data === 'object') {
           setRoleMapping(data)
         }
@@ -417,16 +575,46 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       })
 
     // V3: Fetch admin-configured tab configurations
-    fetch('/api/config/tabs')
-      .then(res => res.json())
-      .then(response => {
-        if (response.success && Array.isArray(response.data)) {
-          setAllTabConfigs(response.data)
+    const loadTabs = async () => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetchWithTimeout(
+            '/api/config/tabs',
+            {
+              method: 'GET',
+              cache: 'no-store',
+              credentials: 'include',
+            },
+            REQUEST_TIMEOUT_MS,
+          )
+
+          if (!response.ok) {
+            throw new Error(`tabs config request failed: ${response.status}`)
+          }
+
+          const payload = await response.json()
+          if (cancelled) return
+
+          if (payload?.success && Array.isArray(payload.data)) {
+            setAllTabConfigs(payload.data)
+          }
+          return
+        } catch (error) {
+          if (attempt === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 350))
+            continue
+          }
+
+          console.warn('[MemberAuth] failed to load tab configurations; using fallback nav defaults', error)
         }
-      })
-      .catch(() => {
-        // Tab configs fallback handled by API route
-      })
+      }
+    }
+
+    void loadTabs()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Derive membership tier from Discord role IDs using dynamic mapping
@@ -1156,12 +1344,23 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // V3: Compute filtered tab configs based on user's tier
   const getVisibleTabs = useCallback((): TabConfig[] => {
-    if (!allTabConfigs.length) return []
     const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
     const userTierLevel = state.profile?.membership_tier
       ? tierHierarchy[state.profile.membership_tier] || 0
       : 0
     const isAdmin = state.profile?.role === 'admin'
+
+    if (!allTabConfigs.length) {
+      const fallbackTabIds = state.allowedTabs.length > 0
+        ? ensureAdminReplayTabIds(state.allowedTabs, isAdmin)
+        : getAllowedTabsForTier(state.profile?.membership_tier || null, isAdmin)
+
+      const fallbackTabs = fallbackTabIds.map((tabId, index) => (
+        buildFallbackTabConfig(tabId, index + 1)
+      ))
+
+      return ensureAdminReplayTabConfig(fallbackTabs, isAdmin)
+    }
 
     const visibleTabs = allTabConfigs.filter(tab => {
       if (!tab.is_active) return false
@@ -1172,7 +1371,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     })
 
     return ensureAdminReplayTabConfig(visibleTabs, isAdmin)
-  }, [allTabConfigs, state.profile?.membership_tier, state.profile?.role])
+  }, [allTabConfigs, getAllowedTabsForTier, state.allowedTabs, state.profile?.membership_tier, state.profile?.role])
 
   const getMobileTabs = useCallback((): TabConfig[] => {
     return getVisibleTabs().filter(tab => tab.mobile_visible).slice(0, 5)

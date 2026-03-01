@@ -14,6 +14,7 @@ interface MobileToolSheetState {
 }
 
 const SUPPORTED_CHART_TIMEFRAMES = new Set(['1m', '5m', '15m', '1h', '4h', '1D'])
+const MOBILE_SHEET_BREAKPOINT_PX = 1024
 
 export interface MobileSheetBridgeResult {
   view: MobileToolView
@@ -151,7 +152,7 @@ export function useMobileToolSheet() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const isMobile = () => window.innerWidth < 1024
+    const isMobile = () => window.innerWidth < MOBILE_SHEET_BREAKPOINT_PX
 
     const handleChart = (event: Event) => {
       if (!isMobile()) return
@@ -231,6 +232,25 @@ export function useMobileToolSheet() {
       window.removeEventListener('ai-coach-show-chart', handleShowChart)
     }
   }, [openSheet])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleViewportChange = () => {
+      if (window.innerWidth >= MOBILE_SHEET_BREAKPOINT_PX) {
+        closeSheet()
+      }
+    }
+
+    handleViewportChange()
+    window.addEventListener('resize', handleViewportChange)
+    window.addEventListener('orientationchange', handleViewportChange)
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange)
+      window.removeEventListener('orientationchange', handleViewportChange)
+    }
+  }, [closeSheet])
 
   return { ...state, openSheet, closeSheet }
 }

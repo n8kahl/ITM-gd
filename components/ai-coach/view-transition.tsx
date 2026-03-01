@@ -1,6 +1,6 @@
 'use client'
 
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import type { ReactNode } from 'react'
 
 export function ViewTransition({
@@ -10,18 +10,17 @@ export function ViewTransition({
   viewKey: string
   children: ReactNode
 }) {
+  const shouldReduceMotion = useReducedMotion()
+
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={viewKey}
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -20 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="h-full"
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      key={viewKey}
+      initial={shouldReduceMotion ? false : { opacity: 0.96, x: 12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.16, ease: 'easeOut' }}
+      className="h-full"
+    >
+      {children}
+    </motion.div>
   )
 }

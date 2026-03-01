@@ -74,7 +74,6 @@ export function useSPXCommandController() {
   } = useSPXSetupContext()
 
   const [mobileTab, setMobileTab] = useState<MobilePanelTab>('chart')
-  const [mobileCoachTabVisited, setMobileCoachTabVisited] = useState(false)
   const [showLevelOverlay, setShowLevelOverlay] = useState(true)
   const [showAdvancedHud, setShowAdvancedHud] = useState(false)
   const [initialSkeletonExpired, setInitialSkeletonExpired] = useState(false)
@@ -515,8 +514,8 @@ export function useSPXCommandController() {
 
   const handleMobileTabChange = useCallback((next: MobilePanelTab) => {
     setMobileTab(next)
-    if (next === 'coach') {
-      setMobileCoachTabVisited(true)
+    if (next !== 'coach') {
+      setShowMobileCoachSheet(false)
     }
     trackSPXTelemetryEvent(SPX_TELEMETRY_EVENT.HEADER_ACTION_CLICK, {
       surface: 'mobile_tabs',
@@ -577,6 +576,18 @@ export function useSPXCommandController() {
       }
     }
   }, [isMobile, showAdvancedHud, showCommandPalette, sidebarOpen])
+
+  useEffect(() => {
+    if (!showMobileCoachSheet) return
+    if (isMobile && mobileSmartStackEnabled && uxFlags.coachDockV1) return
+
+    const rafId = window.requestAnimationFrame(() => {
+      setShowMobileCoachSheet(false)
+    })
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [isMobile, mobileSmartStackEnabled, showMobileCoachSheet, uxFlags.coachDockV1])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -755,7 +766,6 @@ export function useSPXCommandController() {
     isLoading,
     levels,
     mobileTab,
-    mobileCoachTabVisited,
     showLevelOverlay,
     initialSkeletonExpired,
     showShortcutHelp,
