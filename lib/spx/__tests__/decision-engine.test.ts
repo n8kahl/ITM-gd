@@ -424,6 +424,41 @@ describe('decision engine', () => {
     expect(result.confidence).toBeCloseTo(88.08, 2)
   })
 
+  it('falls back to rule-based confidence when ML output is NaN', () => {
+    const setup = buildSetup()
+    __setConfidenceModelForTest({
+      version: 'nan-model',
+      intercept: Number.NaN,
+      features: {},
+    })
+
+    const context = {
+      regime: 'trending' as const,
+      prediction: null,
+      basis: null,
+      gex: null,
+      flowEvents: [],
+      userId: 'ml-user',
+      mlConfidenceEnabled: true,
+      nowMs: Date.parse('2026-02-21T15:10:00.000Z'),
+    }
+
+    const result = evaluateSPXSetupDecision(setup, context)
+    const flowBias = flowAlignmentBias(setup.direction, context.flowEvents)
+    const regimeScore = regimeCompatibility(setup.regime, context.regime)
+    const expected = calculateRuleBasedConfidence({
+      alignmentScore: result.alignmentScore,
+      confluenceScore: setup.confluenceScore,
+      probability: setup.probability,
+      flowBias,
+      regimeScore,
+    })
+
+    expect(result.confidenceSource).toBe('rule_based')
+    expect(Number.isFinite(result.confidence)).toBe(true)
+    expect(result.confidence).toBe(expected)
+  })
+
   it('respects ML override when disabled for a user', () => {
     const setup = buildSetup()
     __setConfidenceModelForTest({

@@ -314,10 +314,13 @@ export function evaluateSPXSetupDecision(
   })
   const featureVector = extractFeatures(setup, context)
   void primeConfidenceModel()
-  const mlConfidence = predictConfidence(featureVector, {
+  const mlConfidenceRaw = predictConfidence(featureVector, {
     userId: context.userId,
     enabledOverride: context.mlConfidenceEnabled,
   })
+  const mlConfidence = typeof mlConfidenceRaw === 'number' && Number.isFinite(mlConfidenceRaw)
+    ? mlConfidenceRaw
+    : null
   const confidence = mlConfidence == null
     ? ruleBasedConfidence
     : round(clamp(mlConfidence, 5, 95), 2)
