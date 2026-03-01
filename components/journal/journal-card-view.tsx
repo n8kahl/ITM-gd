@@ -3,6 +3,7 @@
 import { useReducer } from 'react'
 import { Pencil, Star, Trash2 } from 'lucide-react'
 import type { JournalEntry } from '@/lib/types/journal'
+import { Button } from '@/components/ui/button'
 import { SpotlightCard } from '@/components/ui/spotlight-card'
 
 interface JournalCardViewProps {
@@ -85,17 +86,19 @@ export function JournalCardView({
               </button>
 
               <div className="mt-4 flex items-center justify-end gap-2 border-t border-white/10 pt-3">
-                <button
+                <Button
                   type="button"
                   onClick={() => onEditEntry(entry)}
                   disabled={disableActions}
-                  className="inline-flex h-9 items-center gap-1 rounded-md border border-white/10 px-3 text-xs text-ivory hover:bg-white/5 disabled:opacity-60"
+                  variant="luxury-outline"
+                  size="sm"
+                  className="h-11 px-3 text-xs md:h-9"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   Edit
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
                   onClick={async () => {
                     dispatch({ type: 'favorite-updating', entryId: entry.id })
@@ -103,21 +106,25 @@ export function JournalCardView({
                     dispatch({ type: 'favorite-idle' })
                   }}
                   disabled={disableActions || state.favoriteUpdatingId === entry.id}
-                  className="inline-flex h-9 items-center gap-1 rounded-md border border-white/10 px-3 text-xs text-ivory hover:bg-white/5 disabled:opacity-60"
+                  variant="luxury-outline"
+                  size="sm"
+                  className="h-11 px-3 text-xs md:h-9"
                 >
                   <Star className={`h-3.5 w-3.5 ${entry.is_favorite ? 'fill-amber-300 text-amber-300' : ''}`} />
                   Favorite
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
                   onClick={() => onDeleteEntry(entry.id)}
                   disabled={disableActions}
-                  className="inline-flex h-9 items-center gap-1 rounded-md border border-red-500/40 px-3 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-60"
+                  variant="destructive"
+                  size="sm"
+                  className="h-11 border-red-500/40 px-3 text-xs text-red-300 hover:bg-red-500/20 md:h-9"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Delete
-                </button>
+                </Button>
               </div>
             </article>
           </SpotlightCard>

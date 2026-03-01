@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, Pencil, Share2, Star, Trash2, X } from 'lucide-react'
 import type { AITradeAnalysis, JournalEntry } from '@/lib/types/journal'
+import { Button } from '@/components/ui/button'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 import { AIGradeDisplay } from '@/components/journal/ai-grade-display'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
@@ -151,28 +152,30 @@ export function EntryDetailSheet({
   const displayEntry = localEntry || entry
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 animate-in fade-in-0 duration-200 sm:items-center">
       <div className="absolute inset-0" onClick={onClose} />
 
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        className="relative z-10 flex h-[92vh] w-full max-w-2xl flex-col rounded-t-xl border border-white/10 bg-[#101315] p-4 sm:h-auto sm:max-h-[90vh] sm:rounded-xl"
+        className="relative z-10 flex h-[92vh] w-full max-w-2xl flex-col rounded-t-xl border border-white/10 bg-[var(--onyx)] p-4 animate-in slide-in-from-bottom-4 duration-300 sm:h-auto sm:max-h-[90vh] sm:rounded-xl sm:zoom-in-95"
       >
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="text-base font-semibold text-ivory">{displayEntry.symbol} Trade</h2>
             <p className="text-xs text-muted-foreground">{formatDate(displayEntry.trade_date)}</p>
           </div>
-          <button
+          <Button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-white/10 p-2 text-muted-foreground hover:text-ivory"
+            variant="luxury-outline"
+            size="icon-sm"
+            className="h-10 w-10 text-muted-foreground hover:text-ivory"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         <div className="grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
@@ -212,52 +215,60 @@ export function EntryDetailSheet({
         <div className="mt-4 flex items-center justify-end gap-2 border-t border-white/10 pt-4">
           {/* Share to Community button — only for closed trades with P&L */}
           {!displayEntry.is_open && displayEntry.pnl != null && (
-            <button
+            <Button
               type="button"
               onClick={() => {
                 Analytics.trackMembersSocialAction('share_trade')
                 setShareOpen(true)
               }}
               disabled={disableActions || alreadyShared}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-emerald-500/40 px-4 text-sm text-emerald-400 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              variant="luxury-outline"
+              size="sm"
+              className="h-10 border-emerald-500/40 px-4 text-emerald-400 hover:bg-emerald-500/10"
             >
               <Share2 className="h-4 w-4" />
               {alreadyShared ? 'Shared' : 'Share'}
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             type="button"
             onClick={() => {
               Analytics.trackJournalAction('grade_trade')
               void handleGrade()
             }}
             disabled={disableActions || grading || Boolean(displayEntry.ai_analysis)}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+            variant="luxury-outline"
+            size="sm"
+            className="h-10 px-4"
           >
             {grading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-4 w-4" />}
             {displayEntry.ai_analysis ? 'Graded' : grading ? 'Grading...' : 'Grade Trade'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => onEdit(entry)}
             disabled={disableActions}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 px-4 text-sm text-ivory hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+            variant="luxury-outline"
+            size="sm"
+            className="h-10 px-4"
           >
             <Pencil className="h-4 w-4" />
             Edit
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => {
               onDelete(entry.id)
               onClose()
             }}
             disabled={disableActions}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-red-500/40 px-4 text-sm text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+            variant="destructive"
+            size="sm"
+            className="h-10 border-red-500/40 px-4 text-red-300 hover:bg-red-500/20"
           >
             <Trash2 className="h-4 w-4" />
             Delete
-          </button>
+          </Button>
         </div>
       </div>
 

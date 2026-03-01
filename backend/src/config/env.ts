@@ -79,6 +79,17 @@ const envSchema = z.object({
   SPX_WEIGHTED_CONFLUENCE_ENABLED: booleanFromEnv.default(false),
   SPX_ADAPTIVE_EV_ENABLED: booleanFromEnv.default(false),
   SPX_EV_SLIPPAGE_R: z.string().default('0.05').transform(Number),
+
+  // Same-Day Replay
+  REPLAY_SNAPSHOT_ENABLED: booleanFromEnv.default(true),
+  REPLAY_SNAPSHOT_INTERVAL_MS: z.string().default('60000').transform(Number),
+  DISCORD_BOT_ENABLED: booleanFromEnv.default(false),
+  DISCORD_BOT_TOKEN: z.string().optional(),
+  DISCORD_BOT_GUILD_IDS: z.string().default(''),
+  DISCORD_BOT_CHANNEL_IDS: z.string().default(''),
+  REPLAY_V2_ENABLED: booleanFromEnv.default(false),
+  DRILL_MODE_ENABLED: booleanFromEnv.default(false),
+
   ALPHA_VANTAGE_API_KEY: z.string().optional(),
   ALPHA_VANTAGE_BASE_URL: z.string().url().optional(),
 

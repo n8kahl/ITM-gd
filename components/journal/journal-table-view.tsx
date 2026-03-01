@@ -3,6 +3,7 @@
 import { Star, Pencil, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { JournalEntry } from '@/lib/types/journal'
+import { Button } from '@/components/ui/button'
 
 function formatDate(dateStr: string): string {
   const parsed = new Date(dateStr)
@@ -169,25 +170,29 @@ export function JournalTableView({
                     </div>
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
+                    <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                      <Button
                         type="button"
                         aria-label="Edit trade"
                         disabled={disableActions}
                         onClick={(e) => { e.stopPropagation(); onEditEntry(entry) }}
-                        className="focus-champagne p-1.5 rounded-md hover:bg-white/[0.06] text-muted-foreground hover:text-ivory transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="focus-champagne h-11 w-11 rounded-md text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-ivory disabled:cursor-not-allowed disabled:opacity-50 md:h-8 md:w-8"
                       >
                         <Pencil strokeWidth={1.5} className="w-3.5 h-3.5" />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
                         aria-label="Delete trade"
                         disabled={disableActions}
                         onClick={(e) => { e.stopPropagation(); onDeleteEntry(entry.id) }}
-                        className="focus-champagne p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="focus-champagne h-11 w-11 rounded-md text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50 md:h-8 md:w-8"
                       >
                         <Trash2 strokeWidth={1.5} className="w-3.5 h-3.5" />
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>

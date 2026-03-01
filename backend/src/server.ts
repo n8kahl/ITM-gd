@@ -45,6 +45,11 @@ import { startSpxEodCleanupWorker, stopSpxEodCleanupWorker } from './workers/spx
 import { startSpxTtlEnforcementWorker, stopSpxTtlEnforcementWorker } from './workers/spxTtlEnforcementWorker';
 import { restoreTickEvaluatorState, persistTickEvaluatorState } from './services/spx/tickEvaluator';
 import { getSPXSnapshot } from './services/spx';
+import { replaySnapshotWriter } from './services/spx/replaySnapshotWriter';
+import { discordBot } from './services/discord/discordBot';
+import { parseDiscordMessageWithFallback } from './services/discord/messageParser';
+import { discordBroadcaster } from './services/discord/discordBroadcaster';
+import { discordPersistence, persistThenBroadcastDiscordSignal } from './services/discord/discordPersistence';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -243,6 +248,33 @@ async function start() {
     startPortfolioSyncWorker();
     startSpxEodCleanupWorker();
     startSpxTtlEnforcementWorker();
+    if (env.REPLAY_SNAPSHOT_ENABLED) {
+      replaySnapshotWriter.start();
+      logger.info('Replay snapshot writer lifecycle started');
+    }
+    if (env.DISCORD_BOT_ENABLED) {
+      discordBot.setMessageHandler(async (payload) => {
+        if (payload.authorIsBot) {
+          return;
+        }
+
+        try {
+          const parsed = await parseDiscordMessageWithFallback(payload);
+          await persistThenBroadcastDiscordSignal(parsed, {
+            persistence: discordPersistence,
+            broadcaster: discordBroadcaster,
+            logger,
+          });
+        } catch (error) {
+          logger.warn('Discord message pipeline failed; continuing fail-open', {
+            error: error instanceof Error ? error.message : String(error),
+            messageId: payload.messageId,
+            channelId: payload.channelId,
+          });
+        }
+      });
+      await discordBot.start();
+    }
 
     // Restore tick evaluator state from Redis (survives backend restarts)
     restoreTickEvaluatorState().then((count) => {
@@ -290,6 +322,8 @@ async function gracefulShutdown(signal: string) {
     stopPortfolioSyncWorker();
     stopSpxEodCleanupWorker();
     stopSpxTtlEnforcementWorker();
+    await replaySnapshotWriter.stop();
+    await discordBot.stop();
 
     // Persist tick evaluator state before shutdown
     await persistTickEvaluatorState().catch((err) => {

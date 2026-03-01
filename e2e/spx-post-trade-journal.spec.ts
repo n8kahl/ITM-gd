@@ -12,7 +12,7 @@ test.describe('SPX post-trade journal capture', () => {
 
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
 
-    const primaryCta = page.getByTestId('spx-action-primary-cta')
+    const primaryCta = page.getByTestId('spx-action-primary-cta-desktop')
     const initialLabel = (await primaryCta.textContent())?.trim() || ''
     if (initialLabel === 'Select Best Setup') {
       await primaryCta.click()

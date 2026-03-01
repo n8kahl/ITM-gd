@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, X } from 'lucide-react'
 import type { JournalEntry } from '@/lib/types/journal'
+import { Button } from '@/components/ui/button'
 import { useFocusTrap } from '@/hooks/use-focus-trap'
 import { QuickEntryForm } from '@/components/journal/quick-entry-form'
 import { FullEntryForm } from '@/components/journal/full-entry-form'
@@ -154,13 +155,19 @@ export function TradeEntrySheet({
   const containerRef = useRef<HTMLDivElement>(null)
   const initialScreenshotPathRef = useRef('')
   const transientScreenshotPathsRef = useRef<Set<string>>(new Set())
+  const dragStartYRef = useRef<number | null>(null)
+  const dragPointerIdRef = useRef<number | null>(null)
+  const dragOffsetRef = useRef(0)
   const [values, setValues] = useState<EntryFormValues>(EMPTY_VALUES)
   const [mode, setMode] = useState<'quick' | 'full'>('quick')
   const [saving, setSaving] = useState(false)
   const [symbolError, setSymbolError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [isMobileSheet, setIsMobileSheet] = useState(false)
+  const [isDraggingSheet, setIsDraggingSheet] = useState(false)
+  const [sheetDragOffset, setSheetDragOffset] = useState(0)
 
-  const cleanupTransientScreenshots = async () => {
+  const cleanupTransientScreenshots = useCallback(async () => {
     const pendingPaths = Array.from(transientScreenshotPathsRef.current)
     transientScreenshotPathsRef.current.clear()
 
@@ -173,20 +180,18 @@ export function TradeEntrySheet({
         // Best-effort cleanup; failures should not block user flow.
       }
     }))
-  }
+  }, [])
 
-  const closeWithoutSave = () => {
+  const closeWithoutSave = useCallback(() => {
     if (saving) return
     void cleanupTransientScreenshots()
     onClose()
-  }
+  }, [cleanupTransientScreenshots, onClose, saving])
 
   useFocusTrap({
     active: open,
     containerRef,
-    onEscape: () => {
-      closeWithoutSave()
-    },
+    onEscape: closeWithoutSave,
   })
 
   useEffect(() => {
@@ -198,7 +203,23 @@ export function TradeEntrySheet({
     setSaveError(null)
     initialScreenshotPathRef.current = editEntry?.screenshot_storage_path ?? ''
     transientScreenshotPathsRef.current = new Set()
+    dragStartYRef.current = null
+    dragPointerIdRef.current = null
+    dragOffsetRef.current = 0
+    setIsDraggingSheet(false)
+    setSheetDragOffset(0)
   }, [editEntry, open])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const mediaQuery = window.matchMedia('(max-width: 767px)')
+    const syncMobileState = () => setIsMobileSheet(mediaQuery.matches)
+
+    syncMobileState()
+    mediaQuery.addEventListener('change', syncMobileState)
+    return () => mediaQuery.removeEventListener('change', syncMobileState)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -212,6 +233,46 @@ export function TradeEntrySheet({
   }, [open])
 
   const canSave = useMemo(() => !disabled && !saving, [disabled, saving])
+
+  const handleSheetDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isMobileSheet || saving || event.pointerType === 'mouse') return
+
+    dragStartYRef.current = event.clientY
+    dragPointerIdRef.current = event.pointerId
+    dragOffsetRef.current = 0
+    setIsDraggingSheet(true)
+    setSheetDragOffset(0)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }, [isMobileSheet, saving])
+
+  const handleSheetDragMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingSheet || event.pointerId !== dragPointerIdRef.current || dragStartYRef.current == null) return
+
+    const delta = Math.max(0, event.clientY - dragStartYRef.current)
+    dragOffsetRef.current = delta
+    setSheetDragOffset(delta)
+  }, [isDraggingSheet])
+
+  const handleSheetDragEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingSheet || event.pointerId !== dragPointerIdRef.current) return
+
+    const shouldDismiss = dragOffsetRef.current >= 120
+    dragStartYRef.current = null
+    dragPointerIdRef.current = null
+    dragOffsetRef.current = 0
+    setIsDraggingSheet(false)
+    setSheetDragOffset(0)
+
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    } catch {
+      // Pointer may already be released on some mobile browsers.
+    }
+
+    if (shouldDismiss) {
+      closeWithoutSave()
+    }
+  }, [closeWithoutSave, isDraggingSheet])
 
   const updateValue = (key: keyof EntryFormValues, value: string | boolean) => {
     setValues((prev) => {
@@ -318,7 +379,7 @@ export function TradeEntrySheet({
   if (!open || typeof document === 'undefined') return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 animate-in fade-in-0 duration-200 sm:items-center sm:p-6">
       <div
         className="absolute inset-0"
         onClick={() => {
@@ -330,40 +391,62 @@ export function TradeEntrySheet({
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        className="relative z-10 flex w-full max-w-4xl flex-col overflow-hidden rounded-t-xl border border-white/10 bg-[#101315] sm:max-h-[90vh] sm:rounded-xl"
+        className="relative z-10 flex w-full max-w-4xl flex-col overflow-hidden rounded-t-xl border border-white/10 bg-[var(--onyx)] animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[90vh] sm:rounded-xl sm:slide-in-from-bottom-0 sm:zoom-in-95"
+        style={{
+          transform: isMobileSheet ? `translateY(${sheetDragOffset}px)` : undefined,
+          transition: isMobileSheet && !isDraggingSheet
+            ? 'transform 220ms cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+            : undefined,
+        }}
       >
-        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-white/10 bg-[#101315] pb-4">
+        <div
+          className="flex justify-center py-2 sm:hidden touch-none"
+          onPointerDown={handleSheetDragStart}
+          onPointerMove={handleSheetDragMove}
+          onPointerUp={handleSheetDragEnd}
+          onPointerCancel={handleSheetDragEnd}
+        >
+          <div className="h-1.5 w-12 rounded-full bg-white/20" />
+        </div>
+
+        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-white/10 bg-[var(--onyx)] pb-4">
           <div>
             <h2 className="text-base font-semibold text-ivory">{editEntry ? 'Edit Trade' : 'New Trade'}</h2>
             <p className="text-xs text-muted-foreground">Manual entry only. Session prefill is removed in V2.</p>
           </div>
-          <button
+          <Button
             type="button"
             onClick={closeWithoutSave}
             disabled={saving}
-            className="rounded-md border border-white/10 p-2 text-muted-foreground hover:text-ivory"
+            variant="luxury-outline"
+            size="icon-sm"
+            className="h-10 w-10 text-muted-foreground hover:text-ivory"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
           <div className="mb-4 flex gap-2">
-            <button
+            <Button
               type="button"
               onClick={() => setMode('quick')}
-              className={`rounded-md px-3 py-1.5 text-xs ${mode === 'quick' ? 'bg-emerald-600 text-white' : 'border border-white/10 text-muted-foreground'}`}
+              variant={mode === 'quick' ? 'default' : 'luxury-outline'}
+              size="sm"
+              className="h-10 px-3 text-xs"
             >
               Quick Form
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => setMode('full')}
-              className={`rounded-md px-3 py-1.5 text-xs ${mode === 'full' ? 'bg-emerald-600 text-white' : 'border border-white/10 text-muted-foreground'}`}
+              variant={mode === 'full' ? 'default' : 'luxury-outline'}
+              size="sm"
+              className="h-10 px-3 text-xs"
             >
               Full Form
-            </button>
+            </Button>
           </div>
 
           {mode === 'quick' ? (
@@ -396,24 +479,27 @@ export function TradeEntrySheet({
         </div>
 
         {mode === 'full' && (
-          <div className="sticky bottom-0 z-10 flex shrink-0 items-center justify-end gap-2 border-t border-white/10 bg-[#101315] p-4">
-            <button
+          <div className="sticky bottom-0 z-10 flex shrink-0 items-center justify-end gap-2 border-t border-white/10 bg-[var(--onyx)] p-4">
+            <Button
               type="button"
               onClick={closeWithoutSave}
               disabled={saving}
-              className="h-10 rounded-md border border-white/10 px-4 text-sm text-muted-foreground hover:text-ivory"
+              variant="luxury-outline"
+              size="sm"
+              className="h-10 px-4 text-muted-foreground hover:text-ivory"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={handleSave}
               disabled={!canSave}
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+              size="sm"
+              className="h-10 px-4"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Save
-            </button>
+            </Button>
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { X, BookOpen } from 'lucide-react'
 import { JournalCardView } from '@/components/journal/journal-card-view'
 import { JournalTableView } from '@/components/journal/journal-table-view'
+import { Button } from '@/components/ui/button'
 import type { JournalEntry, JournalFilters } from '@/lib/types/journal'
 import { DEFAULT_JOURNAL_FILTERS } from '@/lib/types/journal'
 import { sanitizeJournalEntries } from '@/lib/journal/sanitize-entry'
@@ -92,7 +93,7 @@ export function JournalSlideOver({ open, onClose, initialFilters }: JournalSlide
 
       {/* Slide-over panel */}
       <div
-        className="fixed inset-y-0 right-0 z-[61] flex w-full max-w-xl flex-col border-l border-white/10 bg-[#0B0D10]"
+        className="fixed inset-y-0 right-0 z-[61] flex w-full max-w-xl flex-col border-l border-white/10 bg-[var(--onyx)] animate-in slide-in-from-right-8 duration-300"
         role="dialog"
         aria-modal="true"
         aria-label="Trade Journal"
@@ -108,14 +109,16 @@ export function JournalSlideOver({ open, onClose, initialFilters }: JournalSlide
               {entries.length} entries
             </span>
           </div>
-          <button
+          <Button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-white/10 bg-white/5 p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white/80"
+            variant="luxury-outline"
+            size="icon-sm"
+            className="h-10 w-10 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80"
             aria-label="Close journal"
           >
             <X className="h-4 w-4" strokeWidth={1.5} />
-          </button>
+          </Button>
         </div>
 
         {/* Content */}

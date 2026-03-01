@@ -306,6 +306,18 @@
     letter-spacing: 0.01em;
   }
 
+  /* Keep numeric inputs clean in premium form surfaces. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
   /* Data hierarchy - Geist Mono for terminal precision */
   .font-mono,
   table th,

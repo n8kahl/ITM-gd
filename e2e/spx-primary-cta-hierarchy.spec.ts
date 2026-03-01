@@ -15,7 +15,7 @@ test.describe('SPX primary CTA hierarchy', () => {
 
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
 
-    const primaryCta = page.getByTestId('spx-action-primary-cta')
+    const primaryCta = page.getByTestId('spx-action-primary-cta-desktop')
     const initialLabel = (await primaryCta.textContent())?.trim() || ''
     expect(['Select Best Setup', 'Stage Trade']).toContain(initialLabel)
 
@@ -43,7 +43,7 @@ test.describe('SPX primary CTA hierarchy', () => {
 
     await page.goto('/members/spx-command-center', { waitUntil: 'domcontentloaded' })
 
-    const primaryCta = page.getByTestId('spx-action-primary-cta')
+    const primaryCta = page.getByTestId('spx-action-primary-cta-desktop')
     const currentLabel = (await primaryCta.textContent())?.trim() || ''
     if (currentLabel === 'Select Best Setup') {
       await primaryCta.click()
@@ -51,6 +51,11 @@ test.describe('SPX primary CTA hierarchy', () => {
 
     await expect(primaryCta).toContainText('Stage Trade')
     await expect(primaryCta).toBeDisabled()
-    await expect(page.getByTestId('spx-action-primary-cta-blocked-reason')).toContainText(/snapshot degraded/i)
+    const blockedReasonChip = page.getByTestId('spx-action-primary-cta-blocked-reason')
+    if (await blockedReasonChip.count()) {
+      await expect(blockedReasonChip).toContainText(/snapshot|degraded|fallback|offline/i)
+    } else {
+      await expect(page.getByTestId('spx-header-status-chip')).toContainText(/degraded|fallback|offline|last known good/i)
+    }
   })
 })

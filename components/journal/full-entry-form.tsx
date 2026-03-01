@@ -1,6 +1,17 @@
 'use client'
 
 import { ScreenshotUploadZone } from '@/components/journal/screenshot-upload-zone'
+import { DatePickerField } from '@/components/journal/date-picker-field'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 
 interface FullEntryValues {
   trade_date: string
@@ -47,96 +58,111 @@ interface FullEntryFormProps {
   onChange: (key: keyof FullEntryValues, value: string | boolean) => void
 }
 
+const fieldInputClassName = 'h-10 border-white/10 bg-black/20 text-sm text-ivory placeholder:text-muted-foreground focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/50'
+const fieldSelectClassName = 'h-10 border-white/10 bg-black/20 text-sm text-ivory focus:ring-2 focus:ring-emerald-500/50'
+const textAreaClassName = 'min-h-[90px] border-white/10 bg-black/20 text-sm text-ivory placeholder:text-muted-foreground transition-colors duration-300 hover:border-white/20 focus-visible:ring-2 focus-visible:ring-emerald-500/50'
+
 export function FullEntryForm({ values, symbolError, disabled = false, onChange }: FullEntryFormProps) {
   const isOptions = values.contract_type === 'call' || values.contract_type === 'put'
 
   return (
     <div className="space-y-4">
-      {/* 1. Core Trade Details - Open by default */}
       <details open className="rounded-lg border border-white/10 bg-white/5">
         <summary className="cursor-pointer p-3 text-sm font-medium text-ivory">Core Trade Details</summary>
         <div className="space-y-3 p-3 pt-0">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">Trade Date</label>
-              <input
-                type="date"
-                value={values.trade_date}
-                onChange={(e) => onChange('trade_date', e.target.value)}
-                className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+              <DatePickerField
+                value={values.trade_date || null}
+                placeholder="Select trade date"
+                ariaLabel="Trade date"
+                onChange={(date) => onChange('trade_date', date ?? '')}
                 disabled={disabled}
+                className="w-full"
               />
             </div>
+
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">Symbol</label>
-              <input
+              <Input
                 value={values.symbol}
-                onChange={(e) => onChange('symbol', e.target.value.toUpperCase())}
-                className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+                onChange={(event) => onChange('symbol', event.target.value.toUpperCase())}
+                className={fieldInputClassName}
                 placeholder="AAPL"
                 disabled={disabled}
               />
               {symbolError && <p className="mt-1 text-xs text-red-400">{symbolError}</p>}
             </div>
+
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">Direction</label>
-              <select
+              <Select
                 value={values.direction}
-                onChange={(e) => onChange('direction', e.target.value as 'long' | 'short')}
-                className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+                onValueChange={(value) => onChange('direction', value as 'long' | 'short')}
                 disabled={disabled}
               >
-                <option value="long">Long</option>
-                <option value="short">Short</option>
-              </select>
+                <SelectTrigger className={fieldSelectClassName} aria-label="Direction">
+                  <SelectValue placeholder="Direction" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="long">Long</SelectItem>
+                  <SelectItem value="short">Short</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">Contract Type</label>
-              <select
+              <Select
                 value={values.contract_type}
-                onChange={(e) => onChange('contract_type', e.target.value as 'stock' | 'call' | 'put')}
-                className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+                onValueChange={(value) => onChange('contract_type', value as 'stock' | 'call' | 'put')}
                 disabled={disabled}
               >
-                <option value="stock">Stock</option>
-                <option value="call">Call</option>
-                <option value="put">Put</option>
-              </select>
+                <SelectTrigger className={fieldSelectClassName} aria-label="Contract Type">
+                  <SelectValue placeholder="Contract type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="stock">Stock</SelectItem>
+                  <SelectItem value="call">Call</SelectItem>
+                  <SelectItem value="put">Put</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Field value={values.entry_price} label="Entry Price" onChange={(v) => onChange('entry_price', v)} type="number" disabled={disabled} />
-            <Field value={values.exit_price} label="Exit Price" onChange={(v) => onChange('exit_price', v)} type="number" disabled={disabled} />
-            <Field value={values.position_size} label="Position Size" onChange={(v) => onChange('position_size', v)} type="number" disabled={disabled} />
-            <Field value={values.pnl} label="P&L" onChange={(v) => onChange('pnl', v)} type="number" disabled={disabled} />
-            <Field value={values.pnl_percentage} label="P&L %" onChange={(v) => onChange('pnl_percentage', v)} type="number" step="0.0001" disabled={disabled} />
+
+            <Field value={values.entry_price} label="Entry Price" onChange={(value) => onChange('entry_price', value)} type="number" disabled={disabled} />
+            <Field value={values.exit_price} label="Exit Price" onChange={(value) => onChange('exit_price', value)} type="number" disabled={disabled} />
+            <Field value={values.position_size} label="Position Size" onChange={(value) => onChange('position_size', value)} type="number" disabled={disabled} />
+            <Field value={values.pnl} label="P&L" onChange={(value) => onChange('pnl', value)} type="number" disabled={disabled} />
+            <Field value={values.pnl_percentage} label="P&L %" onChange={(value) => onChange('pnl_percentage', value)} type="number" step="0.0001" disabled={disabled} />
           </div>
         </div>
       </details>
 
-      {/* 2. Risk Management */}
       <details className="rounded-lg border border-white/10 bg-white/5">
         <summary className="cursor-pointer p-3 text-sm font-medium text-ivory">Risk Management</summary>
         <div className="space-y-3 p-3 pt-0">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Field value={values.stop_loss} label="Stop Loss" onChange={(v) => onChange('stop_loss', v)} type="number" disabled={disabled} />
-            <Field value={values.initial_target} label="Initial Target" onChange={(v) => onChange('initial_target', v)} type="number" disabled={disabled} />
-            <div className="flex items-end gap-2">
-              <input
+            <Field value={values.stop_loss} label="Stop Loss" onChange={(value) => onChange('stop_loss', value)} type="number" disabled={disabled} />
+            <Field value={values.initial_target} label="Initial Target" onChange={(value) => onChange('initial_target', value)} type="number" disabled={disabled} />
+
+            <div className="flex items-end gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+              <Checkbox
                 id="is-open"
-                type="checkbox"
                 checked={values.is_open}
-                onChange={(e) => onChange('is_open', e.target.checked)}
+                onCheckedChange={(checked) => onChange('is_open', checked === true)}
                 disabled={disabled}
-                className="h-4 w-4"
               />
               <label htmlFor="is-open" className="text-xs text-muted-foreground">Open position</label>
             </div>
           </div>
+
           <div>
             <label className="mb-1 block text-xs text-muted-foreground">Strategy</label>
-            <input
+            <Input
               value={values.strategy}
-              onChange={(e) => onChange('strategy', e.target.value)}
-              className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+              onChange={(event) => onChange('strategy', event.target.value)}
+              className={fieldInputClassName}
               placeholder="e.g., Bull flag breakout, VWAP bounce"
               disabled={disabled}
             />
@@ -144,63 +170,69 @@ export function FullEntryForm({ values, symbolError, disabled = false, onChange 
         </div>
       </details>
 
-      {/* 3. Options Details - Only show for call/put */}
       {isOptions && (
         <details className="rounded-lg border border-white/10 bg-white/5">
           <summary className="cursor-pointer p-3 text-sm font-medium text-ivory">Options Details</summary>
           <div className="space-y-3 p-3 pt-0">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <Field value={values.strike_price} label="Strike Price" onChange={(v) => onChange('strike_price', v)} type="number" disabled={disabled} />
+              <Field value={values.strike_price} label="Strike Price" onChange={(value) => onChange('strike_price', value)} type="number" disabled={disabled} />
+
               <div>
                 <label className="mb-1 block text-xs text-muted-foreground">Expiration Date</label>
-                <input
-                  type="date"
-                  value={values.expiration_date}
-                  onChange={(e) => onChange('expiration_date', e.target.value)}
-                  className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+                <DatePickerField
+                  value={values.expiration_date || null}
+                  placeholder="Select expiration"
+                  ariaLabel="Expiration date"
+                  onChange={(date) => onChange('expiration_date', date ?? '')}
                   disabled={disabled}
                 />
               </div>
-              <Field value={values.dte_at_entry} label="DTE at Entry" onChange={(v) => onChange('dte_at_entry', v)} type="number" disabled={disabled} />
-              <Field value={values.iv_at_entry} label="IV at Entry (%)" onChange={(v) => onChange('iv_at_entry', v)} type="number" disabled={disabled} />
-              <Field value={values.delta_at_entry} label="Delta" onChange={(v) => onChange('delta_at_entry', v)} type="number" step="0.01" disabled={disabled} />
-              <Field value={values.theta_at_entry} label="Theta" onChange={(v) => onChange('theta_at_entry', v)} type="number" step="0.01" disabled={disabled} />
-              <Field value={values.gamma_at_entry} label="Gamma" onChange={(v) => onChange('gamma_at_entry', v)} type="number" step="0.01" disabled={disabled} />
-              <Field value={values.vega_at_entry} label="Vega" onChange={(v) => onChange('vega_at_entry', v)} type="number" step="0.01" disabled={disabled} />
-              <Field value={values.underlying_at_entry} label="Underlying at Entry" onChange={(v) => onChange('underlying_at_entry', v)} type="number" disabled={disabled} />
-              <Field value={values.underlying_at_exit} label="Underlying at Exit" onChange={(v) => onChange('underlying_at_exit', v)} type="number" disabled={disabled} />
+
+              <Field value={values.dte_at_entry} label="DTE at Entry" onChange={(value) => onChange('dte_at_entry', value)} type="number" disabled={disabled} />
+              <Field value={values.iv_at_entry} label="IV at Entry (%)" onChange={(value) => onChange('iv_at_entry', value)} type="number" disabled={disabled} />
+              <Field value={values.delta_at_entry} label="Delta" onChange={(value) => onChange('delta_at_entry', value)} type="number" step="0.01" disabled={disabled} />
+              <Field value={values.theta_at_entry} label="Theta" onChange={(value) => onChange('theta_at_entry', value)} type="number" step="0.01" disabled={disabled} />
+              <Field value={values.gamma_at_entry} label="Gamma" onChange={(value) => onChange('gamma_at_entry', value)} type="number" step="0.01" disabled={disabled} />
+              <Field value={values.vega_at_entry} label="Vega" onChange={(value) => onChange('vega_at_entry', value)} type="number" step="0.01" disabled={disabled} />
+              <Field value={values.underlying_at_entry} label="Underlying at Entry" onChange={(value) => onChange('underlying_at_entry', value)} type="number" disabled={disabled} />
+              <Field value={values.underlying_at_exit} label="Underlying at Exit" onChange={(value) => onChange('underlying_at_exit', value)} type="number" disabled={disabled} />
             </div>
           </div>
         </details>
       )}
 
-      {/* 4. Psychology & Discipline */}
       <details className="rounded-lg border border-white/10 bg-white/5">
         <summary className="cursor-pointer p-3 text-sm font-medium text-ivory">Psychology & Discipline</summary>
         <div className="space-y-3 p-3 pt-0">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <MoodSelect value={values.mood_before} label="Mood Before Trade" onChange={(v) => onChange('mood_before', v)} disabled={disabled} />
-            <MoodSelect value={values.mood_after} label="Mood After Trade" onChange={(v) => onChange('mood_after', v)} disabled={disabled} />
-            <Field value={values.discipline_score} label="Discipline Score (1-5)" onChange={(v) => onChange('discipline_score', v)} type="number" disabled={disabled} />
+            <MoodSelect value={values.mood_before} label="Mood Before Trade" onChange={(value) => onChange('mood_before', value)} disabled={disabled} />
+            <MoodSelect value={values.mood_after} label="Mood After Trade" onChange={(value) => onChange('mood_after', value)} disabled={disabled} />
+            <Field value={values.discipline_score} label="Discipline Score (1-5)" onChange={(value) => onChange('discipline_score', value)} type="number" disabled={disabled} />
+
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">Followed Plan?</label>
-              <select
-                value={values.followed_plan}
-                onChange={(e) => onChange('followed_plan', e.target.value as '' | 'yes' | 'no')}
-                className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+              <Select
+                value={values.followed_plan || 'unset'}
+                onValueChange={(value) => onChange('followed_plan', value === 'unset' ? '' : value as '' | 'yes' | 'no')}
                 disabled={disabled}
               >
-                <option value="">Not set</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
+                <SelectTrigger className={fieldSelectClassName} aria-label="Followed Plan">
+                  <SelectValue placeholder="Followed plan?" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unset">Not set</SelectItem>
+                  <SelectItem value="yes">Yes</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
             <div className="md:col-span-2">
               <label className="mb-1 block text-xs text-muted-foreground">Deviation Notes</label>
-              <textarea
+              <Textarea
                 value={values.deviation_notes}
-                onChange={(e) => onChange('deviation_notes', e.target.value)}
-                className="min-h-[80px] w-full rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-ivory"
+                onChange={(event) => onChange('deviation_notes', event.target.value)}
+                className={textAreaClassName}
                 placeholder="How did you deviate from your plan?"
                 disabled={disabled}
               />
@@ -209,30 +241,29 @@ export function FullEntryForm({ values, symbolError, disabled = false, onChange 
         </div>
       </details>
 
-      {/* 5. Notes & Lessons */}
       <details className="rounded-lg border border-white/10 bg-white/5">
         <summary className="cursor-pointer p-3 text-sm font-medium text-ivory">Notes & Lessons</summary>
         <div className="space-y-3 p-3 pt-0">
-          <TextArea value={values.setup_notes} label="Setup Notes" onChange={(v) => onChange('setup_notes', v)} placeholder="What was your trade setup?" disabled={disabled} />
-          <TextArea value={values.execution_notes} label="Execution Notes" onChange={(v) => onChange('execution_notes', v)} placeholder="How did you execute?" disabled={disabled} />
-          <TextArea value={values.lessons_learned} label="Lessons Learned" onChange={(v) => onChange('lessons_learned', v)} placeholder="What did you learn?" disabled={disabled} />
+          <TextArea value={values.setup_notes} label="Setup Notes" onChange={(value) => onChange('setup_notes', value)} placeholder="What was your trade setup?" disabled={disabled} />
+          <TextArea value={values.execution_notes} label="Execution Notes" onChange={(value) => onChange('execution_notes', value)} placeholder="How did you execute?" disabled={disabled} />
+          <TextArea value={values.lessons_learned} label="Lessons Learned" onChange={(value) => onChange('lessons_learned', value)} placeholder="What did you learn?" disabled={disabled} />
+
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">Tags (comma-separated)</label>
-              <input
+              <Input
                 value={values.tags}
-                onChange={(e) => onChange('tags', e.target.value)}
-                className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+                onChange={(event) => onChange('tags', event.target.value)}
+                className={fieldInputClassName}
                 placeholder="breakout, FOMO, revenge-trade"
                 disabled={disabled}
               />
             </div>
-            <Field value={values.rating} label="Trade Rating (1-5)" onChange={(v) => onChange('rating', v)} type="number" disabled={disabled} />
+            <Field value={values.rating} label="Trade Rating (1-5)" onChange={(value) => onChange('rating', value)} type="number" disabled={disabled} />
           </div>
         </div>
       </details>
 
-      {/* 6. Screenshot */}
       <details className="rounded-lg border border-white/10 bg-white/5">
         <summary className="cursor-pointer p-3 text-sm font-medium text-ivory">Screenshot</summary>
         <div className="space-y-3 p-3 pt-0">
@@ -289,12 +320,13 @@ function Field({
   return (
     <div>
       <label className="mb-1 block text-xs text-muted-foreground">{label}</label>
-      <input
+      <Input
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         type={type}
+        inputMode={type === 'number' ? 'decimal' : undefined}
         step={step || (type === 'number' ? '0.01' : undefined)}
-        className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+        className={fieldInputClassName}
         disabled={disabled}
       />
     </div>
@@ -317,35 +349,49 @@ function TextArea({
   return (
     <div>
       <label className="mb-1 block text-xs text-muted-foreground">{label}</label>
-      <textarea
+      <Textarea
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="min-h-[90px] w-full rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-ivory placeholder:text-muted-foreground"
+        className={textAreaClassName}
         disabled={disabled}
       />
     </div>
   )
 }
 
-function MoodSelect({ value, label, onChange, disabled }: { value: string, label: string, onChange: (value: string) => void, disabled?: boolean }) {
+function MoodSelect({
+  value,
+  label,
+  onChange,
+  disabled,
+}: {
+  value: string
+  label: string
+  onChange: (value: string) => void
+  disabled?: boolean
+}) {
   return (
     <div>
       <label className="mb-1 block text-xs text-muted-foreground">{label}</label>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm text-ivory"
+      <Select
+        value={value || 'unset'}
+        onValueChange={(nextValue) => onChange(nextValue === 'unset' ? '' : nextValue)}
         disabled={disabled}
       >
-        <option value="">Not set</option>
-        <option value="confident">Confident</option>
-        <option value="neutral">Neutral</option>
-        <option value="anxious">Anxious</option>
-        <option value="frustrated">Frustrated</option>
-        <option value="excited">Excited</option>
-        <option value="fearful">Fearful</option>
-      </select>
+        <SelectTrigger className={fieldSelectClassName} aria-label={label}>
+          <SelectValue placeholder={label} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="unset">Not set</SelectItem>
+          <SelectItem value="confident">Confident</SelectItem>
+          <SelectItem value="neutral">Neutral</SelectItem>
+          <SelectItem value="anxious">Anxious</SelectItem>
+          <SelectItem value="frustrated">Frustrated</SelectItem>
+          <SelectItem value="excited">Excited</SelectItem>
+          <SelectItem value="fearful">Fearful</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   )
 }

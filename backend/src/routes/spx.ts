@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../config/database';
+import { getDailyAggregates, getMinuteAggregates, type MassiveAggregate } from '../config/massive';
 import { logger } from '../lib/logger';
 import { hasBackendAdminAccess } from '../lib/adminAccess';
+import { formatMassiveTicker } from '../lib/symbols';
 import { authenticateToken } from '../middleware/auth';
 import { requireTier } from '../middleware/requireTier';
 import { getPredictionState } from '../services/spx/aiPredictor';
@@ -50,7 +52,110 @@ import {
 const router = Router();
 const KNOWN_MISSING_RELATIONS = new Set<string>();
 const TRADE_STREAM_STALE_THRESHOLD_MS = 30_000;
+const REPLAY_SESSIONS_DEFAULT_WINDOW_DAYS = 30;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+type ReplaySessionQueryRow = {
+  id?: unknown;
+  session_date?: unknown;
+  channel_id?: unknown;
+  channel_name?: unknown;
+  caller_name?: unknown;
+  trade_count?: unknown;
+  net_pnl_pct?: unknown;
+  session_start?: unknown;
+  session_end?: unknown;
+  session_summary?: unknown;
+};
+
+type ReplayTradeQueryRow = {
+  id?: unknown;
+  trade_index?: unknown;
+  symbol?: unknown;
+  strike?: unknown;
+  contract_type?: unknown;
+  expiry?: unknown;
+  direction?: unknown;
+  entry_price?: unknown;
+  entry_timestamp?: unknown;
+  sizing?: unknown;
+  initial_stop?: unknown;
+  target_1?: unknown;
+  target_2?: unknown;
+  thesis_text?: unknown;
+  entry_condition?: unknown;
+  lifecycle_events?: unknown;
+  final_pnl_pct?: unknown;
+  is_winner?: unknown;
+  fully_exited?: unknown;
+  exit_timestamp?: unknown;
+  entry_snapshot_id?: unknown;
+};
+
+type ReplayMessageQueryRow = {
+  id?: unknown;
+  discord_msg_id?: unknown;
+  author_name?: unknown;
+  author_id?: unknown;
+  content?: unknown;
+  sent_at?: unknown;
+  is_signal?: unknown;
+  signal_type?: unknown;
+  parsed_trade_id?: unknown;
+  created_at?: unknown;
+};
+
+type ReplayChartBar = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+type ReplayPriorDayBar = {
+  high: number;
+  low: number;
+};
+
+const REPLAY_TRADE_SELECT_FIELDS = [
+  'id',
+  'trade_index',
+  'symbol',
+  'strike',
+  'contract_type',
+  'expiry',
+  'direction',
+  'entry_price',
+  'entry_timestamp',
+  'sizing',
+  'initial_stop',
+  'target_1',
+  'target_2',
+  'thesis_text',
+  'entry_condition',
+  'lifecycle_events',
+  'final_pnl_pct',
+  'is_winner',
+  'fully_exited',
+  'exit_timestamp',
+  'entry_snapshot_id',
+].join(',');
+
+const REPLAY_MESSAGE_SELECT_FIELDS = [
+  'id',
+  'discord_msg_id',
+  'author_name',
+  'author_id',
+  'content',
+  'sent_at',
+  'is_signal',
+  'signal_type',
+  'parsed_trade_id',
+  'created_at',
+].join(',');
 
 function parseBoolean(value: unknown): boolean {
   return String(value || '').toLowerCase() === 'true';
@@ -68,10 +173,26 @@ function parseFiniteNumber(value: unknown): number | null {
 function parseISODateInput(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  if (!ISO_DATE_REGEX.test(trimmed)) return null;
   const parsed = Date.parse(`${trimmed}T00:00:00Z`);
   if (!Number.isFinite(parsed)) return null;
   return trimmed;
+}
+
+function parseCalendarISODateInput(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!ISO_DATE_REGEX.test(trimmed)) return null;
+  const [yearStr, monthStr, dayStr] = trimmed.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const isValid = date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+  return isValid ? trimmed : null;
 }
 
 function dateDaysAgoET(days: number): string {
@@ -88,6 +209,179 @@ function parsePositiveInteger(value: unknown, fallback: number, min: number, max
 
 function isUuid(value: string): boolean {
   return UUID_REGEX.test(value);
+}
+
+function toNullableString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseEpochMs(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getPriorTradingDay(dateStr: string): string | null {
+  const [yearStr, monthStr, dayStr] = dateStr.split('-');
+  const year = Number.parseInt(yearStr || '', 10);
+  const month = Number.parseInt(monthStr || '', 10);
+  const day = Number.parseInt(dayStr || '', 10);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  date.setUTCDate(date.getUTCDate() - 1);
+  while (date.getUTCDay() === 0 || date.getUTCDay() === 6) {
+    date.setUTCDate(date.getUTCDate() - 1);
+  }
+
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function mapMassiveAggregatesToReplayBars(aggregates: MassiveAggregate[]): ReplayChartBar[] {
+  return (aggregates || [])
+    .map((bar) => {
+      const timeSeconds = Math.floor((parseFiniteNumber(bar.t) ?? 0) / 1000);
+      const open = parseFiniteNumber(bar.o);
+      const high = parseFiniteNumber(bar.h);
+      const low = parseFiniteNumber(bar.l);
+      const close = parseFiniteNumber(bar.c);
+      const volume = parseFiniteNumber(bar.v) ?? 0;
+
+      if (
+        !Number.isFinite(timeSeconds)
+        || timeSeconds <= 0
+        || open == null
+        || high == null
+        || low == null
+        || close == null
+      ) {
+        return null;
+      }
+
+      return {
+        time: timeSeconds,
+        open,
+        high,
+        low,
+        close,
+        volume,
+      };
+    })
+    .filter((bar): bar is ReplayChartBar => bar != null)
+    .sort((a, b) => a.time - b.time);
+}
+
+async function fetchReplaySessionMarketContext(
+  sessionDate: string,
+  symbol: string,
+): Promise<{ bars: ReplayChartBar[]; priorDayBar: ReplayPriorDayBar | null }> {
+  const replayDate = parseCalendarISODateInput(sessionDate);
+  if (!replayDate) {
+    return { bars: [], priorDayBar: null };
+  }
+
+  const ticker = formatMassiveTicker(symbol);
+  const priorDate = getPriorTradingDay(replayDate);
+  const [minuteBars, priorDailyBars] = await Promise.all([
+    getMinuteAggregates(ticker, replayDate),
+    priorDate ? getDailyAggregates(ticker, priorDate, priorDate) : Promise.resolve([] as MassiveAggregate[]),
+  ]);
+
+  const bars = mapMassiveAggregatesToReplayBars(minuteBars);
+
+  const priorDailyBar = Array.isArray(priorDailyBars) && priorDailyBars.length > 0
+    ? priorDailyBars[0]
+    : null;
+  const priorHigh = priorDailyBar ? parseFiniteNumber(priorDailyBar.h) : null;
+  const priorLow = priorDailyBar ? parseFiniteNumber(priorDailyBar.l) : null;
+  const priorDayBar = priorHigh != null && priorLow != null
+    ? { high: priorHigh, low: priorLow }
+    : null;
+
+  return { bars, priorDayBar };
+}
+
+function compareReplaySessionRows(a: ReplaySessionQueryRow, b: ReplaySessionQueryRow): number {
+  const aDate = typeof a.session_date === 'string' ? a.session_date : '';
+  const bDate = typeof b.session_date === 'string' ? b.session_date : '';
+  if (aDate !== bDate) return bDate.localeCompare(aDate);
+
+  const aStartMs = parseEpochMs(a.session_start) ?? 0;
+  const bStartMs = parseEpochMs(b.session_start) ?? 0;
+  if (aStartMs !== bStartMs) return bStartMs - aStartMs;
+
+  const aId = typeof a.id === 'string' ? a.id : '';
+  const bId = typeof b.id === 'string' ? b.id : '';
+  return aId.localeCompare(bId);
+}
+
+function mapReplayTradeRow(trade: ReplayTradeQueryRow) {
+  const tradeIndex = parseFiniteNumber(trade.trade_index);
+  return {
+    id: toNullableString(trade.id),
+    tradeIndex: tradeIndex == null ? 0 : Math.max(0, Math.trunc(tradeIndex)),
+    contract: {
+      symbol: toNullableString(trade.symbol),
+      strike: parseFiniteNumber(trade.strike),
+      type: toNullableString(trade.contract_type),
+      expiry: toNullableString(trade.expiry),
+    },
+    entry: {
+      direction: toNullableString(trade.direction),
+      price: parseFiniteNumber(trade.entry_price),
+      timestamp: toNullableString(trade.entry_timestamp),
+      sizing: toNullableString(trade.sizing),
+    },
+    stop: {
+      initial: parseFiniteNumber(trade.initial_stop),
+    },
+    targets: {
+      target1: parseFiniteNumber(trade.target_1),
+      target2: parseFiniteNumber(trade.target_2),
+    },
+    thesis: {
+      text: toNullableString(trade.thesis_text),
+      entryCondition: toNullableString(trade.entry_condition),
+    },
+    lifecycle: {
+      events: Array.isArray(trade.lifecycle_events) ? trade.lifecycle_events : [],
+    },
+    outcome: {
+      finalPnlPct: parseFiniteNumber(trade.final_pnl_pct),
+      isWinner: typeof trade.is_winner === 'boolean' ? trade.is_winner : null,
+      fullyExited: typeof trade.fully_exited === 'boolean' ? trade.fully_exited : null,
+      exitTimestamp: toNullableString(trade.exit_timestamp),
+    },
+    entrySnapshotId: toNullableString(trade.entry_snapshot_id),
+  };
+}
+
+function mapReplayMessageRow(message: ReplayMessageQueryRow) {
+  return {
+    id: toNullableString(message.id),
+    discordMessageId: toNullableString(message.discord_msg_id),
+    authorName: toNullableString(message.author_name),
+    authorId: toNullableString(message.author_id),
+    content: toNullableString(message.content),
+    sentAt: toNullableString(message.sent_at),
+    isSignal: typeof message.is_signal === 'boolean' ? message.is_signal : null,
+    signalType: toNullableString(message.signal_type),
+    parsedTradeId: toNullableString(message.parsed_trade_id),
+    createdAt: toNullableString(message.created_at),
+  };
 }
 
 function toTradeStreamFeedTrust(generatedAt: string): TradeStreamFeedTrustMetadata {
@@ -174,6 +468,390 @@ function parseSetupPayload(value: unknown): Setup | null {
 }
 
 router.use(authenticateToken, requireTier('pro'));
+
+router.get('/replay-sessions', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const isAdmin = await hasBackendAdminAccess(userId);
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin access required.',
+      });
+    }
+
+    const fromProvided = req.query.from !== undefined;
+    const toProvided = req.query.to !== undefined;
+    const parsedFrom = parseCalendarISODateInput(req.query.from);
+    const parsedTo = parseCalendarISODateInput(req.query.to);
+
+    if (fromProvided && !parsedFrom) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Query parameter "from" must be a valid date in YYYY-MM-DD format.',
+      });
+    }
+
+    if (toProvided && !parsedTo) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Query parameter "to" must be a valid date in YYYY-MM-DD format.',
+      });
+    }
+
+    const from = parsedFrom || dateDaysAgoET(REPLAY_SESSIONS_DEFAULT_WINDOW_DAYS - 1);
+    const to = parsedTo || dateDaysAgoET(0);
+    if (from > to) {
+      return res.status(400).json({
+        error: 'Invalid date range',
+        message: 'Query parameter "from" must be on or before "to" (YYYY-MM-DD).',
+      });
+    }
+
+    const channelId = toNullableString(req.query.channelId);
+    const symbol = toNullableString(req.query.symbol)?.toUpperCase() || null;
+
+    let sessionsQuery = supabase
+      .from('discord_trade_sessions')
+      .select(
+        'id,session_date,channel_id,channel_name,caller_name,trade_count,net_pnl_pct,session_start,session_end,session_summary'
+      )
+      .gte('session_date', from)
+      .lte('session_date', to);
+
+    if (channelId) {
+      sessionsQuery = sessionsQuery.eq('channel_id', channelId);
+    }
+
+    const { data: sessionsData, error: sessionsError } = await sessionsQuery.order('session_date', { ascending: false });
+    if (sessionsError) {
+      throw sessionsError;
+    }
+
+    let sessionRows = (Array.isArray(sessionsData) ? sessionsData : []) as ReplaySessionQueryRow[];
+
+    if (symbol && sessionRows.length > 0) {
+      const sessionIds = sessionRows
+        .map((row) => (typeof row.id === 'string' ? row.id : null))
+        .filter((value): value is string => Boolean(value));
+
+      if (sessionIds.length === 0) {
+        sessionRows = [];
+      } else {
+        const { data: symbolRows, error: symbolError } = await supabase
+          .from('discord_parsed_trades')
+          .select('session_id')
+          .eq('symbol', symbol)
+          .in('session_id', sessionIds);
+
+        if (symbolError) {
+          throw symbolError;
+        }
+
+        const matchedSessionIds = new Set(
+          (Array.isArray(symbolRows) ? symbolRows : [])
+            .map((row) => (typeof (row as { session_id?: unknown }).session_id === 'string'
+              ? String((row as { session_id: string }).session_id)
+              : null))
+            .filter((value): value is string => Boolean(value))
+        );
+
+        sessionRows = sessionRows.filter((row) => (
+          typeof row.id === 'string' && matchedSessionIds.has(row.id)
+        ));
+      }
+    }
+
+    sessionRows.sort(compareReplaySessionRows);
+
+    const sessions = sessionRows.map((row) => {
+      const tradeCount = parseFiniteNumber(row.trade_count);
+      return {
+        sessionId: typeof row.id === 'string' ? row.id : '',
+        sessionDate: toNullableString(row.session_date),
+        channel: {
+          id: toNullableString(row.channel_id),
+          name: toNullableString(row.channel_name),
+        },
+        caller: toNullableString(row.caller_name),
+        tradeCount: tradeCount == null ? 0 : Math.max(0, Math.trunc(tradeCount)),
+        netPnlPct: parseFiniteNumber(row.net_pnl_pct),
+        sessionStart: toNullableString(row.session_start),
+        sessionEnd: toNullableString(row.session_end),
+        sessionSummary: toNullableString(row.session_summary),
+      };
+    });
+
+    return res.json({
+      meta: {
+        from,
+        to,
+        channelId,
+        symbol,
+        defaultWindowDays: REPLAY_SESSIONS_DEFAULT_WINDOW_DAYS,
+        usedDefaultFrom: !parsedFrom,
+        usedDefaultTo: !parsedTo,
+      },
+      count: sessions.length,
+      sessions,
+    });
+  } catch (error) {
+    logger.error('SPX replay sessions list endpoint failed', {
+      from: req.query.from,
+      to: req.query.to,
+      channelId: req.query.channelId,
+      symbol: req.query.symbol,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load replay sessions.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/replay-sessions/:sessionId/trades', async (req: Request, res: Response) => {
+  try {
+    const sessionId = typeof req.params.sessionId === 'string' ? req.params.sessionId.trim() : '';
+    if (!isUuid(sessionId)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'sessionId must be a valid UUID.',
+      });
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const isAdmin = await hasBackendAdminAccess(userId);
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin access required.',
+      });
+    }
+
+    const symbol = toNullableString(req.query.symbol)?.toUpperCase() || null;
+
+    const { data: session, error: sessionError } = await supabase
+      .from('discord_trade_sessions')
+      .select('id,session_date')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (sessionError) {
+      throw sessionError;
+    }
+
+    if (!session) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    const sessionDate = toNullableString((session as { session_date?: unknown }).session_date);
+    if (!sessionDate) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    let tradesQuery = supabase
+      .from('discord_parsed_trades')
+      .select(REPLAY_TRADE_SELECT_FIELDS)
+      .eq('session_id', sessionId);
+
+    if (symbol) {
+      tradesQuery = tradesQuery.eq('symbol', symbol);
+    }
+
+    const { data: tradesData, error: tradesError } = await tradesQuery.order('trade_index', { ascending: true });
+    if (tradesError) {
+      throw tradesError;
+    }
+
+    const tradeRows = (Array.isArray(tradesData) ? tradesData : []) as ReplayTradeQueryRow[];
+    const trades = tradeRows.map(mapReplayTradeRow);
+
+    return res.json({
+      sessionId,
+      sessionDate,
+      symbol,
+      trades,
+      count: trades.length,
+    });
+  } catch (error) {
+    logger.error('SPX replay session trades endpoint failed', {
+      sessionId: req.params.sessionId,
+      symbol: req.query.symbol,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load replay session trades.',
+      retryAfter: 10,
+    });
+  }
+});
+
+router.get('/replay-sessions/:sessionId', async (req: Request, res: Response) => {
+  try {
+    const sessionId = typeof req.params.sessionId === 'string' ? req.params.sessionId.trim() : '';
+    if (!isUuid(sessionId)) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'sessionId must be a valid UUID.',
+      });
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required.',
+      });
+    }
+
+    const isAdmin = await hasBackendAdminAccess(userId);
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Admin access required.',
+      });
+    }
+
+    const symbol = toNullableString(req.query.symbol)?.toUpperCase() || 'SPX';
+
+    const { data: session, error: sessionError } = await supabase
+      .from('discord_trade_sessions')
+      .select('id,session_date,channel_id,channel_name,caller_name,trade_count,net_pnl_pct,session_start,session_end,session_summary')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (sessionError) {
+      throw sessionError;
+    }
+
+    if (!session) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    const sessionRow = session as ReplaySessionQueryRow;
+    const sessionDate = toNullableString(sessionRow.session_date);
+    if (!sessionDate) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: `Replay session ${sessionId} was not found.`,
+      });
+    }
+
+    const [{ data: snapshotsData, error: snapshotsError }, { data: tradesData, error: tradesError }, { data: messagesData, error: messagesError }] = await Promise.all([
+      supabase
+        .from('replay_snapshots')
+        .select('*')
+        .eq('session_date', sessionDate)
+        .eq('symbol', symbol)
+        .order('captured_at', { ascending: true }),
+      supabase
+        .from('discord_parsed_trades')
+        .select(REPLAY_TRADE_SELECT_FIELDS)
+        .eq('session_id', sessionId)
+        .eq('symbol', symbol)
+        .order('trade_index', { ascending: true }),
+      supabase
+        .from('discord_messages')
+        .select(REPLAY_MESSAGE_SELECT_FIELDS)
+        .eq('session_id', sessionId)
+        .order('sent_at', { ascending: true }),
+    ]);
+
+    if (snapshotsError) throw snapshotsError;
+    if (tradesError) throw tradesError;
+    if (messagesError) throw messagesError;
+
+    const snapshotRows = Array.isArray(snapshotsData) ? snapshotsData : [];
+    const tradeRows = (Array.isArray(tradesData) ? tradesData : []) as ReplayTradeQueryRow[];
+    const messageRows = (Array.isArray(messagesData) ? messagesData : []) as ReplayMessageQueryRow[];
+
+    const tradeCount = parseFiniteNumber(sessionRow.trade_count);
+    const trades = tradeRows.map(mapReplayTradeRow);
+    const messages = messageRows.map(mapReplayMessageRow);
+    let bars: ReplayChartBar[] = [];
+    let priorDayBar: ReplayPriorDayBar | null = null;
+
+    try {
+      const marketContext = await fetchReplaySessionMarketContext(sessionDate, symbol);
+      bars = marketContext.bars;
+      priorDayBar = marketContext.priorDayBar;
+    } catch (marketError) {
+      logger.warn('SPX replay session detail market-data enrichment failed', {
+        sessionId,
+        sessionDate,
+        symbol,
+        error: marketError instanceof Error ? marketError.message : String(marketError),
+      });
+      bars = [];
+      priorDayBar = null;
+    }
+
+    return res.json({
+      sessionId,
+      sessionDate,
+      symbol,
+      session: {
+        channel: {
+          id: toNullableString(sessionRow.channel_id),
+          name: toNullableString(sessionRow.channel_name),
+        },
+        caller: toNullableString(sessionRow.caller_name),
+        tradeCount: tradeCount == null ? 0 : Math.max(0, Math.trunc(tradeCount)),
+        netPnlPct: parseFiniteNumber(sessionRow.net_pnl_pct),
+        sessionStart: toNullableString(sessionRow.session_start),
+        sessionEnd: toNullableString(sessionRow.session_end),
+        sessionSummary: toNullableString(sessionRow.session_summary),
+      },
+      snapshots: snapshotRows,
+      trades,
+      messages,
+      bars,
+      priorDayBar,
+      counts: {
+        snapshots: snapshotRows.length,
+        trades: trades.length,
+        messages: messages.length,
+      },
+    });
+  } catch (error) {
+    logger.error('SPX replay session detail endpoint failed', {
+      sessionId: req.params.sessionId,
+      symbol: req.query.symbol,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(503).json({
+      error: 'Data unavailable',
+      message: 'Unable to load replay session detail.',
+      retryAfter: 10,
+    });
+  }
+});
 
 router.get('/replay-sessions/:sessionId/snapshots', async (req: Request, res: Response) => {
   try {

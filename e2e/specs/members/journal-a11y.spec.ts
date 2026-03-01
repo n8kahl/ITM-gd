@@ -113,7 +113,8 @@ test.describe('Trade Journal Accessibility', () => {
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     // Switch to cards view and open detail
-    await page.getByLabel('View').selectOption('cards')
+    await page.getByLabel('View').click()
+    await page.getByRole('option', { name: 'Cards', exact: true }).click()
     const spyCardOpen = page
       .locator('article')
       .filter({ has: page.getByRole('heading', { name: 'SPY' }) })

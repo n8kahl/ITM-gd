@@ -18,7 +18,7 @@ test.describe('SPX setup interaction', () => {
 
     await fadeSetupButton.click()
     await expect(fadeSetupCard).toHaveClass(/ring-1/)
-    await expect(page.getByText(spxMockContracts.primaryDescription)).toBeVisible()
+    await expect(page.getByRole('heading', { name: /6030C 2026-03-20|6020P 2026-03-20/i })).toBeVisible()
 
     await breakoutSetupButton.click()
 
@@ -54,7 +54,7 @@ test.describe('SPX setup interaction', () => {
     const fadeSetupButton = page.getByRole('button', { name: /bullish ranging.*actionable/i })
     const breakoutSetupButton = page.getByRole('button', { name: /bearish breakout.*triggered/i })
     const breakoutSetupCard = breakoutSetupButton.locator('..')
-    const primaryCta = page.getByTestId('spx-action-primary-cta')
+    const primaryCta = page.getByTestId('spx-action-primary-cta-desktop')
 
     await breakoutSetupButton.click()
     const initialPrimaryLabel = (await primaryCta.textContent())?.trim() || ''

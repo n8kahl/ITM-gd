@@ -8,6 +8,9 @@ import { createNeutralFlowWindowAggregation, getFlowWindowAggregation } from './
 import { computeUnifiedGEXLandscape } from './gexEngine';
 import { getMergedLevels } from './levelEngine';
 import { logger } from '../../lib/logger';
+import { getMultiTFConfluenceContext, type SPXMultiTFConfluenceContext } from './multiTFConfluence';
+import { replaySnapshotWriter } from './replaySnapshotWriter';
+import { classifyCurrentRegime } from './regimeClassifier';
 import {
   readSharedSnapshot,
   releaseSnapshotBuildLock,
@@ -15,7 +18,6 @@ import {
   waitForSharedSnapshot,
   writeSharedSnapshot,
 } from './snapshotCoordination';
-import { classifyCurrentRegime } from './regimeClassifier';
 import { detectActiveSetups, getLatestSetupEnvironmentState } from './setupDetector';
 import { applyTickStateToSetups, evaluateTickSetupTransitions, syncTickEvaluatorSetups, persistTickEvaluatorState } from './tickEvaluator';
 import { getLatestTick, isTickStreamHealthy } from '../tickCache';
@@ -49,6 +51,7 @@ const SNAPSHOT_STAGE_TIMEOUTS_MS = {
   spyImpact: 4_000,
   fib: 5_000,
   levels: 5_000,
+  multiTF: 4_000,
   regime: 4_000,
   setups: 5_000,
   prediction: 4_000,
@@ -71,6 +74,14 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
       clearTimeout(timeoutHandle);
     }
   }
+}
+
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') return true;
+  if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') return false;
+  return fallback;
 }
 
 // Throttled tick evaluator persistence — at most once per 30s
@@ -198,6 +209,81 @@ function getFallbackCoachMessages(snapshot: SPXSnapshot | null): CoachMessage[] 
   return snapshot?.coachMessages || [];
 }
 
+interface SetupStatusTransition {
+  setupId: string;
+  from: string;
+  to: string;
+}
+
+function detectSetupStatusTransitions(
+  previousSnapshot: SPXSnapshot | null,
+  nextSnapshot: SPXSnapshot,
+): SetupStatusTransition[] {
+  if (!previousSnapshot) return [];
+
+  const previousById = new Map<string, string>();
+  for (const setup of previousSnapshot.setups || []) {
+    previousById.set(setup.id, setup.status);
+  }
+
+  const transitions: SetupStatusTransition[] = [];
+  const sortedNextSetups = [...(nextSnapshot.setups || [])].sort((left, right) => left.id.localeCompare(right.id));
+  for (const setup of sortedNextSetups) {
+    const previousStatus = previousById.get(setup.id);
+    if (!previousStatus || previousStatus === setup.status) continue;
+
+    transitions.push({
+      setupId: setup.id,
+      from: previousStatus,
+      to: setup.status,
+    });
+  }
+
+  return transitions;
+}
+
+function queueReplaySnapshotCapture(input: {
+  snapshot: SPXSnapshot;
+  previousSnapshot: SPXSnapshot | null;
+  multiTFContext: SPXMultiTFConfluenceContext | null;
+}): void {
+  void (async () => {
+    const transitions = detectSetupStatusTransitions(input.previousSnapshot, input.snapshot);
+    const capturedAt = new Date(input.snapshot.generatedAt);
+    const captureBase = {
+      snapshot: input.snapshot,
+      capturedAt,
+      multiTFContext: input.multiTFContext,
+    } as const;
+
+    const capturePromises: Array<Promise<void>> = [
+      replaySnapshotWriter.capture({
+        ...captureBase,
+        captureMode: 'interval',
+      }),
+      ...transitions.map(() => replaySnapshotWriter.capture({
+        ...captureBase,
+        captureMode: 'setup_transition',
+      })),
+    ];
+
+    const captureResults = await Promise.allSettled(capturePromises);
+    const failedCaptureCount = captureResults.filter((result) => result.status === 'rejected').length;
+
+    if (failedCaptureCount > 0) {
+      logger.warn('Replay snapshot capture failed (fail-open)', {
+        failedCaptureCount,
+        totalCaptureCalls: capturePromises.length,
+        transitionCount: transitions.length,
+      });
+    }
+  })().catch((error) => {
+    logger.warn('Replay snapshot capture orchestration failed (fail-open)', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
+
 type SnapshotStage = keyof typeof SNAPSHOT_STAGE_TIMEOUTS_MS;
 
 interface StageFallbackResult<T> {
@@ -319,6 +405,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   const fallbackSnapshot = (lastGoodSnapshot && fallbackAge <= SNAPSHOT_MAX_FALLBACK_AGE_MS)
     ? lastGoodSnapshot
     : null;
+  const previousSnapshotForReplayCapture = lastGoodSnapshot;
   const tickHealth = isTickStreamHealthy('SPX', {
     maxAgeMs: SNAPSHOT_TICK_HEALTH_MAX_AGE_MS,
   });
@@ -437,6 +524,26 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
   stageQuality.regime = regimeResult.quality;
   const regime = regimeResult.value;
 
+  const multiTFEnabled = parseBooleanEnv(process.env.SPX_MULTI_TF_CONFLUENCE_ENABLED, false);
+  const multiTFResult = multiTFEnabled
+    ? await withStageFallback({
+      stage: 'multiTF',
+      forceRefresh,
+      run: () => getMultiTFConfluenceContext({ forceRefresh }),
+      fallback: () => null as SPXMultiTFConfluenceContext | null,
+    })
+    : {
+      value: null as SPXMultiTFConfluenceContext | null,
+      quality: {
+        ok: true,
+        source: 'disabled',
+        freshnessMs: 0,
+        degradedReason: null,
+      } satisfies SPXSnapshotStageQuality,
+    };
+  stageQuality.multiTF = multiTFResult.quality;
+  const multiTFContextForReplay = multiTFResult.value;
+
   const setupsRawResult = await withStageFallback({
     stage: 'setups',
     forceRefresh,
@@ -447,6 +554,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
       fibLevels,
       regimeState: regime,
       flowEvents: flow,
+      ...(multiTFContextForReplay ? { multiTFConfluenceOverride: multiTFContextForReplay } : {}),
     }),
     fallback: () => fallbackSnapshot?.setups || [],
   });
@@ -536,7 +644,7 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     warnings: Array.from(new Set(degradedReasons)),
   };
 
-  return {
+  const snapshot: SPXSnapshot = {
     levels: levelData.levels,
     clusters: levelData.clusters,
     fibLevels,
@@ -555,6 +663,14 @@ async function buildSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
     standbyGuidance: setupEnvironmentState?.standbyGuidance || null,
     generatedAt: nowIso(),
   };
+
+  queueReplaySnapshotCapture({
+    snapshot,
+    previousSnapshot: previousSnapshotForReplayCapture,
+    multiTFContext: multiTFContextForReplay,
+  });
+
+  return snapshot;
 }
 
 function refreshSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
@@ -616,7 +732,6 @@ function refreshSnapshot(forceRefresh: boolean): Promise<SPXSnapshot> {
         });
         return sharedSnapshot;
       }
-
       if (lastGoodSnapshot) {
         logger.warn('SPX snapshot refresh failed; serving last good snapshot', {
           forceRefresh,

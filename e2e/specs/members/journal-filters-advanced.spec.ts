@@ -96,6 +96,11 @@ function getVisibleSymbols(page: Page) {
     .allTextContents()
 }
 
+async function selectFilterOption(page: Page, label: string, option: string) {
+  await page.getByLabel(label, { exact: true }).click()
+  await page.getByRole('option', { name: option, exact: true }).click()
+}
+
 test.describe('Trade Journal Advanced Filters', () => {
   test.describe.configure({ mode: 'serial' })
 
@@ -108,7 +113,7 @@ test.describe('Trade Journal Advanced Filters', () => {
   test('filters by contract type', async ({ page }) => {
     await openWithFixtures(page)
 
-    await page.getByLabel('Contract type').selectOption('call')
+    await selectFilterOption(page, 'Contract type', 'Call')
 
     await expect(page.getByText('AAPL')).toBeVisible()
     await expect(page.getByText('SPY')).toBeVisible()
@@ -120,7 +125,7 @@ test.describe('Trade Journal Advanced Filters', () => {
   test('filters by open/closed status', async ({ page }) => {
     await openWithFixtures(page)
 
-    await page.getByLabel('Open/closed').selectOption('true')
+    await selectFilterOption(page, 'Open/closed', 'Open')
 
     await expect(page.getByText('MSFT')).toBeVisible()
     await expect(page.getByText('QQQ')).toBeVisible()
@@ -133,7 +138,7 @@ test.describe('Trade Journal Advanced Filters', () => {
     await openWithFixtures(page)
 
     await page.getByLabel('Symbol').fill('spy')
-    await page.getByLabel('Direction', { exact: true }).selectOption('short')
+    await selectFilterOption(page, 'Direction', 'Short')
 
     const visibleSymbols = await getVisibleSymbols(page)
     expect(visibleSymbols.length).toBeGreaterThan(0)
@@ -144,9 +149,9 @@ test.describe('Trade Journal Advanced Filters', () => {
     await openWithFixtures(page)
 
     await page.getByLabel('Symbol').fill('spy')
-    await page.getByLabel('Direction', { exact: true }).selectOption('short')
-    await page.getByLabel('Contract type').selectOption('stock')
-    await page.getByLabel('Win/loss').selectOption('true')
+    await selectFilterOption(page, 'Direction', 'Short')
+    await selectFilterOption(page, 'Contract type', 'Stock')
+    await selectFilterOption(page, 'Win/loss', 'Winners')
 
     await expect(page.getByText('SPY')).toBeVisible()
     await expect(page.getByText('AAPL')).not.toBeVisible()
@@ -159,8 +164,8 @@ test.describe('Trade Journal Advanced Filters', () => {
     await openWithFixtures(page)
 
     await page.getByLabel('Symbol').fill('aapl')
-    await page.getByLabel('Direction', { exact: true }).selectOption('long')
-    await page.getByLabel('Contract type').selectOption('call')
+    await selectFilterOption(page, 'Direction', 'Long')
+    await selectFilterOption(page, 'Contract type', 'Call')
 
     await expect(page.getByText('AAPL')).toBeVisible()
     await expect(page.getByText('SPY')).not.toBeVisible()
@@ -168,8 +173,8 @@ test.describe('Trade Journal Advanced Filters', () => {
     await page.getByRole('button', { name: 'Clear all' }).click()
 
     await expect(page.getByLabel('Symbol')).toHaveValue('')
-    await expect(page.getByLabel('Direction', { exact: true })).toHaveValue('all')
-    await expect(page.getByLabel('Contract type')).toHaveValue('all')
+    await expect(page.getByLabel('Direction', { exact: true })).toContainText('All directions')
+    await expect(page.getByLabel('Contract type')).toContainText('All types')
 
     const visibleSymbols = await getVisibleSymbols(page)
     expect(visibleSymbols).toContain('AAPL')
@@ -182,7 +187,7 @@ test.describe('Trade Journal Advanced Filters', () => {
   test('table view shows correct column headers', async ({ page }) => {
     await openWithFixtures(page)
 
-    await page.getByLabel('View').selectOption('table')
+    await selectFilterOption(page, 'View', 'Table')
 
     const table = page.locator('table[aria-label="Journal trades table"]')
     await expect(table).toBeVisible()
@@ -201,7 +206,7 @@ test.describe('Trade Journal Advanced Filters', () => {
 
     await page.getByLabel('Symbol').fill('NONEXISTENT')
 
-    await expect(page.getByText('No journal entries found')).toBeVisible()
+    await expect(page.getByText('Start tracking your edge')).toBeVisible()
     await expect(page.locator('table[aria-label="Journal trades table"]')).not.toBeVisible()
   })
 })

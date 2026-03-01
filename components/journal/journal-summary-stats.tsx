@@ -2,9 +2,11 @@
 
 import type { JournalEntry } from '@/lib/types/journal'
 import type { JournalStats } from '@/lib/types/journal'
+import { SkeletonStatCard } from '@/components/ui/skeleton-loader'
 
 interface JournalSummaryStatsProps {
   entries: JournalEntry[]
+  loading?: boolean
 }
 
 function calculateStats(entries: JournalEntry[]): JournalStats {
@@ -41,7 +43,17 @@ function formatCurrency(value: number | null): string {
   return `${value >= 0 ? '+' : '-'}$${abs}`
 }
 
-export function JournalSummaryStats({ entries }: JournalSummaryStatsProps) {
+export function JournalSummaryStats({ entries, loading = false }: JournalSummaryStatsProps) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <SkeletonStatCard key={`journal-summary-loading-${index}`} className="bg-white/5 p-3" />
+        ))}
+      </div>
+    )
+  }
+
   const stats = calculateStats(entries)
 
   return (

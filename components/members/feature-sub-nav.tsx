@@ -34,6 +34,14 @@ export function FeatureSubNav({
 
   if (!items.length) return null
 
+  const handleNavItemClick = (label: string) => {
+    try {
+      void Analytics.trackMemberNavItem(label)
+    } catch (error) {
+      console.error('Failed to track member nav item click:', error)
+    }
+  }
+
   return (
     <div className={cn('sticky z-30 mb-4 lg:mb-6', stickyOffsetClassName, className)}>
       <div className="rounded-2xl border border-white/10 bg-[#0A0A0B]/85 backdrop-blur-xl px-2 py-2">
@@ -46,7 +54,7 @@ export function FeatureSubNav({
               <Link
                 key={item.id}
                 href={item.href}
-                onClick={() => Analytics.trackMemberNavItem(item.label)}
+                onClick={() => handleNavItemClick(item.label)}
                 className={cn(
                   'group shrink-0 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors',
                   active

@@ -40,7 +40,7 @@ test.describe('Trade Journal Mobile', () => {
     await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByRole('heading', { name: 'Trade Journal' })).toBeVisible()
-    await expect(page.getByLabel('View')).toHaveValue('cards')
+    await expect(page.getByLabel('View')).toContainText('Cards')
     await expect(page.locator('table[aria-label="Journal trades table"]')).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'AAPL' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'TSLA' })).toBeVisible()

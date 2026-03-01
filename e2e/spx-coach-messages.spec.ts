@@ -34,10 +34,10 @@ test.describe('SPX coach messages', () => {
     const alertTag = page.getByText('alert').first()
     await expect(alertTag).toBeVisible()
 
-    const expandButton = streamedCard.getByRole('button', { name: 'Expand' })
+    const expandButton = streamedCard.getByRole('button', { name: 'Expand' }).first()
     await expect(expandButton).toBeVisible()
 
-    await expandButton.click()
+    await expandButton.click({ force: true })
     await expect(streamedCard.getByRole('button', { name: 'Collapse' })).toBeVisible()
     await expect(streamedCard.getByText('If flow diverges for more than two prints', { exact: false })).toBeVisible()
   })

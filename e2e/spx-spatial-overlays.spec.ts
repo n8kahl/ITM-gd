@@ -17,7 +17,11 @@ async function ensureSpatialMode(page: Page) {
   for (let attempt = 0; attempt < 48; attempt += 1) {
     if (await spatialSurface.isVisible().catch(() => false)) return
     if (await spatialToggle.isVisible().catch(() => false)) {
-      await spatialToggle.click()
+      if (await spatialToggle.isEnabled().catch(() => false)) {
+        if ((await spatialToggle.getAttribute('aria-pressed')) !== 'true') {
+          await spatialToggle.click({ force: true })
+        }
+      }
       await expect(spatialSurface).toBeVisible({ timeout: 12_000 })
       return
     }
