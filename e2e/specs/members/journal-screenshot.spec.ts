@@ -277,4 +277,86 @@ test.describe('Trade Journal Screenshot UI', () => {
 
     await expect.poll(() => state.entries.length, { timeout: 10_000 }).toBe(0)
   })
+
+  test('allows manual symbol entry when screenshot returns no positions', async ({ page }) => {
+    const state = await setupJournalCrudMocks(page, [])
+    await setupScreenshotPipelineMocks(page)
+    await mockScreenshotAnalyze(page, {
+      positions: [],
+      positionCount: 0,
+      intent: 'unknown',
+      suggestedActions: [],
+      warnings: ['No clear trade position detected.'],
+    })
+
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
+    await seedSupabaseClientSessionMock(page)
+
+    await page.getByRole('button', { name: 'Screenshot' }).click()
+    await page.locator('[role="dialog"] input[type="file"]').setInputFiles({
+      name: 'random-chart.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('mock-png', 'utf-8'),
+    })
+
+    await expect(page.getByText(/Found 0 positions/i)).toBeVisible()
+    await page.getByRole('dialog').locator('input[placeholder="e.g., AAPL"]').fill('TSLA')
+    await page.getByRole('button', { name: 'Create Entry' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Quick Screenshot Entry' })).toHaveCount(0)
+    await expect.poll(() => state.entries[0]?.symbol ?? null, { timeout: 10_000 }).toBe('TSLA')
+  })
+
+  test('lets full form pick one position when screenshot has multiple positions', async ({ page }) => {
+    await setupJournalCrudMocks(page, [])
+    await setupScreenshotPipelineMocks(page)
+    await mockScreenshotAnalyze(page, {
+      positions: [
+        {
+          symbol: 'AAPL',
+          type: 'stock',
+          quantity: 10,
+          entryPrice: 180.25,
+          confidence: 0.84,
+        },
+        {
+          symbol: 'TSLA',
+          type: 'call',
+          strike: 250,
+          expiry: '2026-04-17',
+          quantity: 1,
+          entryPrice: 8.2,
+          confidence: 0.81,
+        },
+      ],
+      positionCount: 2,
+      intent: 'portfolio',
+      suggestedActions: [],
+      warnings: ['Multiple positions detected.'],
+    })
+
+    await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
+    await seedSupabaseClientSessionMock(page)
+
+    await page.getByRole('button', { name: 'New Entry' }).click()
+    await page.getByRole('button', { name: 'Full Form' }).click()
+
+    const tradeDialog = page.locator('[role="dialog"]').first()
+    const screenshotSection = tradeDialog.locator('details').filter({ hasText: 'Screenshot' })
+    await screenshotSection.locator('summary').click()
+    await screenshotSection.locator('input[type="file"]').setInputFiles({
+      name: 'portfolio.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('mock-png', 'utf-8'),
+    })
+
+    await expect(screenshotSection.getByText(/Found 2 positions/i)).toBeVisible()
+    await expect(screenshotSection.getByRole('button', { name: 'Applied' })).toBeVisible()
+
+    await screenshotSection.getByRole('button', { name: 'Use TSLA' }).click()
+    await expect(tradeDialog.locator('input[placeholder="AAPL"]')).toHaveValue('TSLA')
+
+    await screenshotSection.getByRole('button', { name: 'Use AAPL' }).click()
+    await expect(tradeDialog.locator('input[placeholder="AAPL"]')).toHaveValue('AAPL')
+  })
 })
