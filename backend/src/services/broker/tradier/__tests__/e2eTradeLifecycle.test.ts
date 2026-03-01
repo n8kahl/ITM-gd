@@ -76,11 +76,13 @@ jest.mock('../client', () => ({
 // --- Imports (after all mocks are declared) ---
 import {
   processTradierExecutionTransitions,
+  rehydrateExecutionStates,
   __resetExecutionEngineStateForTests,
 } from '../executionEngine';
 import { TradierClient } from '../client';
 import type { SetupTransitionEvent } from '../../../spx/tickEvaluator';
 import type { Setup, ContractRecommendation, ClusterZone } from '../../../spx/types';
+import { pollOrderLifecycleQueueOnceForTests } from '../orderLifecycleManager';
 
 // --- Fixtures ---
 const MOCK_CLUSTER_ZONE: ClusterZone = {
@@ -612,6 +614,67 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       expect(mockGetContractRecommendation).not.toHaveBeenCalled();
       expect(mockPlaceOrder).not.toHaveBeenCalled();
       expect(mockUpsertExecutionState).not.toHaveBeenCalled();
+    });
+
+    it('shadow-blocked setup never routes broker orders', async () => {
+      const shadowBlockedSetup: Setup = {
+        ...MOCK_SETUP,
+        gateStatus: 'shadow_blocked',
+        gateReasons: ['confluence_shadow_block:2.99'],
+      };
+      mockGetContractRecommendation.mockResolvedValue(MOCK_RECOMMENDATION);
+      setupSupabaseMocks({
+        credentials: [MOCK_CREDENTIAL],
+        portfolio: { total_equity: 100_000, day_trade_buying_power: 200_000 },
+      });
+
+      await processTradierExecutionTransitions([buildTriggeredEvent(shadowBlockedSetup)]);
+
+      expect(mockGetContractRecommendation).not.toHaveBeenCalled();
+      expect(mockPlaceOrder).not.toHaveBeenCalled();
+      expect(mockUpsertExecutionState).not.toHaveBeenCalled();
+    });
+
+    it('rehydration restores polling for in-flight entry orders', async () => {
+      mockLoadOpenStates.mockResolvedValue([
+        {
+          id: 'state-rehydrate-1',
+          userId: MOCK_CREDENTIAL.user_id,
+          setupId: MOCK_SETUP.id,
+          sessionDate: '2026-02-23',
+          symbol: 'SPXW260223C05870000',
+          quantity: 3,
+          remainingQuantity: 1,
+          entryOrderId: 'entry-rehydrate-001',
+          runnerStopOrderId: 'runner-stop-rehydrate-001',
+          entryLimitPrice: 4.4,
+          actualFillQty: 1,
+          avgFillPrice: 4.5,
+          status: 'partial_fill',
+          closeReason: null,
+          closedAt: null,
+          createdAt: '2026-02-23T14:45:00Z',
+          updatedAt: '2026-02-23T14:46:00Z',
+        },
+      ]);
+      setupSupabaseMocks({
+        credentials: [MOCK_CREDENTIAL],
+        portfolio: null,
+      });
+      mockGetOrderStatus.mockResolvedValue({
+        id: 'entry-rehydrate-001',
+        status: 'open',
+        filledQuantity: 1,
+        avgFillPrice: 4.5,
+        remainingQuantity: 2,
+        raw: {},
+      });
+
+      const rehydratedCount = await rehydrateExecutionStates();
+      await pollOrderLifecycleQueueOnceForTests();
+
+      expect(rehydratedCount).toBe(1);
+      expect(mockGetOrderStatus).toHaveBeenCalledWith('entry-rehydrate-001');
     });
 
     it('single-contract position exits fully at T1 with no runner stop', async () => {

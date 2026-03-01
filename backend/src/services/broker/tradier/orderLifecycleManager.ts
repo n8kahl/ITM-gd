@@ -2,6 +2,7 @@ import { logger } from '../../../lib/logger';
 import { publishCoachMessage } from '../../coachPushChannel';
 import {
   updateExecutionState,
+  closeExecutionState,
   markStateFailed,
 } from '../../spx/executionStateStore';
 import {
@@ -63,13 +64,16 @@ export function enqueueOrderForPolling(entry: {
   activeStopOrderId?: string | null;
   remainingBeforeOrder?: number;
   postFillStopPrice?: number;
+  initialStopCoverageQuantity?: number;
   fillSide?: ExecutionFillSide;
   fillPhase?: ExecutionTransitionPhase;
 }): void {
   const resolvedFillMeta = resolveFillMeta(entry.phase, entry.fillSide, entry.fillPhase);
-  const initialStopCoverage = entry.phase === 't1'
-    ? Math.max(0, entry.remainingBeforeOrder ?? 0)
-    : 0;
+  const initialStopCoverage = Number.isFinite(entry.initialStopCoverageQuantity)
+    ? Math.max(0, entry.initialStopCoverageQuantity ?? 0)
+    : entry.phase === 't1'
+      ? Math.max(0, entry.remainingBeforeOrder ?? 0)
+      : 0;
 
   pollQueue.set(entry.orderId, {
     ...entry,
@@ -154,6 +158,8 @@ async function pollSingleOrder(orderId: string, entry: PollEntry): Promise<void>
         status: 'filled',
         remainingQuantity: status.filledQuantity,
       }).catch(() => undefined);
+    } else if (entry.phase === 'runner_stop') {
+      await closeExecutionState(entry.userId, entry.setupId, entry.sessionDate, 'stop').catch(() => undefined);
     }
     return;
   }
@@ -173,6 +179,12 @@ async function pollSingleOrder(orderId: string, entry: PollEntry): Promise<void>
         avgFillPrice: status.avgFillPrice,
         status: 'partial_fill',
         remainingQuantity: status.filledQuantity,
+      }).catch(() => undefined);
+    } else if (entry.phase === 'runner_stop') {
+      const remainingAfterStopFill = Math.max(0, entry.totalQuantity - status.filledQuantity);
+      await updateExecutionState(entry.userId, entry.setupId, entry.sessionDate, {
+        remainingQuantity: remainingAfterStopFill,
+        status: remainingAfterStopFill > 0 ? 'partial_fill' : 'filled',
       }).catch(() => undefined);
     }
     // Keep polling for remaining fill
@@ -435,6 +447,9 @@ function resolveFillMeta(
   }
   if (pollPhase === 'terminal') {
     return { side: 'exit', phase: 'target2_hit' };
+  }
+  if (pollPhase === 'runner_stop') {
+    return { side: 'exit', phase: 'invalidated' };
   }
 
   return { side: undefined, phase: undefined };

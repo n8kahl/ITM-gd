@@ -128,7 +128,7 @@ function resolveSandboxMode(row: TradierCredentialRow): boolean {
 }
 
 function isSetupExecutionEligible(setup: SetupTransitionEvent['setup']): boolean {
-  if (setup?.gateStatus === 'blocked') return false;
+  if (setup?.gateStatus && setup.gateStatus !== 'eligible') return false;
   const gateReasons = Array.isArray(setup?.gateReasons) ? setup.gateReasons : [];
   if (gateReasons.some((reason) => reason.includes('drift_control_paused'))) return false;
   return true;
@@ -248,6 +248,65 @@ function inferEntryProtectiveStopPrice(input: {
   return Number(Math.max(0.05, capped).toFixed(2));
 }
 
+function inferProtectiveStopPriceFromEntry(entryLimitPrice: number): number {
+  if (!Number.isFinite(entryLimitPrice) || entryLimitPrice <= 0) return 0;
+  return Number(Math.max(0.05, entryLimitPrice * 0.65).toFixed(2));
+}
+
+interface RehydratedPollPlan {
+  orderId: string;
+  phase: 'entry' | 'runner_stop';
+  totalQuantity: number;
+  referencePrice: number;
+  symbol: string;
+  protectiveStopPrice?: number;
+  activeStopOrderId?: string | null;
+  initialStopCoverageQuantity?: number;
+}
+
+function buildRehydratedPollPlan(state: ExecutionActiveState): RehydratedPollPlan | null {
+  if (!state.entryOrderId) return null;
+  if (state.status === 'closed' || state.status === 'failed') return null;
+
+  const entryReferencePrice = Number.isFinite(state.avgFillPrice ?? Number.NaN) && (state.avgFillPrice ?? 0) > 0
+    ? (state.avgFillPrice as number)
+    : state.entryLimitPrice;
+  const normalizedSymbol = typeof state.symbol === 'string' && state.symbol.trim().length > 0
+    ? state.symbol
+    : '';
+
+  if (!normalizedSymbol) return null;
+
+  if (state.status === 'active' || state.status === 'partial_fill') {
+    return {
+      orderId: state.entryOrderId,
+      phase: 'entry',
+      totalQuantity: Math.max(1, state.quantity),
+      referencePrice: entryReferencePrice,
+      symbol: normalizedSymbol,
+      protectiveStopPrice: inferProtectiveStopPriceFromEntry(state.entryLimitPrice),
+      activeStopOrderId: state.runnerStopOrderId,
+      initialStopCoverageQuantity: Math.max(
+        0,
+        state.actualFillQty ?? 0,
+        state.remainingQuantity ?? 0,
+      ),
+    };
+  }
+
+  if (state.status === 'filled' && state.runnerStopOrderId && state.remainingQuantity > 0) {
+    return {
+      orderId: state.runnerStopOrderId,
+      phase: 'runner_stop',
+      totalQuantity: Math.max(1, state.remainingQuantity),
+      referencePrice: entryReferencePrice,
+      symbol: normalizedSymbol,
+    };
+  }
+
+  return null;
+}
+
 async function loadActiveExecutionCredentials(): Promise<TradierCredentialRow[]> {
   const now = Date.now();
   if (cachedCredentials && cachedCredentials.expiresAt > now) {
@@ -285,12 +344,67 @@ async function loadActiveExecutionCredentials(): Promise<TradierCredentialRow[]>
 export async function rehydrateExecutionStates(): Promise<number> {
   try {
     const openStates = await loadOpenStates();
+    const credentials = await loadActiveExecutionCredentials();
+    const credentialsByUserId = new Map<string, TradierCredentialRow>();
+    for (const credential of credentials) {
+      if (!credentialsByUserId.has(credential.user_id)) {
+        credentialsByUserId.set(credential.user_id, credential);
+      }
+    }
+    const tradierByUserId = new Map<string, TradierClient>();
+    let recoveredPollCount = 0;
+
     for (const state of openStates) {
       const key = stateKey(state.userId, state.setupId, state.sessionDate);
       stateByUserSetup.set(key, state);
+
+      const plan = buildRehydratedPollPlan(state);
+      if (!plan) continue;
+
+      const credential = credentialsByUserId.get(state.userId);
+      if (!credential) {
+        logger.warn('Skipping lifecycle poll recovery for open execution state due to missing Tradier credential', {
+          userId: state.userId,
+          setupId: state.setupId,
+          sessionDate: state.sessionDate,
+          orderId: plan.orderId,
+          phase: plan.phase,
+        });
+        continue;
+      }
+
+      let tradier = tradierByUserId.get(state.userId);
+      if (!tradier) {
+        tradier = new TradierClient({
+          accountId: credential.account_id,
+          accessToken: decryptTradierAccessToken(credential.access_token_ciphertext),
+          sandbox: resolveSandboxMode(credential),
+        });
+        tradierByUserId.set(state.userId, tradier);
+      }
+
+      enqueueOrderForPolling({
+        orderId: plan.orderId,
+        userId: state.userId,
+        setupId: state.setupId,
+        sessionDate: state.sessionDate,
+        phase: plan.phase,
+        tradier,
+        totalQuantity: plan.totalQuantity,
+        referencePrice: plan.referencePrice,
+        symbol: plan.symbol,
+        protectiveStopPrice: plan.protectiveStopPrice,
+        activeStopOrderId: plan.activeStopOrderId,
+        initialStopCoverageQuantity: plan.initialStopCoverageQuantity,
+      });
+      recoveredPollCount += 1;
     }
+
     rehydrated = true;
-    logger.info('Execution states rehydrated from Supabase', { count: openStates.length });
+    logger.info('Execution states rehydrated from Supabase', {
+      count: openStates.length,
+      recoveredPolls: recoveredPollCount,
+    });
     return openStates.length;
   } catch (error) {
     logger.warn('Failed to rehydrate execution states; starting with empty cache', {
@@ -299,6 +413,16 @@ export async function rehydrateExecutionStates(): Promise<number> {
     rehydrated = true;
     return 0;
   }
+}
+
+if (EXECUTION_RUNTIME_ENABLEMENT.enabled && process.env.NODE_ENV !== 'test') {
+  // Eager rehydration closes the restart gap where in-flight orders would be unpolled
+  // until the first new transition event arrives.
+  void rehydrateExecutionStates().catch((error) => {
+    logger.warn('Tradier execution startup rehydration failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
 }
 
 async function handleTriggeredTransition(

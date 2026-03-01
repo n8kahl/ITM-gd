@@ -1,9 +1,11 @@
 const mockUpdateExecutionState = jest.fn();
+const mockCloseExecutionState = jest.fn();
 const mockMarkStateFailed = jest.fn();
 const mockRecordExecutionFill = jest.fn();
 
 jest.mock('../../../spx/executionStateStore', () => ({
   updateExecutionState: (...args: unknown[]) => mockUpdateExecutionState(...args),
+  closeExecutionState: (...args: unknown[]) => mockCloseExecutionState(...args),
   markStateFailed: (...args: unknown[]) => mockMarkStateFailed(...args),
 }));
 
@@ -214,6 +216,48 @@ describe('tradier/orderLifecycleManager', () => {
         fillQuantity: 1,
       }),
     );
+  });
+
+  it('treats runner_stop fills as exit invalidations and closes state', async () => {
+    const getOrderStatus = jest.fn().mockResolvedValueOnce({
+      id: 'runner-stop-001',
+      status: 'filled',
+      filledQuantity: 2,
+      avgFillPrice: 1.85,
+      remainingQuantity: 0,
+      raw: {},
+    });
+
+    enqueueOrderForPolling({
+      orderId: 'runner-stop-001',
+      userId: 'user-5',
+      setupId: 'setup-5',
+      sessionDate: '2026-03-01',
+      phase: 'runner_stop',
+      tradier: { getOrderStatus } as any,
+      totalQuantity: 2,
+      referencePrice: 1.8,
+      symbol: 'SPXW260301C05870000',
+    });
+
+    await pollOrderLifecycleQueueOnceForTests();
+
+    expect(mockRecordExecutionFill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        setupId: 'setup-5',
+        side: 'exit',
+        phase: 'invalidated',
+        fillPrice: 1.85,
+        fillQuantity: 2,
+      }),
+    );
+    expect(mockCloseExecutionState).toHaveBeenCalledWith(
+      'user-5',
+      'setup-5',
+      '2026-03-01',
+      'stop',
+    );
+    expect(getOrderPollQueueSize()).toBe(0);
   });
 
   it('attaches and resizes entry protective stop as cumulative fills increase', async () => {
