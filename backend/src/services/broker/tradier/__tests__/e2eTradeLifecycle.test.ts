@@ -615,6 +615,25 @@ describe('SPX E2E: Setup → Contract → Entry → T1 → Exit', () => {
       expect(mockPlaceOrder).not.toHaveBeenCalled();
     });
 
+    it('blocked gate setup never routes broker orders', async () => {
+      const blockedSetup: Setup = {
+        ...MOCK_SETUP,
+        gateStatus: 'blocked',
+        gateReasons: ['drift_control_paused:fade_at_wall|ranging'],
+      };
+      mockGetContractRecommendation.mockResolvedValue(MOCK_RECOMMENDATION);
+      setupSupabaseMocks({
+        credentials: [MOCK_CREDENTIAL],
+        portfolio: { total_equity: 100_000, day_trade_buying_power: 200_000 },
+      });
+
+      await processTradierExecutionTransitions([buildTriggeredEvent(blockedSetup)]);
+
+      expect(mockGetContractRecommendation).not.toHaveBeenCalled();
+      expect(mockPlaceOrder).not.toHaveBeenCalled();
+      expect(mockUpsertExecutionState).not.toHaveBeenCalled();
+    });
+
     it('single-contract position exits fully at T1 with no runner stop', async () => {
       // Setup entry with small portfolio → 1 contract
       mockGetContractRecommendation.mockResolvedValue(MOCK_RECOMMENDATION);

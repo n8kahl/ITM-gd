@@ -128,6 +128,13 @@ function resolveSandboxMode(row: TradierCredentialRow): boolean {
   return EXECUTION_SANDBOX_DEFAULT;
 }
 
+function isSetupExecutionEligible(setup: SetupTransitionEvent['setup']): boolean {
+  if (setup?.gateStatus === 'blocked') return false;
+  const gateReasons = Array.isArray(setup?.gateReasons) ? setup.gateReasons : [];
+  if (gateReasons.some((reason) => reason.includes('drift_control_paused'))) return false;
+  return true;
+}
+
 function createSizingResult(input: {
   ask: number;
   totalEquity: number;
@@ -299,6 +306,15 @@ async function handleTriggeredTransition(
   event: SetupTransitionEvent,
   credentials: TradierCredentialRow[],
 ): Promise<void> {
+  if (!isSetupExecutionEligible(event.setup)) {
+    logger.info('Tradier execution skipped due to blocked setup gate', {
+      setupId: event.setupId,
+      gateStatus: event.setup?.gateStatus ?? null,
+      gateReasons: event.setup?.gateReasons ?? [],
+    });
+    return;
+  }
+
   const recommendation = await getContractRecommendation({
     setup: event.setup,
     forceRefresh: true,
