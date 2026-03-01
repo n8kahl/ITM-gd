@@ -54,11 +54,17 @@ ALTER TABLE spx_setup_execution_fills ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS select_spx_setup_execution_fills ON spx_setup_execution_fills;
 DROP POLICY IF EXISTS select_spx_setup_execution_fills_owner ON spx_setup_execution_fills;
+DROP POLICY IF EXISTS insert_spx_setup_execution_fills ON spx_setup_execution_fills;
+DROP POLICY IF EXISTS insert_spx_setup_execution_fills_owner ON spx_setup_execution_fills;
 DROP POLICY IF EXISTS spx_setup_execution_fills_service_all ON spx_setup_execution_fills;
 
 CREATE POLICY select_spx_setup_execution_fills_owner ON spx_setup_execution_fills
   FOR SELECT TO authenticated
   USING (reported_by_user_id = auth.uid());
+
+CREATE POLICY insert_spx_setup_execution_fills_owner ON spx_setup_execution_fills
+  FOR INSERT TO authenticated
+  WITH CHECK (reported_by_user_id = auth.uid());
 
 CREATE POLICY spx_setup_execution_fills_service_all ON spx_setup_execution_fills
   FOR ALL TO service_role

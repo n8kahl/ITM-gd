@@ -30,5 +30,8 @@ describe('SPX schema contracts', () => {
     expect(hardeningMigration).toMatch(
       /CREATE POLICY\s+select_spx_setup_execution_fills_owner[\s\S]*reported_by_user_id = auth\.uid\(\)/i,
     );
+    expect(hardeningMigration).toMatch(
+      /CREATE POLICY\s+insert_spx_setup_execution_fills_owner[\s\S]*FOR INSERT TO authenticated[\s\S]*reported_by_user_id = auth\.uid\(\)/i,
+    );
   });
 });
