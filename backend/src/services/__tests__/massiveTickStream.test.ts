@@ -134,6 +134,12 @@ describe('massiveTickStream helpers', () => {
     expect(params).toBe('V.I:SPX,V.SPY');
   });
 
+  it('applies bounded jitter to reconnect delays', () => {
+    expect(__testables.applyReconnectJitter(1000, () => 0)).toBe(700);
+    expect(__testables.applyReconnectJitter(1000, () => 0.5)).toBe(1000);
+    expect(__testables.applyReconnectJitter(1000, () => 1)).toBe(1300);
+  });
+
   it('normalizes nanosecond timestamps to milliseconds', () => {
     expect(__testables.normalizeTimestamp(1700000000000000000)).toBe(1700000000000);
   });

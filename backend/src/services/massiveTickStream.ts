@@ -19,6 +19,8 @@ const DEFAULT_AUTH_ACK_TIMEOUT_MS = 5_000;
 const SUBSCRIBE_ACK_TIMEOUT_MS = 3_000;
 const DEFAULT_MAX_CONNECTIONS_RECONNECT_MS = 60_000;
 const DEFAULT_POLICY_CLOSE_RECONNECT_MS = 15_000;
+const RECONNECT_JITTER_MIN = 0.7;
+const RECONNECT_JITTER_MAX = 1.3;
 const MASSIVE_LOCK_KEY = 'massive:tick:stream:lock';
 const MASSIVE_LOCK_TTL_S = 60;
 const RENEW_LOCK_IF_OWNER_SCRIPT = `
@@ -123,6 +125,15 @@ function setConnectionState(nextState: MassiveTickConnectionState, reason: strin
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function applyReconnectJitter(delayMs: number, randomFn: () => number = Math.random): number {
+  const randomValue = randomFn();
+  const normalizedRandom = Number.isFinite(randomValue)
+    ? Math.min(1, Math.max(0, randomValue))
+    : 0.5;
+  const multiplier = RECONNECT_JITTER_MIN + (normalizedRandom * (RECONNECT_JITTER_MAX - RECONNECT_JITTER_MIN));
+  return Math.max(0, Math.round(delayMs * multiplier));
 }
 
 function isL2MicrostructureEnabled(): boolean {
@@ -477,18 +488,21 @@ function scheduleReconnect(reason: string): void {
   clearReconnectTimer();
 
   const env = getEnv();
-  const baseDelay = Math.min(
+  const deterministicBackoffDelay = Math.min(
     env.MASSIVE_TICK_RECONNECT_BASE_MS * (2 ** reconnectAttempt),
     env.MASSIVE_TICK_RECONNECT_MAX_MS,
   );
+  const jitteredBackoffDelay = applyReconnectJitter(deterministicBackoffDelay);
   const forcedDelay = forcedReconnectDelayMs ?? 0;
-  const delay = Math.max(baseDelay, forcedDelay);
+  const delay = Math.max(jitteredBackoffDelay, forcedDelay);
   forcedReconnectDelayMs = null;
   reconnectAttempt += 1;
 
   logger.warn('Massive tick stream reconnect scheduled', {
     reason,
     delayMs: delay,
+    deterministicBackoffDelayMs: deterministicBackoffDelay,
+    jitteredBackoffDelayMs: jitteredBackoffDelay,
     attempt: reconnectAttempt,
     forcedDelayMs: forcedDelay || undefined,
   });
@@ -845,4 +859,5 @@ export const __testables = {
   evaluateAuthControlEvent,
   evaluateAuthTimeout,
   shouldProcessTickEvent,
+  applyReconnectJitter,
 };
