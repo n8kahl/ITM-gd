@@ -32,7 +32,7 @@ interface PricingCardProps {
   features: string[];
   whopLink: string;
   popular?: boolean;
-  tier: "core" | "pro" | "executive";
+  tier: "trial" | "core" | "pro" | "executive";
   urgencyText?: string;
   spotsLeft?: number;
   tagline?: string;
@@ -40,9 +40,16 @@ interface PricingCardProps {
 }
 
 // Tier Title Card Component - Premium Luxury Branding
-function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "executive"; name: string; isHovered: boolean }) {
+function TierTitleCard({ tier, name, isHovered }: { tier: "trial" | "core" | "pro" | "executive"; name: string; isHovered: boolean }) {
   // Premium tier colors using existing luxury palette
   const tierColors = {
+    trial: {
+      // Signal Blue - Trial & Discovery
+      gradient: "from-[#1D4ED8] via-[#3B82F6] to-[#60A5FA]",
+      accent: "#3B82F6",
+      glow: "rgba(59, 130, 246, 0.3)",
+      icon: "★",
+    },
     core: {
       // Wealth Emerald - Growth & Prosperity
       gradient: "from-[#065F46] via-[#047857] to-[#059669]",
@@ -138,6 +145,12 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "core" | "pro" | "exec
           {colors.icon}
         </div>
 
+        {tier === "trial" && (
+          <span className="absolute top-4 right-4 inline-flex items-center px-2.5 py-1 rounded text-[10px] font-bold tracking-wider uppercase bg-white/15 text-white border border-white/20 backdrop-blur-sm">
+            NEW
+          </span>
+        )}
+
         {/* Tier Name - Centered */}
         <div className="absolute inset-0 flex items-center justify-center">
           <span
@@ -191,7 +204,7 @@ export function PricingCard({
   tagline,
   isYearly = false,
 }: PricingCardProps) {
-  const isCore = tier === "core";
+  const isTrial = tier === "trial";
   const isPro = tier === "pro";
   const isExecutive = tier === "executive";
 
@@ -241,6 +254,15 @@ export function PricingCard({
 
   // Premium tier styling using luxury palette
   const tierStyles = {
+    trial: {
+      // Signal Blue - Trial & Discovery
+      borderColor: "rgba(59, 130, 246, 0.25)",
+      glowColor: "rgba(59, 130, 246, 0.12)",
+      accentColor: "#3B82F6",
+      buttonGradient: "from-trial-blue to-trial-blue-deep",
+      checkBg: "bg-trial-blue/10",
+      checkColor: "text-trial-blue",
+    },
     core: {
       // Wealth Emerald - Growth & Prosperity
       borderColor: "rgba(16, 185, 129, 0.25)",
@@ -516,8 +538,14 @@ export function PricingCard({
                   boxShadow: isHovered ? `0 0 40px ${styles.glowColor}` : `0 0 20px ${styles.glowColor}`,
                 }}
               >
-                GET STARTED
+                {isTrial ? "START TRIAL" : "GET STARTED"}
               </div>
+
+              {isTrial && (
+                <p className="text-center text-xs text-trial-blue-light/90">
+                  No commitment. Cancel anytime.
+                </p>
+              )}
 
               {/* Security Badge */}
               <p className="text-center text-xs text-muted-foreground/60">
@@ -545,6 +573,13 @@ export function PricingCard({
             className="absolute bottom-0 right-0 w-10 h-10 border-b-2 border-r-2 rounded-br-2xl"
             style={{ borderColor: `${styles.accentColor}50` }}
           />
+
+          {isTrial && (
+            <>
+              <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-trial-blue/40 rounded-tl-sm z-10" />
+              <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-trial-blue/40 rounded-br-sm z-10" />
+            </>
+          )}
 
           {/* Noise texture for all cards */}
           <div

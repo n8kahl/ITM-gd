@@ -70,6 +70,9 @@
   --wealth-emerald: #047857;
   --wealth-emerald-light: #059669;
   --wealth-emerald-dark: #065F46;
+  --trial-blue: #3B82F6;
+  --trial-blue-deep: #1D4ED8;
+  --trial-blue-light: #60A5FA;
   --onyx: #0A0A0B;
   --onyx-light: #141416;
   --ivory: #F5F5F0;
@@ -183,6 +186,9 @@
   --color-wealth-emerald: var(--wealth-emerald);
   --color-wealth-emerald-light: var(--wealth-emerald-light);
   --color-wealth-emerald-dark: var(--wealth-emerald-dark);
+  --color-trial-blue: var(--trial-blue);
+  --color-trial-blue-deep: var(--trial-blue-deep);
+  --color-trial-blue-light: var(--trial-blue-light);
   --color-onyx: var(--onyx);
   --color-ivory: var(--ivory);
 
