@@ -63,9 +63,7 @@ test.describe('Dashboard Navigation', () => {
     await expect(welcomeSection).toBeVisible()
 
     // Mobile bottom nav should be present
-    const bottomNav = page.locator('nav[class*="fixed"][class*="bottom-0"]').or(
-      page.locator('[class*="fixed bottom-0"]'),
-    )
+    const bottomNav = page.locator('[data-mobile-bottom-nav]')
     await expect(bottomNav.first()).toBeVisible()
   })
 })

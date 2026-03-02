@@ -13,6 +13,7 @@ type TabConfigRecord = {
   icon: string
   path: string
   required_tier: 'core' | 'pro' | 'executive' | 'admin'
+  required_discord_role_ids?: string[] | null
   sort_order: number
   is_required: boolean
   mobile_visible: boolean

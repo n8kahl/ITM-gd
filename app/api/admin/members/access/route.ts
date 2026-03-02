@@ -304,12 +304,20 @@ export async function GET(request: NextRequest) {
 
     const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
     const userTierLevel = resolvedTier ? tierHierarchy[resolvedTier] : 0
+    const isAdminUser = hasAdminPermission
     const allowedTabs = Array.isArray(tabConfigs)
       ? tabConfigs
         .filter((tab: any) => {
+          const requiredRoleIds = Array.isArray(tab.required_discord_role_ids)
+            ? tab.required_discord_role_ids.map((id: unknown) => String(id)).filter(Boolean)
+            : []
+          if (!isAdminUser && requiredRoleIds.length > 0) {
+            const hasRequiredRole = requiredRoleIds.some((roleId: string) => effectiveRoleIds.includes(roleId))
+            if (!hasRequiredRole) return false
+          }
           if (tab.is_required) return true
           const required = String(tab.required_tier || '')
-          if (required === 'admin') return false
+          if (required === 'admin') return isAdminUser
           const requiredLevel = tierHierarchy[required] || 0
           return userTierLevel >= requiredLevel
         })
