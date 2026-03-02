@@ -7,10 +7,13 @@ import { Menu, X } from "lucide-react";
 // import Link from "next/link"; // Hidden for now - member login disabled
 // import { Shield } from "lucide-react"; // Hidden for now - member login disabled
 import { cn } from "@/lib/utils";
+import { Analytics } from "@/lib/analytics";
+import { createBrowserSupabase } from "@/lib/supabase-browser";
 
 export function FloatingNavbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -31,6 +34,13 @@ export function FloatingNavbar() {
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const supabase = createBrowserSupabase();
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: unknown } }) => {
+      setIsAuthenticated(Boolean(session));
+    });
   }, []);
 
   const navLinks = [
@@ -80,7 +90,7 @@ export function FloatingNavbar() {
           </div>
 
           {/* Desktop CTA Buttons */}
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-3">
             {/* Member Login - Hidden for now
             <Link
               href="/login?redirect=/members"
@@ -96,6 +106,21 @@ export function FloatingNavbar() {
               <span>Members</span>
             </Link>
             */}
+
+            {!isAuthenticated && (
+              <a
+                href="https://whop.com/checkout/plan_NeOYhHAwtWczQ"
+                className={cn(
+                  "px-4 py-2 rounded-sm text-sm font-semibold tracking-wide",
+                  "bg-gradient-to-r from-trial-blue to-trial-blue-deep text-white",
+                  "hover:shadow-[0_4px_20px_rgba(59,130,246,0.4)] hover:-translate-y-[1px]",
+                  "transition-all duration-300"
+                )}
+                onClick={() => Analytics.trackCTAClick("Nav Trial CTA")}
+              >
+                7-Day Trial $49.99
+              </a>
+            )}
 
             {/* Join Now CTA */}
             <Button
@@ -186,6 +211,24 @@ export function FloatingNavbar() {
                   Join Now
                 </a>
               </Button>
+
+              {!isAuthenticated && (
+                <a
+                  href="https://whop.com/checkout/plan_NeOYhHAwtWczQ"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    Analytics.trackCTAClick("Mobile Nav Trial CTA");
+                  }}
+                  className={cn(
+                    "flex items-center justify-center h-12 px-4 mt-2",
+                    "bg-gradient-to-r from-trial-blue to-trial-blue-deep text-white",
+                    "text-sm font-semibold tracking-wide rounded-sm",
+                    "transition-all duration-300"
+                  )}
+                >
+                  7-Day Trial - $49.99
+                </a>
+              )}
             </div>
           </div>
         </motion.div>
