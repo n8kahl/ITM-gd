@@ -15,13 +15,10 @@ import { PricingCard } from "@/components/ui/pricing-card";
 import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
 import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
 import { RibbonDivider } from "@/components/ui/ribbon-divider";
-import { CandlestickChart, WinRateChart, SignalPulse } from "@/components/ui/mini-chart";
 import { DiscordMock } from "@/components/ui/discord-mock";
 import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
 import { Analytics } from "@/lib/analytics";
 import { getPricingTiers, PricingTier } from "@/lib/supabase";
-import { createBrowserSupabase } from "@/lib/supabase-browser";
-import SparkleLog from "@/components/ui/sparkle-logo";
 import { BRAND_LOGO_SRC, BRAND_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
@@ -57,13 +54,23 @@ const ChatWidget = dynamic(
   () => import("@/components/ui/chat-widget").then((mod) => mod.ChatWidget),
   { ssr: false },
 );
+const SparkleLog = dynamic(() => import("@/components/ui/sparkle-logo"), {
+  ssr: false,
+});
+const CandlestickChart = dynamic(
+  () => import("@/components/ui/mini-chart").then((mod) => mod.CandlestickChart),
+  { ssr: false },
+);
+const WinRateChart = dynamic(
+  () => import("@/components/ui/mini-chart").then((mod) => mod.WinRateChart),
+  { ssr: false },
+);
 
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Legacy handler for contact modal with preset message (kept for fallback)
   const handleCohortContactFallback = () => {
@@ -79,13 +86,6 @@ export default function Home() {
         console.error('Failed to load pricing tiers:', error);
         // Fallback is handled in the render - uses hardcoded values if empty
       });
-  }, []);
-
-  useEffect(() => {
-    const supabase = createBrowserSupabase();
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: unknown } }) => {
-      setIsAuthenticated(Boolean(session));
-    });
   }, []);
 
   // Auto-popup subscribe modal after 5 seconds (once per session)
@@ -389,33 +389,28 @@ export default function Home() {
 
           {/* Pricing Cards Grid - Core → Pro → Execute */}
           <StaggerContainer
-            className={cn(
-              "grid gap-6 lg:gap-8 items-stretch",
-              isAuthenticated ? "md:grid-cols-3" : "md:grid-cols-2 lg:grid-cols-4"
-            )}
+            className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8 items-stretch"
             staggerDelay={0.15}
           >
-            {!isAuthenticated && (
-              <StaggerItem>
-                <PricingCard
-                  name="7-Day Trial"
-                  price="$49.99"
-                  period="/ 7 days"
-                  description="Core Sniper Access"
-                  features={[
-                    "🎯 Full Core Sniper SPX Alerts",
-                    "👀 Morning Watchlist Access",
-                    "🧠 Educational Commentary",
-                    "💬 Community Access",
-                    "📊 81% Win Rate Track Record",
-                  ]}
-                  whopLink="https://whop.com/checkout/plan_NeOYhHAwtWczQ"
-                  tier="trial"
-                  tagline="Limited Time"
-                  isYearly={false}
-                />
-              </StaggerItem>
-            )}
+            <StaggerItem>
+              <PricingCard
+                name="7-Day Trial"
+                price="$49.99"
+                period="/ 7 days"
+                description="Core Sniper Access"
+                features={[
+                  "🎯 Full Core Sniper SPX Alerts",
+                  "👀 Morning Watchlist Access",
+                  "🧠 Educational Commentary",
+                  "💬 Community Access",
+                  "📊 81% Win Rate Track Record",
+                ]}
+                whopLink="https://whop.com/checkout/plan_NeOYhHAwtWczQ"
+                tier="trial"
+                tagline="Limited Time"
+                isYearly={false}
+              />
+            </StaggerItem>
 
             {/* Core Sniper Card */}
             <StaggerItem>
@@ -764,24 +759,22 @@ export default function Home() {
                   <a href="#pricing">Choose Your Plan →</a>
                 </Button>
 
-                {!isAuthenticated && (
-                  <>
-                    <span className="text-sm text-muted-foreground/40 font-medium">or</span>
-                    <a
-                      href="https://whop.com/checkout/plan_NeOYhHAwtWczQ"
-                      className={cn(
-                        "inline-flex items-center justify-center min-w-[220px]",
-                        "px-8 py-4 rounded-sm text-sm font-semibold tracking-wider uppercase",
-                        "bg-transparent border border-trial-blue text-trial-blue-light",
-                        "hover:bg-trial-blue/10 hover:shadow-[0_0_24px_rgba(59,130,246,0.2)]",
-                        "transition-all duration-300"
-                      )}
-                      onClick={() => Analytics.trackCTAClick("Final CTA Trial Button")}
-                    >
-                      Try 7 Days for $49.99 →
-                    </a>
-                  </>
-                )}
+                <>
+                  <span className="text-sm text-muted-foreground/40 font-medium">or</span>
+                  <a
+                    href="https://whop.com/checkout/plan_NeOYhHAwtWczQ"
+                    className={cn(
+                      "inline-flex items-center justify-center min-w-[220px]",
+                      "px-8 py-4 rounded-sm text-sm font-semibold tracking-wider uppercase",
+                      "bg-transparent border border-trial-blue text-trial-blue-light",
+                      "hover:bg-trial-blue/10 hover:shadow-[0_0_24px_rgba(59,130,246,0.2)]",
+                      "transition-all duration-300"
+                    )}
+                    onClick={() => Analytics.trackCTAClick("Final CTA Trial Button")}
+                  >
+                    Try 7 Days for $49.99 →
+                  </a>
+                </>
               </div>
 
               <p className="text-xs text-muted-foreground/60 mt-4">
