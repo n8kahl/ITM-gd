@@ -24,6 +24,7 @@ type TabConfig = {
   icon: string
   path: string
   required_tier: MembershipTier
+  required_discord_role_ids: string[] | null
   badge_text: string | null
   badge_variant: BadgeVariant
   description: string | null
@@ -39,6 +40,7 @@ const EMPTY_TAB = (index: number): TabConfig => ({
   icon: 'LayoutDashboard',
   path: '/members/new-tab',
   required_tier: 'core',
+  required_discord_role_ids: null,
   badge_text: null,
   badge_variant: null,
   description: null,
@@ -54,6 +56,27 @@ function normalizeTabId(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9-_]/g, '-')
     .replace(/-+/g, '-')
+}
+
+function normalizeRoleIds(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  const roleIds = value
+    .map((id) => String(id).trim())
+    .filter(Boolean)
+  return roleIds.length > 0 ? Array.from(new Set(roleIds)) : null
+}
+
+function parseRoleIdsInput(value: string): string[] | null {
+  const roleIds = value
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+  return roleIds.length > 0 ? Array.from(new Set(roleIds)) : null
+}
+
+function formatRoleIdsInput(value: string[] | null | undefined): string {
+  if (!value || value.length === 0) return ''
+  return value.join(', ')
 }
 
 export default function AdminTabsPage() {
@@ -77,7 +100,10 @@ export default function AdminTabsPage() {
         return
       }
 
-      setTabs(payload.data || [])
+      setTabs((payload.data || []).map((tab: TabConfig) => ({
+        ...tab,
+        required_discord_role_ids: normalizeRoleIds(tab.required_discord_role_ids),
+      })))
     } catch {
       setError('Failed to load tab configurations')
     } finally {
@@ -155,6 +181,7 @@ export default function AdminTabsPage() {
         label: tab.label.trim(),
         icon: tab.icon.trim() || 'LayoutDashboard',
         path: tab.path.trim(),
+        required_discord_role_ids: normalizeRoleIds(tab.required_discord_role_ids),
         badge_text: tab.badge_text?.trim() || null,
         description: tab.description?.trim() || null,
       }))
@@ -353,6 +380,19 @@ export default function AdminTabsPage() {
                     onChange={(event) => updateTab(index, { sort_order: Number(event.target.value) || 0 })}
                     className="w-full rounded-md bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
                   />
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-xs text-white/60">Required Discord Roles</span>
+                  <input
+                    value={formatRoleIdsInput(tab.required_discord_role_ids)}
+                    onChange={(event) => updateTab(index, { required_discord_role_ids: parseRoleIdsInput(event.target.value) })}
+                    className="w-full rounded-md bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
+                    placeholder="Comma-separated role IDs (optional)"
+                  />
+                  <span className="block text-[11px] text-white/40">
+                    If set, users must have one of these Discord role IDs to see this tab.
+                  </span>
                 </label>
 
                 <label className="space-y-1">

@@ -146,6 +146,7 @@ export async function PUT(request: NextRequest) {
       icon: String(tab.icon || 'LayoutDashboard').trim(),
       path: String(tab.path || '').trim(),
       required_tier: tab.required_tier,
+      required_discord_role_ids: normalizeDiscordRoleIds(tab.required_discord_role_ids),
       badge_text: tab.badge_text ? String(tab.badge_text).trim() : null,
       badge_variant: tab.badge_variant || null,
       description: tab.description ? String(tab.description).trim() : null,

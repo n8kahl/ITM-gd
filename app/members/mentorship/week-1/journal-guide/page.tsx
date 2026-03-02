@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   BookOpen, CheckCircle2, ChevronDown, ChevronRight, ArrowRight,
   Upload, Camera, Plus, Filter, BarChart3, Target, Brain,
   AlertTriangle, TrendingDown, Eye,
 } from 'lucide-react'
+
+import { Analytics } from '@/lib/analytics'
 
 /* ─── Section data ─── */
 const SECTIONS = [
@@ -63,6 +65,8 @@ const CHECKLIST_ITEMS = [
   'Prepare your numbers for the Week 1 group call',
 ]
 
+const CHECKLIST_STORAGE_KEY = 'mentorship_week1_checklist_v1'
+
 /* ─── Sub-components ─── */
 function MockBrowser({ url, children }: { url: string; children: React.ReactNode }) {
   return (
@@ -104,7 +108,29 @@ function MockField({ label, value, placeholder, error }: { label: string; value?
 
 /* ─── Main Component ─── */
 export default function JournalGuidePage() {
-  const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set())
+  const [checkedItems, setCheckedItems] = useState<Set<number>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const raw = window.localStorage.getItem(CHECKLIST_STORAGE_KEY)
+      if (!raw) return new Set()
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return new Set()
+      const validItems = parsed
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value >= 0 && value < CHECKLIST_ITEMS.length)
+      return new Set(validItems)
+    } catch {
+      return new Set()
+    }
+  })
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CHECKLIST_STORAGE_KEY, JSON.stringify(Array.from(checkedItems)))
+    } catch {
+      // Ignore local storage write failures.
+    }
+  }, [checkedItems])
 
   const toggleCheck = (index: number) => {
     setCheckedItems((prev) => {
@@ -113,6 +139,7 @@ export default function JournalGuidePage() {
       else next.add(index)
       return next
     })
+    void Analytics.trackAcademyAction('mentorship_week1_checklist_toggle')
   }
 
   const scrollToSection = (id: string) => {
@@ -144,7 +171,7 @@ export default function JournalGuidePage() {
               <button
                 key={s.id}
                 onClick={() => scrollToSection(s.id)}
-                className="shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-medium text-white/50 transition-colors hover:bg-white/5 hover:text-white/80"
+                className="min-h-11 shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-medium text-white/50 transition-colors hover:bg-white/5 hover:text-white/80"
               >
                 {s.label}
               </button>
@@ -210,7 +237,7 @@ export default function JournalGuidePage() {
           </div>
 
           {/* Stats */}
-          <div className="mb-4 grid grid-cols-4 gap-2">
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
               { label: 'Total Trades', value: '0' },
               { label: 'Win Rate', value: '—' },
@@ -458,7 +485,7 @@ export default function JournalGuidePage() {
 
         {/* Sample journal with trades */}
         <MockBrowser url="Your journal after entering 20 trades">
-          <div className="mb-3 grid grid-cols-4 gap-2">
+          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
               <div className="text-[9px] font-semibold uppercase tracking-wider text-white/30">Total Trades</div>
               <div className="font-mono text-lg font-bold">20</div>
@@ -485,7 +512,7 @@ export default function JournalGuidePage() {
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-white/10">
@@ -522,6 +549,33 @@ export default function JournalGuidePage() {
               </tbody>
             </table>
           </div>
+
+          <div className="grid gap-2 md:hidden">
+            {SAMPLE_TRADES.map((trade, index) => (
+              <article key={index} className={`rounded-lg border p-3 ${trade.winner ? 'border-emerald-500/25 bg-emerald-500/[0.03]' : 'border-red-500/25 bg-red-500/[0.03]'}`}>
+                <div className="flex items-center justify-between">
+                  <p className="font-mono text-sm font-semibold text-white/90">{trade.symbol}</p>
+                  <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${trade.tagColor}`}>{trade.tag}</span>
+                </div>
+                <p className="mt-1 text-[11px] text-white/50">{trade.date} • {trade.dir}</p>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                  <div>
+                    <p className="text-white/35">Entry</p>
+                    <p className="font-mono text-white/70">{trade.entry}</p>
+                  </div>
+                  <div>
+                    <p className="text-white/35">Exit</p>
+                    <p className="font-mono text-white/70">{trade.exit}</p>
+                  </div>
+                  <div>
+                    <p className="text-white/35">P&L</p>
+                    <p className={`font-mono font-semibold ${trade.pnlColor}`}>{trade.pnl}</p>
+                  </div>
+                </div>
+              </article>
+            ))}
+            <p className="px-2 text-center text-[11px] text-white/30">... 15 more entries ...</p>
+          </div>
         </MockBrowser>
 
         <Callout type="tip">
@@ -556,7 +610,7 @@ export default function JournalGuidePage() {
           </div>
 
           {/* Stats grid */}
-          <div className="mb-4 grid grid-cols-4 gap-2">
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
               { label: 'Win Rate', value: '45%', color: 'text-amber-400' },
               { label: 'Avg P&L', value: '-$62', color: 'text-red-400' },
@@ -695,7 +749,7 @@ export default function JournalGuidePage() {
         <div className="flex flex-wrap justify-center gap-3">
           <Link
             href="/members/journal"
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition-opacity hover:opacity-90"
           >
             <BookOpen className="h-4 w-4" />
             Open Trade Journal
@@ -703,7 +757,7 @@ export default function JournalGuidePage() {
           </Link>
           <Link
             href="/members/mentorship/week-1"
-            className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 py-3 text-sm font-medium text-white/80 transition-colors hover:bg-white/10"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-6 py-3 text-sm font-medium text-white/80 transition-colors hover:bg-white/10"
           >
             Back to Week 1 Lesson
           </Link>

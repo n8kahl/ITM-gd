@@ -1,7 +1,21 @@
 'use client'
 
 import Link from 'next/link'
-import { Target, BookOpen, Brain, TrendingUp, Shield, Crosshair, BarChart3, Users } from 'lucide-react'
+import {
+  BarChart3,
+  BookOpen,
+  Brain,
+  CheckSquare,
+  ClipboardList,
+  Crosshair,
+  PhoneCall,
+  Shield,
+  Target,
+  TestTube2,
+  TrendingUp,
+  Trophy,
+  Users,
+} from 'lucide-react'
 
 const WEEKS = [
   {
@@ -82,7 +96,7 @@ export default function MentorshipPage() {
   return (
     <div className="space-y-8">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent p-8 md:p-12">
+      <div className="glass-card-heavy relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent p-8 md:p-12">
         <div className="relative z-10">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-400">
             <Crosshair className="h-3.5 w-3.5" />
@@ -107,10 +121,10 @@ export default function MentorshipPage() {
           { label: 'Repeatable Setups', value: 'Edge' },
           { label: 'Sniper Confidence', value: 'Mindset' },
         ].map((obj) => (
-          <div
-            key={obj.label}
-            className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-center"
-          >
+            <div
+              key={obj.label}
+              className="glass-card-heavy rounded-xl border border-white/10 p-4 text-center"
+            >
             <div className="font-mono text-lg font-bold text-emerald-400">{obj.value}</div>
             <div className="mt-1 text-[11px] font-medium uppercase tracking-wider text-white/40">{obj.label}</div>
           </div>
@@ -169,7 +183,7 @@ export default function MentorshipPage() {
                     {w.active && (
                       <Link
                         href={w.href}
-                        className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-black transition-opacity hover:opacity-90"
+                        className="mt-4 inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-black transition-opacity hover:opacity-90"
                       >
                         Start Week {w.week}
                         <span aria-hidden="true">&rarr;</span>
@@ -188,14 +202,14 @@ export default function MentorshipPage() {
         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white/40">Each Week Includes</h3>
         <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-5">
           {[
-            { icon: '📖', label: 'Core Lesson' },
-            { icon: '📝', label: 'Assignment' },
-            { icon: '🧪', label: 'Knowledge Test' },
-            { icon: '📞', label: '1hr Group Call' },
-            { icon: '🎯', label: 'Outcome Target' },
+            { icon: BookOpen, label: 'Core Lesson' },
+            { icon: ClipboardList, label: 'Assignment' },
+            { icon: TestTube2, label: 'Knowledge Test' },
+            { icon: PhoneCall, label: '1hr Group Call' },
+            { icon: Trophy, label: 'Outcome Target' },
           ].map((item) => (
-            <div key={item.label} className="flex items-center gap-3 text-sm text-white/70">
-              <span className="text-lg">{item.icon}</span>
+            <div key={item.label} className="glass-card-heavy flex min-h-11 items-center gap-3 rounded-xl border border-white/10 p-3 text-sm text-white/70">
+              <item.icon className="h-4 w-4 text-emerald-300" />
               {item.label}
             </div>
           ))}
