@@ -135,6 +135,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const period = analyticsPeriodSchema.parse(searchParams.get('period') ?? '30d')
     const periodStart = getPeriodStart(period)
+    const nowIso = new Date().toISOString()
 
     const fullSelect = 'id,trade_date,symbol,direction,pnl,hold_duration_min,mfe_percent,mae_percent,entry_price,exit_price,stop_loss,setup_type,market_context'
     const coreSelect = 'id,trade_date,symbol,direction,pnl,hold_duration_min,mfe_percent,mae_percent,entry_price,exit_price,stop_loss,market_context'
@@ -143,6 +144,7 @@ export async function GET(request: NextRequest) {
       .from('journal_entries')
       .select(fullSelect)
       .eq('user_id', user.id)
+      .lte('trade_date', nowIso)
       .order('trade_date', { ascending: true })
 
     if (period !== 'all') {
@@ -157,6 +159,7 @@ export async function GET(request: NextRequest) {
         .from('journal_entries')
         .select(coreSelect)
         .eq('user_id', user.id)
+        .lte('trade_date', nowIso)
         .order('trade_date', { ascending: true })
 
       if (period !== 'all') {

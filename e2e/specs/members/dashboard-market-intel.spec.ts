@@ -110,7 +110,7 @@ test.describe('Dashboard Market Intelligence Component', () => {
     expect(hasConsoleErrors).toBe(false);
   });
 
-  test('shows stock splits calendar', async ({ page }) => {
+  test('does not render stock splits calendar card', async ({ page }) => {
     await setupAllDashboardMocks(page);
     await page.goto(DASHBOARD_URL);
     await page.waitForLoadState('networkidle');
@@ -119,6 +119,6 @@ test.describe('Dashboard Market Intelligence Component', () => {
     await expect(marketIntelRegion).toBeVisible();
 
     const splitsCalendar = marketIntelRegion.locator('text=/Splits|Calendar/i');
-    await expect(splitsCalendar).toBeVisible();
+    await expect(splitsCalendar).toHaveCount(0);
   });
 });

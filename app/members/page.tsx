@@ -13,7 +13,6 @@ import { CalendarHeatmap } from '@/components/dashboard/calendar-heatmap'
 import { MarketBriefCard } from '@/components/dashboard/market-brief-card'
 import { MarketAnalyticsCard } from '@/components/dashboard/market-analytics-card'
 import { MarketMoversCard } from '@/components/dashboard/market-movers-card'
-import { StockSplitsCalendar } from '@/components/dashboard/stock-splits-calendar'
 import { EarningsRadarCard } from '@/components/dashboard/earnings-radar-card'
 import { FADE_UP_VARIANT, LUXURY_SPRING, STAGGER_CHILDREN } from '@/lib/motion-primitives'
 
@@ -112,7 +111,6 @@ export default function MemberDashboard() {
           <EarningsRadarCard />
           <MarketAnalyticsCard />
           <MarketMoversCard />
-          <StockSplitsCalendar />
         </div>
       </motion.section>
     </motion.div>

@@ -13,57 +13,12 @@ interface DashboardStats {
   trades_last_month: number
 }
 
-function toNumber(value: unknown): number | null {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null
-  }
-
-  if (typeof value === 'string') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-
-  return null
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function normalizeDashboardStats(value: unknown): DashboardStats | null {
-  if (!isRecord(value)) return null
-
-  const winRate = toNumber(value.win_rate)
-  const pnlMtd = toNumber(value.pnl_mtd)
-  const pnlChangePct = toNumber(value.pnl_change_pct)
-  const currentStreak = toNumber(value.current_streak)
-  const bestStreak = toNumber(value.best_streak)
-  const tradesMtd = toNumber(value.trades_mtd)
-  const tradesLastMonth = toNumber(value.trades_last_month)
-
-  if (
-    winRate == null
-    || pnlMtd == null
-    || pnlChangePct == null
-    || currentStreak == null
-    || bestStreak == null
-    || tradesMtd == null
-    || tradesLastMonth == null
-  ) {
-    return null
-  }
-
-  return {
-    win_rate: round(winRate, 1),
-    pnl_mtd: round(pnlMtd),
-    pnl_change_pct: round(pnlChangePct, 1),
-    current_streak: Math.max(0, Math.trunc(currentStreak)),
-    streak_type: value.streak_type === 'loss' ? 'loss' : 'win',
-    best_streak: Math.max(0, Math.trunc(bestStreak)),
-    avg_ai_grade: typeof value.avg_ai_grade === 'string' ? value.avg_ai_grade : null,
-    trades_mtd: Math.max(0, Math.trunc(tradesMtd)),
-    trades_last_month: Math.max(0, Math.trunc(tradesLastMonth)),
-  }
+interface DashboardEntryRow {
+  trade_date: string
+  pnl: number | null
+  is_winner: boolean | null
+  ai_analysis: unknown
+  created_at: string | null
 }
 
 function round(value: number, decimals: number = 2): number {
@@ -108,18 +63,115 @@ function parseAIGrade(value: unknown): string | null {
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>
     const grade = obj.grade
-    return typeof grade === 'string' ? grade : null
+    if (typeof grade === 'string') return grade
+    const letter = obj.letter_grade
+    return typeof letter === 'string' ? letter : null
   }
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value)
       if (parsed && typeof parsed.grade === 'string') return parsed.grade
+      if (parsed && typeof parsed.letter_grade === 'string') return parsed.letter_grade
       return null
     } catch {
       return null
     }
   }
   return null
+}
+
+function normalizeAiGrade(value: string | null): string | null {
+  if (!value) return null
+  const trimmed = value.trim().toUpperCase()
+  if (trimmed.length === 0) return null
+  const first = trimmed[0]
+  if (!['A', 'B', 'C', 'D', 'F'].includes(first)) return null
+  return first
+}
+
+function aiGradeToPoints(grade: string): number {
+  switch (grade) {
+    case 'A':
+      return 4
+    case 'B':
+      return 3
+    case 'C':
+      return 2
+    case 'D':
+      return 1
+    default:
+      return 0
+  }
+}
+
+function pointsToAiGrade(points: number): string {
+  if (points >= 3.5) return 'A'
+  if (points >= 2.5) return 'B'
+  if (points >= 1.5) return 'C'
+  if (points >= 0.5) return 'D'
+  return 'F'
+}
+
+function toDate(value: string | null | undefined): Date | null {
+  if (!value) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function deriveWinner(row: DashboardEntryRow): boolean | null {
+  if (row.is_winner === true) return true
+  if (row.is_winner === false) return false
+  if (row.pnl == null) return null
+  return row.pnl > 0
+}
+
+function calculateTradeStreak(rows: DashboardEntryRow[]): {
+  current: number
+  currentType: 'win' | 'loss'
+  best: number
+} {
+  const outcomes = rows
+    .map((row) => deriveWinner(row))
+    .filter((value): value is boolean => value != null)
+
+  if (outcomes.length === 0) {
+    return { current: 0, currentType: 'win', best: 0 }
+  }
+
+  const first = outcomes[0]
+  let current = 0
+  for (const outcome of outcomes) {
+    if (outcome === first) current += 1
+    else break
+  }
+
+  let best = 1
+  let run = 1
+  for (let index = 1; index < outcomes.length; index += 1) {
+    if (outcomes[index] === outcomes[index - 1]) {
+      run += 1
+    } else {
+      run = 1
+    }
+    best = Math.max(best, run)
+  }
+
+  return {
+    current,
+    currentType: first ? 'win' : 'loss',
+    best,
+  }
+}
+
+function calculateAverageAiGrade(rows: DashboardEntryRow[]): string | null {
+  const grades = rows
+    .map((row) => normalizeAiGrade(parseAIGrade(row.ai_analysis)))
+    .filter((grade): grade is string => grade != null)
+
+  if (grades.length === 0) return null
+
+  const averagePoints = grades.reduce((sum, grade) => sum + aiGradeToPoints(grade), 0) / grades.length
+  return pointsToAiGrade(averagePoints)
 }
 
 async function buildFallbackStats(
@@ -138,10 +190,12 @@ async function buildFallbackStats(
     .from('journal_entries')
     .select('trade_date, pnl, is_winner, ai_analysis, created_at')
     .eq('user_id', userId)
-    .eq('is_draft', false)
+    .not('is_draft', 'is', true)
     .neq('symbol', 'PENDING')
     .gte('trade_date', fetchStart.toISOString())
+    .lte('trade_date', now.toISOString())
     .order('trade_date', { ascending: false })
+    .order('created_at', { ascending: false })
 
   if (error && typeof error.message === 'string' && error.message.includes('is_draft')) {
     const retry = await supabase
@@ -150,7 +204,9 @@ async function buildFallbackStats(
       .eq('user_id', userId)
       .neq('symbol', 'PENDING')
       .gte('trade_date', fetchStart.toISOString())
+      .lte('trade_date', now.toISOString())
       .order('trade_date', { ascending: false })
+      .order('created_at', { ascending: false })
 
     entries = retry.data
     error = retry.error
@@ -158,45 +214,54 @@ async function buildFallbackStats(
 
   if (error) throw error
 
-  const rows = entries ?? []
-  const monthRows = rows.filter((row: any) => new Date(row.trade_date) >= monthStart)
-  const prevMonthRows = rows.filter((row: any) => {
-    const d = new Date(row.trade_date)
-    return d >= prevMonthStart && d <= prevMonthEnd
+  const rows: DashboardEntryRow[] = (entries ?? []).map((row: any) => ({
+    trade_date: String(row.trade_date),
+    pnl: typeof row.pnl === 'number' ? row.pnl : (typeof row.pnl === 'string' ? Number(row.pnl) : null),
+    is_winner: row.is_winner === true ? true : row.is_winner === false ? false : null,
+    ai_analysis: row.ai_analysis ?? null,
+    created_at: typeof row.created_at === 'string' ? row.created_at : null,
+  }))
+
+  const monthRows = rows.filter((row) => {
+    const tradeDate = toDate(row.trade_date)
+    return tradeDate != null && tradeDate >= monthStart && tradeDate <= now
   })
 
-  const pnlMtd = monthRows.reduce((sum: number, row: any) => sum + Number(row.pnl || 0), 0)
-  const prevMonthPnl = prevMonthRows.reduce((sum: number, row: any) => sum + Number(row.pnl || 0), 0)
+  const monthClosedRows = monthRows.filter((row) => {
+    const tradeDate = toDate(row.trade_date)
+    return tradeDate != null && tradeDate >= monthStart && tradeDate <= now && row.pnl != null
+  })
+
+  const prevMonthRows = rows.filter((row) => {
+    const tradeDate = toDate(row.trade_date)
+    return tradeDate != null
+      && tradeDate >= prevMonthStart
+      && tradeDate <= prevMonthEnd
+      && row.pnl != null
+  })
+
+  const pnlMtd = monthClosedRows.reduce((sum, row) => sum + (row.pnl ?? 0), 0)
+  const prevMonthPnl = prevMonthRows.reduce((sum, row) => sum + (row.pnl ?? 0), 0)
   const pnlChangePct = prevMonthPnl === 0
     ? (pnlMtd === 0 ? 0 : 100)
     : ((pnlMtd - prevMonthPnl) / Math.abs(prevMonthPnl)) * 100
 
-  const winners = monthRows.filter((row: any) => row.is_winner === true).length
-  const winRate = monthRows.length > 0 ? (winners / monthRows.length) * 100 : 0
+  const winners = monthClosedRows.filter((row) => deriveWinner(row) === true).length
+  const winRate = monthClosedRows.length > 0 ? (winners / monthClosedRows.length) * 100 : 0
 
-  const firstWithGrade = rows.find((row: any) => parseAIGrade(row.ai_analysis))
-  const avgAiGrade = firstWithGrade ? parseAIGrade(firstWithGrade.ai_analysis) : null
+  const avgAiGrade = calculateAverageAiGrade(monthRows)
 
-  const { data: streakRow } = await supabase
-    .from('journal_streaks')
-    .select('current_streak, longest_streak')
-    .eq('user_id', userId)
-    .single()
-
-  // Determine streak type from recent trades (not cumulative totals)
-  const recentTrades = rows.filter((row: any) => row.is_winner != null)
-  const lastTrade = recentTrades[0] // Already sorted DESC
-  const streakType: 'win' | 'loss' = lastTrade?.is_winner === false ? 'loss' : 'win'
+  const streak = calculateTradeStreak(rows)
 
   return {
     win_rate: round(winRate, 1),
     pnl_mtd: round(pnlMtd),
     pnl_change_pct: round(pnlChangePct, 1),
-    current_streak: Number(streakRow?.current_streak || 0),
-    streak_type: streakType,
-    best_streak: Number(streakRow?.longest_streak || 0),
+    current_streak: streak.current,
+    streak_type: streak.currentType,
+    best_streak: streak.best,
     avg_ai_grade: avgAiGrade,
-    trades_mtd: monthRows.length,
+    trades_mtd: monthClosedRows.length,
     trades_last_month: prevMonthRows.length,
   }
 }
@@ -222,21 +287,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || 'month'
 
-    const { data, error } = await supabase.rpc('get_dashboard_stats', {
-      p_user_id: user.id,
-      p_period: period,
-    })
-
-    if (!error && data) {
-      const normalized = normalizeDashboardStats(data)
-      if (normalized) {
-        return NextResponse.json({ success: true, data: normalized })
-      }
-
-      console.warn('get_dashboard_stats returned legacy/incompatible shape; using fallback')
-    }
-
-    // Fallback path for environments where RPC migrations are missing or legacy.
+    // App-side aggregation keeps dashboard metrics accurate across schema drift
+    // (for example nullable is_winner or legacy RPC payloads).
     const fallbackData = await buildFallbackStats(supabase, user.id, period)
     return NextResponse.json({ success: true, data: fallbackData, fallback: true })
   } catch (error) {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { ImagePlus, Plus, Upload } from 'lucide-react'
 import { PageHeader } from '@/components/members/page-header'
 import { Button } from '@/components/ui/button'
@@ -83,6 +84,7 @@ async function extractError(response: Response): Promise<string> {
 }
 
 export default function JournalPage() {
+  const searchParams = useSearchParams()
   const [filters, dispatchFilters] = useReducer(filterReducer, DEFAULT_JOURNAL_FILTERS)
 
   const [entries, setEntries] = useState<JournalEntry[]>([])
@@ -106,6 +108,7 @@ export default function JournalPage() {
   const pullStartYRef = useRef<number | null>(null)
   const [pullDistance, setPullDistance] = useState(0)
   const [pullRefreshing, setPullRefreshing] = useState(false)
+  const deepLinkInitializedRef = useRef(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -233,6 +236,41 @@ export default function JournalPage() {
       loadEntriesAbortRef.current?.abort()
     }
   }, [])
+
+  useEffect(() => {
+    if (deepLinkInitializedRef.current) return
+    if (loading) return
+
+    const entryId = searchParams.get('entry')
+    const fromDate = searchParams.get('from')
+    const toDate = searchParams.get('to')
+    const openNew = searchParams.get('new') === '1'
+
+    const datePatch: Partial<JournalFilters> = {}
+    if (typeof fromDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
+      datePatch.startDate = fromDate
+    }
+    if (typeof toDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
+      datePatch.endDate = toDate
+    }
+    if (Object.keys(datePatch).length > 0) {
+      dispatchFilters({ type: 'patch', value: datePatch })
+    }
+
+    if (entryId) {
+      const targetEntry = entries.find((entry) => entry.id === entryId)
+      if (targetEntry) {
+        setSelectedEntry(targetEntry)
+      }
+    }
+
+    if (openNew && isOnline) {
+      setEditEntry(null)
+      setSheetOpen(true)
+    }
+
+    deepLinkInitializedRef.current = true
+  }, [entries, isOnline, loading, searchParams])
 
   const availableTags = useMemo(() => {
     const set = new Set<string>()

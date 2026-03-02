@@ -58,7 +58,7 @@ interface EntryFormValues {
 }
 
 const EMPTY_VALUES: EntryFormValues = {
-  trade_date: new Date().toISOString().split('T')[0],
+  trade_date: getLocalDateInputValue(),
   symbol: '',
   direction: 'long',
   contract_type: 'stock',
@@ -93,6 +93,13 @@ const EMPTY_VALUES: EntryFormValues = {
   rating: '',
   screenshot_url: '',
   screenshot_storage_path: '',
+}
+
+function getLocalDateInputValue(now: Date = new Date()): string {
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function toTradeDateIso(dateInput: string): string {
