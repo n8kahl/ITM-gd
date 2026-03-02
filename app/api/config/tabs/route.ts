@@ -24,19 +24,6 @@ type TabConfigRecord = {
   [key: string]: unknown
 }
 
-const TRADE_DAY_REPLAY_TAB: TabConfigRecord = {
-  tab_id: 'trade-day-replay',
-  label: 'Trade Day Replay',
-  icon: 'Play',
-  path: '/members/trade-day-replay',
-  required_tier: 'admin',
-  sort_order: 8,
-  is_required: false,
-  mobile_visible: true,
-  is_active: true,
-  description: 'Replay and analyze a full trade day from transcript + market data',
-}
-
 // Default fallback if database is unavailable
 const DEFAULT_TABS: TabConfigRecord[] = [
   { tab_id: 'dashboard', label: 'Command Center', icon: 'LayoutDashboard', path: '/members', required_tier: 'core', sort_order: 0, is_required: true, mobile_visible: true, is_active: true },
@@ -46,7 +33,6 @@ const DEFAULT_TABS: TabConfigRecord[] = [
   { tab_id: 'library', label: 'Academy', icon: 'GraduationCap', path: '/members/academy', required_tier: 'core', sort_order: 5, is_required: false, mobile_visible: false, is_active: true },
   { tab_id: 'social', label: 'Social', icon: 'Users', path: '/members/social', required_tier: 'core', sort_order: 6, is_required: false, mobile_visible: true, is_active: true },
   { tab_id: 'studio', label: 'Trade Studio', icon: 'Palette', path: '/members/studio', required_tier: 'executive', sort_order: 7, is_required: false, mobile_visible: false, is_active: true },
-  TRADE_DAY_REPLAY_TAB,
   { tab_id: 'profile', label: 'Profile', icon: 'UserCircle', path: '/members/profile', required_tier: 'core', sort_order: 99, is_required: true, mobile_visible: true, is_active: true },
 ]
 
@@ -56,23 +42,12 @@ type DynamicTabRecord = Record<string, unknown> & {
   is_active?: unknown
 }
 
-function hasReplayTab(rows: DynamicTabRecord[]): boolean {
-  return rows.some((row) => String(row.tab_id || '') === 'trade-day-replay')
-}
-
 function sortBySortOrder<T extends { sort_order?: unknown }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => {
     const aSort = Number(a.sort_order ?? 0)
     const bSort = Number(b.sort_order ?? 0)
     return aSort - bSort
   })
-}
-
-function ensureReplayTabInActiveRows(allRows: DynamicTabRecord[], activeRows: DynamicTabRecord[]): DynamicTabRecord[] {
-  if (hasReplayTab(allRows)) {
-    return activeRows
-  }
-  return [...activeRows, TRADE_DAY_REPLAY_TAB]
 }
 
 export async function GET() {
@@ -108,11 +83,10 @@ export async function GET() {
 
     const allRows = (tabs || []) as DynamicTabRecord[]
     const activeRows = allRows.filter((row) => row.is_active !== false)
-    const rowsWithReplay = ensureReplayTabInActiveRows(allRows, activeRows)
 
     return NextResponse.json({
       success: true,
-      data: sortBySortOrder(rowsWithReplay),
+      data: sortBySortOrder(activeRows),
     }, {
       headers: {
         'Cache-Control': 'no-store',

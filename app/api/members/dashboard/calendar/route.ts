@@ -55,16 +55,34 @@ async function buildCalendarData(
   userId: string,
   months: number,
 ): Promise<CalendarDayStats[]> {
+  const now = new Date()
   const start = new Date()
   start.setMonth(start.getMonth() - Math.max(1, months))
   start.setHours(0, 0, 0, 0)
 
-  const { data: entries, error } = await supabase
+  let { data: entries, error } = await supabase
     .from('journal_entries')
     .select('trade_date, pnl, is_winner, mood_after')
     .eq('user_id', userId)
+    .not('is_draft', 'is', true)
+    .neq('symbol', 'PENDING')
     .gte('trade_date', start.toISOString())
+    .lte('trade_date', now.toISOString())
     .order('trade_date', { ascending: true })
+
+  if (error && typeof error.message === 'string' && error.message.includes('is_draft')) {
+    const retry = await supabase
+      .from('journal_entries')
+      .select('trade_date, pnl, is_winner, mood_after')
+      .eq('user_id', userId)
+      .neq('symbol', 'PENDING')
+      .gte('trade_date', start.toISOString())
+      .lte('trade_date', now.toISOString())
+      .order('trade_date', { ascending: true })
+
+    entries = retry.data
+    error = retry.error
+  }
 
   if (error) throw error
 
@@ -152,4 +170,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
@@ -42,6 +43,7 @@ export function RecentTrades() {
   const [trades, setTrades] = useState<RecentTrade[]>([])
   const [loading, setLoading] = useState(true)
   const { session, isLoading: isAuthLoading } = useMemberAuth()
+  const router = useRouter()
 
   useEffect(() => {
     const accessToken = session?.access_token
@@ -78,12 +80,13 @@ export function RecentTrades() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 lg:px-6 pt-4 lg:pt-5 pb-3">
         <h3 className="text-sm font-medium text-ivory">Recent Trades</h3>
-        <Link
-          href="/members/journal"
-          className="text-xs text-emerald-400 hover:text-emerald-300 hover:underline transition-colors"
+        <button
+          type="button"
+          onClick={() => router.push('/members/journal')}
+          className="relative z-10 text-xs text-emerald-400 hover:text-emerald-300 hover:underline transition-colors"
         >
           View All
-        </Link>
+        </button>
       </div>
 
       {/* Trade List */}

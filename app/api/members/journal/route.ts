@@ -151,6 +151,12 @@ function calculatePnlPercentage(
   return round((perUnit / entryPrice) * 100, 4)
 }
 
+function deriveWinnerFromPnl(pnl: unknown): boolean | null {
+  const parsed = toNumber(pnl)
+  if (parsed == null) return null
+  return parsed > 0
+}
+
 async function recalculateStreaks(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, userId: string) {
   const { data, error } = await supabase
     .from('journal_entries')
@@ -264,7 +270,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (parsedQuery.includeDrafts !== 'true') {
-      query = query.eq('is_draft', false)
+      query = query.not('is_draft', 'is', true)
       query = query.neq('symbol', 'PENDING')
     }
 
@@ -281,7 +287,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (parsedQuery.isWinner) {
-      query = query.eq('is_winner', parsedQuery.isWinner === 'true')
+      if (parsedQuery.isWinner === 'true') {
+        query = query.or('is_winner.eq.true,pnl.gt.0')
+      } else {
+        query = query.or('is_winner.eq.false,pnl.lte.0')
+      }
     }
 
     if (parsedQuery.isOpen) {
@@ -365,6 +375,10 @@ export async function POST(request: NextRequest) {
       payload.pnl_percentage = calculatePnlPercentage(direction, entryPrice, exitPrice)
     }
 
+    if (!Object.prototype.hasOwnProperty.call(payload, 'is_winner')) {
+      payload.is_winner = deriveWinnerFromPnl(payload.pnl)
+    }
+
     const { data, error } = await supabase
       .from('journal_entries')
       .insert(payload)
@@ -444,6 +458,13 @@ export async function PATCH(request: NextRequest) {
       && !Object.prototype.hasOwnProperty.call(updatePayload, 'is_open')
     ) {
       updatePayload.is_open = false
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(updatePayload, 'is_winner')) {
+      const effectivePnl = Object.prototype.hasOwnProperty.call(updatePayload, 'pnl')
+        ? updatePayload.pnl
+        : existing.pnl
+      updatePayload.is_winner = deriveWinnerFromPnl(effectivePnl)
     }
 
     const mergedValidation = journalEntryCreateSchema.safeParse({

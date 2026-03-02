@@ -11,6 +11,7 @@ async function buildFallbackEquityCurve(
   userId: string,
   days: number,
 ): Promise<Array<{ date: string; daily_pnl: number; cumulative_pnl: number }>> {
+  const now = new Date()
   const start = new Date()
   start.setDate(start.getDate() - Math.max(1, days))
 
@@ -18,9 +19,10 @@ async function buildFallbackEquityCurve(
     .from('journal_entries')
     .select('trade_date, pnl')
     .eq('user_id', userId)
-    .eq('is_draft', false)
+    .not('is_draft', 'is', true)
     .neq('symbol', 'PENDING')
     .gte('trade_date', start.toISOString())
+    .lte('trade_date', now.toISOString())
     .order('trade_date', { ascending: true })
 
   if (error && typeof error.message === 'string' && error.message.includes('is_draft')) {
@@ -30,6 +32,7 @@ async function buildFallbackEquityCurve(
       .eq('user_id', userId)
       .neq('symbol', 'PENDING')
       .gte('trade_date', start.toISOString())
+      .lte('trade_date', now.toISOString())
       .order('trade_date', { ascending: true })
 
     entries = retry.data
@@ -77,6 +80,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const days = parseInt(searchParams.get('days') || '30', 10)
+    const now = new Date()
+    const nowMs = now.getTime()
 
     const { data, error } = await supabase.rpc('get_equity_curve', {
       p_user_id: user.id,
@@ -84,11 +89,21 @@ export async function GET(request: NextRequest) {
     })
 
     if (!error && Array.isArray(data)) {
-      const normalized = data.map((row: any) => ({
-        date: row.date ?? row.trade_date,
-        daily_pnl: Number(row.daily_pnl ?? 0),
-        cumulative_pnl: Number(row.cumulative_pnl ?? 0),
-      }))
+      const normalized = data
+        .map((row: any) => {
+          const dateValue = String(row.date ?? row.trade_date ?? '')
+          const parsedDate = new Date(dateValue)
+          if (Number.isNaN(parsedDate.getTime()) || parsedDate.getTime() > nowMs) {
+            return null
+          }
+
+          return {
+            date: dateValue,
+            daily_pnl: Number(row.daily_pnl ?? 0),
+            cumulative_pnl: Number(row.cumulative_pnl ?? 0),
+          }
+        })
+        .filter((row): row is { date: string; daily_pnl: number; cumulative_pnl: number } => row != null)
       return NextResponse.json({ success: true, data: normalized })
     }
 
