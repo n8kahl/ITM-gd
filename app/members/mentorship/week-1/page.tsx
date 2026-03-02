@@ -158,9 +158,11 @@ export default function Week1Page() {
         </div>
         <div className="glass-card-heavy overflow-hidden rounded-xl border border-white/10 bg-white/[0.02]">
           <iframe
-            src="https://gamma.app/embed/k7v0k4de6wwqh2o"
-            className="h-[420px] w-full md:h-[600px]"
-            allow="fullscreen"
+            src="https://gamma.app/embed/k7v0k4de6wwqh2o?mode=present"
+            className="h-[56vh] min-h-[360px] max-h-[720px] w-full md:h-[72vh] md:min-h-[620px] md:max-h-[900px] lg:h-[78vh]"
+            allow="fullscreen; autoplay"
+            allowFullScreen
+            loading="lazy"
             title="Week 1 — The Trader Identity Reset"
           />
         </div>
