@@ -54,6 +54,7 @@ function buildCSP(nonce: string): string {
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     `connect-src ${connectSrc.join(' ')}`,
+    "frame-src 'self' https://gamma.app https://*.gamma.app",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",

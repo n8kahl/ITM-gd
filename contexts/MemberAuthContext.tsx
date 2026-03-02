@@ -110,22 +110,8 @@ const E2E_BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001'
 const E2E_BYPASS_SHARED_SECRET = process.env.NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET || ''
 const DISCORD_GUILD_ROLES_MISSING_CACHE_KEY = 'member_auth:discord_guild_roles_missing_at_ms'
 const DISCORD_GUILD_ROLES_MISSING_CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const ADMIN_TRADE_DAY_REPLAY_TAB_ID = 'trade-day-replay'
-const ADMIN_TRADE_DAY_REPLAY_TAB_CONFIG: TabConfig = {
-  id: ADMIN_TRADE_DAY_REPLAY_TAB_ID,
-  tab_id: ADMIN_TRADE_DAY_REPLAY_TAB_ID,
-  label: 'Trade Day Replay',
-  icon: 'Play',
-  path: '/members/trade-day-replay',
-  required_tier: 'admin',
-  badge_text: null,
-  badge_variant: null,
-  description: 'Replay and analyze a full trade day from transcript + market data',
-  mobile_visible: true,
-  sort_order: 8,
-  is_required: false,
-  is_active: true,
-}
+const SNIPER_MEMBERSHIP_ROLE_ID = '1468748795234881597'
+const SNIPER_MEMBERSHIP_TAB_ALLOWLIST = new Set(['dashboard', 'journal', 'ai-coach', 'mentorship', 'profile'])
 
 const FALLBACK_TAB_CONFIGS: TabConfig[] = [
   {
@@ -297,21 +283,6 @@ function buildFallbackTabConfig(tabId: string, sortOrder: number): TabConfig {
     is_required: false,
     is_active: true,
   }
-}
-
-function ensureAdminReplayTabIds(tabIds: string[], isAdmin: boolean): string[] {
-  if (!isAdmin || tabIds.includes(ADMIN_TRADE_DAY_REPLAY_TAB_ID)) {
-    return tabIds
-  }
-  return [...tabIds, ADMIN_TRADE_DAY_REPLAY_TAB_ID]
-}
-
-function ensureAdminReplayTabConfig(tabs: TabConfig[], isAdmin: boolean): TabConfig[] {
-  if (!isAdmin || tabs.some((tab) => tab.tab_id === ADMIN_TRADE_DAY_REPLAY_TAB_ID)) {
-    return tabs
-  }
-
-  return [...tabs, ADMIN_TRADE_DAY_REPLAY_TAB_CONFIG].sort((a, b) => a.sort_order - b.sort_order)
 }
 
 function createE2EBypassAuthState(): MemberAuthState {
@@ -650,6 +621,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Sniper Membership should retain AI Coach access even when tier mapping
+    // is not configured for this Discord role in app_settings.
+    if (roleIds.includes(SNIPER_MEMBERSHIP_ROLE_ID)) {
+      return 'pro'
+    }
+
     return null
   }, [roleMapping])
 
@@ -670,11 +647,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         })
         .map(tab => tab.tab_id)
 
-      return ensureAdminReplayTabIds(allowedTabIds, isAdmin)
+      return allowedTabIds
     }
 
     // Fallback: hardcoded tabs if API not yet loaded
-    if (!tier) return ensureAdminReplayTabIds(['dashboard', 'profile'], isAdmin)
+    if (!tier) return ['dashboard', 'profile']
 
     let fallbackTabs: string[]
     switch (tier) {
@@ -691,7 +668,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         fallbackTabs = ['dashboard', 'profile']
     }
 
-    return ensureAdminReplayTabIds(fallbackTabs, isAdmin)
+    return fallbackTabs
   }, [allTabConfigs])
 
   // Fetch allowed tabs (now based on tier, not database)
@@ -1368,20 +1345,24 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       ? tierHierarchy[state.profile.membership_tier] || 0
       : 0
     const isAdmin = state.profile?.role === 'admin'
+    const userDiscordRoles = state.profile?.discord_roles ?? []
+    const hasSniperMembershipRole = userDiscordRoles.includes(SNIPER_MEMBERSHIP_ROLE_ID)
 
     if (!allTabConfigs.length) {
       const fallbackTabIds = state.allowedTabs.length > 0
-        ? ensureAdminReplayTabIds(state.allowedTabs, isAdmin)
+        ? state.allowedTabs
         : getAllowedTabsForTier(state.profile?.membership_tier || null, isAdmin)
 
       const fallbackTabs = fallbackTabIds.map((tabId, index) => (
         buildFallbackTabConfig(tabId, index + 1)
       ))
 
-      return ensureAdminReplayTabConfig(fallbackTabs, isAdmin)
-    }
+      if (!isAdmin && hasSniperMembershipRole) {
+        return fallbackTabs.filter((tab) => SNIPER_MEMBERSHIP_TAB_ALLOWLIST.has(tab.tab_id))
+      }
 
-    const userDiscordRoles = state.profile?.discord_roles ?? []
+      return fallbackTabs
+    }
 
     const visibleTabs = allTabConfigs.filter(tab => {
       if (!tab.is_active) return false
@@ -1400,7 +1381,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       return userTierLevel >= requiredLevel
     })
 
-    return ensureAdminReplayTabConfig(visibleTabs, isAdmin)
+    if (!isAdmin && hasSniperMembershipRole) {
+      return visibleTabs.filter((tab) => SNIPER_MEMBERSHIP_TAB_ALLOWLIST.has(tab.tab_id))
+    }
+
+    return visibleTabs
   }, [allTabConfigs, getAllowedTabsForTier, state.allowedTabs, state.profile?.membership_tier, state.profile?.role, state.profile?.discord_roles])
 
   const getMobileTabs = useCallback((): TabConfig[] => {
