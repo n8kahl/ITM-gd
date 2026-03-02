@@ -145,22 +145,25 @@ export function AIInsights() {
     }
 
     async function fetchInsights() {
+      const token = accessToken
+      if (!token) return
+
       try {
         const [briefResponse, analysisRes, analyticsRes, tradePresenceRes] = await Promise.all([
-          getMorningBrief(accessToken).catch(() => null),
+          getMorningBrief(token).catch(() => null),
           fetch('/api/members/journal?limit=1&sort=created_at&order=desc&has_ai=true', {
             headers: {
-              Authorization: `Bearer ${accessToken}`,
+              Authorization: `Bearer ${token}`,
             },
           }),
           fetch('/api/members/journal/analytics?period=30d', {
             headers: {
-              Authorization: `Bearer ${accessToken}`,
+              Authorization: `Bearer ${token}`,
             },
           }),
           fetch('/api/members/journal?limit=1&sortBy=trade_date&sortDir=desc', {
             headers: {
-              Authorization: `Bearer ${accessToken}`,
+              Authorization: `Bearer ${token}`,
             },
           }),
         ])
