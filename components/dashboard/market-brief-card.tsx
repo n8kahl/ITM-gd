@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Loader2, RefreshCw, Sunrise } from 'lucide-react'
+import { CalendarDays, Sunrise } from 'lucide-react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { AICoachAPIError, getMorningBrief, type MorningBrief } from '@/lib/api/ai-coach'
+import { buildAICoachPromptHref, buildSymbolAICoachHref } from '@/lib/ai-coach-links'
 import { cn } from '@/lib/utils'
 
 const GAME_PLAN_PROMPT =
@@ -67,6 +68,55 @@ function parseClockTime(timeLabel: string): { hour: number; minute: number } | n
   return { hour, minute }
 }
 
+function normalizeDateKey(value: string | null): string | null {
+  if (!value) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString().slice(0, 10)
+}
+
+function parseIsoDate(value: string | null): Date | null {
+  if (!value) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [yearRaw, monthRaw, dayRaw] = value.split('-')
+    const year = Number(yearRaw)
+    const month = Number(monthRaw)
+    const day = Number(dayRaw)
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
+    return new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed
+}
+
+function formatEtDate(value: string | null): string {
+  const parsed = parseIsoDate(value)
+  if (!parsed) return 'n/a'
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(parsed)
+}
+
+function formatEtDateTime(value: string | null): string {
+  const parsed = parseIsoDate(value)
+  if (!parsed) return 'n/a'
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(parsed)
+}
+
 function getEtClock(now: Date = new Date()): { dateKey: string; minutes: number } {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
@@ -90,14 +140,14 @@ function getEtClock(now: Date = new Date()): { dateKey: string; minutes: number 
   }
 }
 
-function formatCountdown(marketDate: string | null, timeLabel: string | null, nowTick: number): string | null {
-  if (!marketDate || !timeLabel) return null
+function formatCountdown(eventDate: string | null, timeLabel: string | null, nowTick: number): string | null {
+  if (!eventDate || !timeLabel) return null
 
   const clock = parseClockTime(timeLabel)
   if (!clock) return null
 
   const et = getEtClock(new Date(nowTick))
-  if (et.dateKey !== marketDate) return null
+  if (et.dateKey !== eventDate) return null
 
   const eventMinutes = clock.hour * 60 + clock.minute
   const delta = eventMinutes - et.minutes
@@ -124,7 +174,6 @@ export function MarketBriefCard() {
 
   const [brief, setBrief] = useState<MorningBrief | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nowTick, setNowTick] = useState(() => Date.now())
 
@@ -132,8 +181,7 @@ export function MarketBriefCard() {
     if (!token) return
     setError(null)
 
-    if (force) setIsRefreshing(true)
-    else setIsLoading(true)
+    if (!force) setIsLoading(true)
 
     try {
       const result = await getMorningBrief(token, { force })
@@ -146,7 +194,6 @@ export function MarketBriefCard() {
       setBrief(null)
     } finally {
       setIsLoading(false)
-      setIsRefreshing(false)
     }
   }, [token])
 
@@ -163,14 +210,33 @@ export function MarketBriefCard() {
     return () => window.clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    if (!token) return
+
+    const interval = window.setInterval(() => {
+      void loadBrief(true)
+    }, 5 * 60 * 1000)
+
+    const handleFocus = () => {
+      void loadBrief(true)
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [loadBrief, token])
+
   const economicEvents = useMemo(() => {
-    const marketDate = asString(brief?.marketDate) || null
+    const marketDate = normalizeDateKey(asString(brief?.marketDate))
     return (brief?.economicEvents || []).slice(0, 3).map((event) => ({
       event: asString((event as Record<string, unknown>).event) || 'Unnamed event',
       time: asString((event as Record<string, unknown>).time) || 'TBD',
       impact: asString((event as Record<string, unknown>).impact) || 'MEDIUM',
+      date: normalizeDateKey(asString((event as Record<string, unknown>).date)) || marketDate,
       countdown: formatCountdown(
-        marketDate,
+        normalizeDateKey(asString((event as Record<string, unknown>).date)) || marketDate,
         asString((event as Record<string, unknown>).time),
         nowTick,
       ),
@@ -195,12 +261,14 @@ export function MarketBriefCard() {
   }, [brief?.openPositionStatus])
 
   const gamePlanHref = useMemo(() => {
-    const params = new URLSearchParams({
-      prompt: GAME_PLAN_PROMPT,
+    return buildAICoachPromptHref(GAME_PLAN_PROMPT, {
       source: 'dashboard_market_brief',
+      symbol: 'SPX',
     })
-    return `/members/ai-coach?${params.toString()}`
   }, [])
+
+  const briefDateLabel = formatEtDate(asString(brief?.marketDate))
+  const generatedLabel = formatEtDateTime(asString(brief?.generatedAt))
 
   return (
     <div className="glass-card-heavy rounded-2xl p-4 lg:p-6 border-champagne/[0.08] h-full flex flex-col">
@@ -211,25 +279,14 @@ export function MarketBriefCard() {
             <h3 className="text-sm font-medium text-ivory">Market Brief</h3>
           </div>
           <p className="text-xs text-muted-foreground mt-1">Pre-market context, economic events, and earnings risk</p>
+          <p className="text-[10px] text-white/45 mt-1">
+            Brief date {briefDateLabel} · Updated {generatedLabel} ET
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <span className={cn('text-[10px] rounded-full border px-2 py-0.5', marketStatusTone(brief))}>
             {marketStatusLabel(brief)}
           </span>
-          <button
-            type="button"
-            onClick={() => loadBrief(true)}
-            disabled={isLoading || isRefreshing}
-            className={cn(
-              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition-colors',
-              isLoading || isRefreshing
-                ? 'border-white/10 bg-white/5 text-white/35 cursor-not-allowed'
-                : 'border-champagne/30 bg-champagne/10 text-champagne hover:bg-champagne/15',
-            )}
-          >
-            {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            Refresh
-          </button>
         </div>
       </div>
 
@@ -261,6 +318,7 @@ export function MarketBriefCard() {
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-white/80 truncate">{item.event}</span>
                       <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-white/55 font-mono">{formatEtDate(item.date)}</span>
                         <span className="text-[10px] text-white/55 font-mono">{item.time}</span>
                         {item.countdown && (
                           <span className="text-[10px] text-emerald-300">{item.countdown}</span>
@@ -285,7 +343,15 @@ export function MarketBriefCard() {
                 {earnings.map((item) => (
                   <div key={`${item.symbol}-${item.time}`} className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-semibold text-white">{item.symbol}</span>
+                      <Link
+                        href={buildSymbolAICoachHref(item.symbol, {
+                          context: 'Focus on earnings setup risk, expected move, and post-earnings reaction plan.',
+                          source: 'dashboard_market_brief_earnings',
+                        })}
+                        className="font-mono text-xs font-semibold text-white hover:text-emerald-300 transition-colors"
+                      >
+                        {item.symbol}
+                      </Link>
                       <span className="text-[10px] text-white/55">{item.time}</span>
                     </div>
                     <div className="text-[10px] text-white/45 mt-1">Expected move {item.expectedMove}</div>
@@ -304,7 +370,15 @@ export function MarketBriefCard() {
                 {openRisks.map((item, index) => (
                   <div key={`${item.symbol}-${index}`} className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-xs font-semibold text-white">{item.symbol}</span>
+                      <Link
+                        href={buildSymbolAICoachHref(item.symbol, {
+                          context: 'Prioritize open-position risk adjustments and current catalyst risk.',
+                          source: 'dashboard_market_brief_open_risk',
+                        })}
+                        className="font-mono text-xs font-semibold text-white hover:text-emerald-300 transition-colors"
+                      >
+                        {item.symbol}
+                      </Link>
                       <span className={cn('text-[10px] font-medium', pnlTone(item.pnlPct))}>
                         {item.pnlPct == null ? 'P&L n/a' : `${item.pnlPct.toFixed(1)}%`}
                         {item.dte != null && Number.isFinite(item.dte) ? ` • ${Math.max(0, Math.round(item.dte))} DTE` : ''}
@@ -327,7 +401,10 @@ export function MarketBriefCard() {
           Build Today&apos;s Game Plan
         </Link>
         <Link
-          href="/members/ai-coach?view=brief"
+          href={buildAICoachPromptHref(
+            'Give me today\'s full market brief with macro catalysts, economic event timing, and highest-conviction watchlist setups.',
+            { source: 'dashboard_market_brief_open_full', symbol: 'SPX' },
+          )}
           className="inline-flex items-center text-xs text-emerald-300 hover:text-emerald-200 transition-colors"
         >
           Open Full Brief

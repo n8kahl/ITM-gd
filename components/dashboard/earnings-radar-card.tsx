@@ -2,10 +2,13 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, Loader2, RefreshCw } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { CalendarDays } from 'lucide-react'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 import { AICoachAPIError, getEarningsCalendar, type EarningsCalendarEvent } from '@/lib/api/ai-coach'
+import { buildAICoachPromptHref, buildSymbolAICoachHref, normalizeAICoachSymbol } from '@/lib/ai-coach-links'
+
+const DEFAULT_EARNINGS_WATCHLIST = ['SPY', 'QQQ', 'AAPL', 'NVDA', 'MSFT', 'TSLA']
+const MAX_WATCHLIST = 12
 
 function formatRevenue(value: number): string {
   if (!Number.isFinite(value)) return '—'
@@ -22,26 +25,97 @@ function sourceLabel(source: EarningsCalendarEvent['source']): string {
   return 'Provider'
 }
 
+function formatEtDate(value: string): string {
+  if (!value) return 'n/a'
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [yearRaw, monthRaw, dayRaw] = value.split('-')
+    const year = Number(yearRaw)
+    const month = Number(monthRaw)
+    const day = Number(dayRaw)
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+      const middayUtc = new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(middayUtc)
+    }
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(parsed)
+}
+
 export function EarningsRadarCard() {
   const { session } = useMemberAuth()
   const token = session?.access_token
 
   const [events, setEvents] = useState<EarningsCalendarEvent[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [watchlist, setWatchlist] = useState<string[]>(DEFAULT_EARNINGS_WATCHLIST)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
   const hasLoadedRef = useRef(false)
+
+  const loadWatchlist = useCallback(async (): Promise<string[]> => {
+    if (!token) return DEFAULT_EARNINGS_WATCHLIST
+
+    try {
+      const response = await fetch('/api/members/journal?limit=40&sortBy=trade_date&sortDir=desc', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) return DEFAULT_EARNINGS_WATCHLIST
+      const payload = await response.json().catch(() => null)
+      const rows = payload?.success && Array.isArray(payload.data)
+        ? payload.data
+        : Array.isArray(payload)
+          ? payload
+          : []
+
+      const seen = new Set<string>()
+      const symbols: string[] = []
+      for (const row of rows) {
+        const raw = typeof row?.symbol === 'string' ? row.symbol : null
+        const symbol = normalizeAICoachSymbol(raw)
+        if (seen.has(symbol)) continue
+        seen.add(symbol)
+        symbols.push(symbol)
+        if (symbols.length >= MAX_WATCHLIST) break
+      }
+
+      return symbols.length > 0 ? symbols : DEFAULT_EARNINGS_WATCHLIST
+    } catch {
+      return DEFAULT_EARNINGS_WATCHLIST
+    }
+  }, [token])
 
   const loadCalendar = useCallback(async (force = false) => {
     if (!token) return
     setError(null)
-    if (force) setIsRefreshing(true)
-    else setIsLoading(true)
+    if (!force) setIsLoading(true)
 
     try {
-      const data = await getEarningsCalendar(token, undefined, 30)
+      const nextWatchlist = await loadWatchlist()
+      setWatchlist(nextWatchlist)
+
+      let data = await getEarningsCalendar(token, nextWatchlist, 30)
+      if (!Array.isArray(data.events) || data.events.length === 0) {
+        data = await getEarningsCalendar(token, undefined, 30)
+      }
+
       setEvents(Array.isArray(data.events) ? data.events : [])
+      setLastUpdated(new Date().toISOString())
     } catch (err) {
       const message = err instanceof AICoachAPIError
         ? err.apiError.message
@@ -50,9 +124,8 @@ export function EarningsRadarCard() {
       setEvents([])
     } finally {
       setIsLoading(false)
-      setIsRefreshing(false)
     }
-  }, [token])
+  }, [loadWatchlist, token])
 
   useEffect(() => {
     if (!token) {
@@ -64,11 +137,29 @@ export function EarningsRadarCard() {
     void loadCalendar(false)
   }, [loadCalendar, token])
 
+  useEffect(() => {
+    if (!token) return
+
+    const interval = window.setInterval(() => {
+      void loadCalendar(true)
+    }, 15 * 60 * 1000)
+
+    const handleFocus = () => {
+      void loadCalendar(true)
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [loadCalendar, token])
+
   const upcoming = useMemo(() => {
     const nowIso = new Date().toISOString().slice(0, 10)
     return [...events]
-      .filter((event) => typeof event.date === 'string' && event.date >= nowIso)
-      .sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol))
+      .filter((event) => typeof event.date === 'string' && event.date.slice(0, 10) >= nowIso)
+      .sort((a, b) => a.date.slice(0, 10).localeCompare(b.date.slice(0, 10)) || a.symbol.localeCompare(b.symbol))
       .slice(0, 6)
   }, [events])
 
@@ -84,22 +175,11 @@ export function EarningsRadarCard() {
             <p className="text-xs text-muted-foreground mt-1">
               Upcoming watchlist earnings (dates + estimates when available)
             </p>
+            <p className="text-[10px] text-white/45 mt-1">
+              {lastUpdated ? `Auto-updated ${new Date(lastUpdated).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : 'Loading latest earnings feed'}
+              {watchlist.length > 0 ? ` · Watchlist ${watchlist.length} symbols` : ''}
+            </p>
           </div>
-
-          <button
-            type="button"
-            onClick={() => loadCalendar(true)}
-            disabled={isLoading || isRefreshing}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] transition-colors',
-              isLoading || isRefreshing
-                ? 'border-white/10 bg-white/5 text-white/30 cursor-not-allowed'
-                : 'border-amber-500/25 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15',
-            )}
-          >
-            {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            Refresh
-          </button>
         </div>
       </div>
 
@@ -127,7 +207,15 @@ export function EarningsRadarCard() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-sm font-semibold text-white">{event.symbol}</span>
+                    <Link
+                      href={buildSymbolAICoachHref(event.symbol, {
+                        context: 'Focus on earnings timing risk, expected move, and post-event trade plan.',
+                        source: 'dashboard_earnings_radar_symbol',
+                      })}
+                      className="font-mono text-sm font-semibold text-white hover:text-emerald-300 transition-colors"
+                    >
+                      {event.symbol}
+                    </Link>
                     <span className="text-[10px] rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/60">
                       {event.time}
                     </span>
@@ -137,7 +225,7 @@ export function EarningsRadarCard() {
                       </span>
                     )}
                   </div>
-                  <span className="text-[11px] font-mono text-white/60">{event.date}</span>
+                  <span className="text-[11px] font-mono text-white/60">{formatEtDate(event.date)}</span>
                 </div>
 
                 {(event.epsEstimate != null || event.revenueEstimate != null) && (
@@ -161,7 +249,10 @@ export function EarningsRadarCard() {
 
         <div className="mt-4">
           <Link
-            href="/members/ai-coach?view=earnings"
+            href={buildAICoachPromptHref(
+              'Summarize the highest-risk earnings events in my watchlist and build a risk-first plan for each name.',
+              { source: 'dashboard_earnings_radar_cta', symbol: watchlist[0] || 'SPX' },
+            )}
             className="text-xs text-amber-300 hover:text-amber-200 transition-colors"
           >
             Open Earnings Intelligence →
