@@ -541,12 +541,6 @@ export function PricingCard({
                 {isTrial ? "START TRIAL" : "GET STARTED"}
               </div>
 
-              {isTrial && (
-                <p className="text-center text-xs text-trial-blue-light/90">
-                  No commitment. Cancel anytime.
-                </p>
-              )}
-
               {/* Security Badge */}
               <p className="text-center text-xs text-muted-foreground/60">
                 Secure transaction powered by{" "}
