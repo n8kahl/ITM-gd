@@ -1,12 +1,14 @@
 
 'use client'
 
+import Link from 'next/link'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useMarketMovers } from '@/hooks/useMarketData'
 import { cn } from '@/lib/utils'
 import { ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { buildSymbolAICoachHref } from '@/lib/ai-coach-links'
 
 interface MarketMoverRowProps {
     ticker: string
@@ -30,7 +32,15 @@ function MarketMoverRow({ ticker, price, change, changePercent, type }: MarketMo
                     {isGainer ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
                 </div>
                 <div>
-                    <div className="font-semibold text-sm group-hover:text-primary transition-colors">{ticker}</div>
+                    <Link
+                        href={buildSymbolAICoachHref(ticker, {
+                            context: 'Explain what is driving this outsized move and how to trade it safely.',
+                            source: 'dashboard_market_movers',
+                        })}
+                        className="font-semibold text-sm group-hover:text-primary transition-colors hover:text-emerald-300"
+                    >
+                        {ticker}
+                    </Link>
                     <div className="text-xs text-muted-foreground">${price.toFixed(2)}</div>
                 </div>
             </div>

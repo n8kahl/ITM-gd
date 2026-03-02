@@ -1,10 +1,12 @@
 
 'use client'
 
+import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useMarketAnalytics } from '@/hooks/useMarketData'
 import { cn } from '@/lib/utils'
 import { Activity, TrendingUp, TrendingDown, BarChart3, Shield, Flame, Minus } from 'lucide-react'
+import { buildSymbolAICoachHref } from '@/lib/ai-coach-links'
 
 function RegimeBadge({ label }: { label: 'Risk-On' | 'Risk-Off' | 'Neutral' }) {
     const config = {
@@ -107,7 +109,15 @@ export function MarketAnalyticsCard() {
                             return (
                                 <div key={idx.symbol} className="flex items-center justify-between bg-muted/20 rounded-lg p-2.5">
                                     <div>
-                                        <div className="font-semibold text-sm">{idx.symbol}</div>
+                                        <Link
+                                            href={buildSymbolAICoachHref(idx.symbol, {
+                                                context: 'Tie this index move to current regime and breadth context.',
+                                                source: 'dashboard_market_analytics',
+                                            })}
+                                            className="font-semibold text-sm hover:text-emerald-300 transition-colors"
+                                        >
+                                            {idx.symbol}
+                                        </Link>
                                         <div className="text-xs text-muted-foreground font-mono tabular-nums">${idx.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                                     </div>
                                     <div className={cn('flex items-center gap-0.5 text-sm font-mono font-medium tabular-nums', isUp ? 'text-emerald-500' : 'text-red-500')}>

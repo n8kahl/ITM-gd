@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { buildSymbolAICoachHref } from '@/lib/ai-coach-links'
 
 interface RecentTrade {
   id: string
@@ -108,15 +108,33 @@ export function RecentTrades() {
               const pnlValue = hasPnl ? Number(trade.pnl) : 0
               const isProfit = pnlValue >= 0
               return (
-                <Link
+                <div
                   key={trade.id}
-                  href={`/members/journal?entry=${trade.id}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/members/journal?entry=${trade.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      router.push(`/members/journal?entry=${trade.id}`)
+                    }
+                  }}
                   className="flex items-center gap-3 lg:gap-4 py-3 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] -mx-2 px-2 rounded-lg transition-colors group"
                 >
                   {/* Symbol */}
-                  <span className="font-mono text-sm font-semibold text-ivory min-w-[60px]">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      router.push(buildSymbolAICoachHref(trade.symbol, {
+                        context: 'Also review how this symbol aligns with my recent trade outcome and improve my next setup.',
+                        source: 'dashboard_recent_trades_symbol',
+                      }))
+                    }}
+                    className="font-mono text-sm font-semibold text-ivory min-w-[60px] text-left hover:text-emerald-300 transition-colors"
+                  >
                     {trade.symbol}
-                  </span>
+                  </button>
 
                   {/* Direction Badge */}
                   <span className={cn(
@@ -157,7 +175,7 @@ export function RecentTrades() {
 
                   {/* Arrow */}
                   <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors flex-shrink-0" />
-                </Link>
+                </div>
               )
             })}
           </div>

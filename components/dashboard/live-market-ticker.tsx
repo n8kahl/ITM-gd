@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Counter } from '@/components/ui/counter'
 import { useMarketIndices, useMarketStatus } from '@/hooks/useMarketData'
+import { buildSymbolAICoachHref } from '@/lib/ai-coach-links'
 
 // ============================================
 // HELPERS
@@ -93,7 +95,15 @@ export function LiveMarketTicker() {
 
             return (
               <div key={quote.symbol} className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs text-muted-foreground font-medium">{quote.symbol}</span>
+                <Link
+                  href={buildSymbolAICoachHref(quote.symbol, {
+                    context: 'Focus on index breadth, momentum, and any active macro catalysts.',
+                    source: 'dashboard_live_market_ticker',
+                  })}
+                  className="text-xs text-muted-foreground font-medium hover:text-emerald-300 transition-colors"
+                >
+                  {quote.symbol}
+                </Link>
                 <Counter
                   value={quote.price}
                   className="text-sm font-semibold text-ivory"
