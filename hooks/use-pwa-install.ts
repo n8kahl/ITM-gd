@@ -11,6 +11,27 @@ interface BeforeInstallPromptEvent extends Event {
 const INSTALL_DISMISSED_KEY = 'tradeitm:pwa-install-dismissed'
 const INSTALL_DISMISSED_KEY_V2 = 'tradeitm:pwa-install-dismissed:v2'
 
+function safeLocalStorageGetItem(key: string): string | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    return window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeLocalStorageSetItem(key: string, value: string): boolean {
+  if (typeof window === 'undefined') return false
+
+  try {
+    window.localStorage.setItem(key, value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function usePwaInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [canInstall, setCanInstall] = useState(false)
@@ -31,8 +52,8 @@ export function usePwaInstall() {
       setIsStandalone(initialStandalone)
       setIsInstalled(initialStandalone)
       const isDismissed = (
-        window.localStorage.getItem(INSTALL_DISMISSED_KEY_V2) === '1'
-        || window.localStorage.getItem(INSTALL_DISMISSED_KEY) === '1'
+        safeLocalStorageGetItem(INSTALL_DISMISSED_KEY_V2) === '1'
+        || safeLocalStorageGetItem(INSTALL_DISMISSED_KEY) === '1'
       )
       setDismissed(isDismissed)
       setReady(true)
@@ -88,9 +109,7 @@ export function usePwaInstall() {
   }, [deferredPrompt])
 
   const dismiss = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(INSTALL_DISMISSED_KEY_V2, '1')
-    }
+    safeLocalStorageSetItem(INSTALL_DISMISSED_KEY_V2, '1')
     setDismissed(true)
   }, [])
 

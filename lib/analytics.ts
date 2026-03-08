@@ -8,32 +8,108 @@ import { UAParser } from 'ua-parser-js'
 const SESSION_KEY = 'titm_session_id'
 const SESSION_DURATION = 30 * 60 * 1000 // 30 minutes
 
+let memorySessionId: string | null = null
+let memoryLastActivity = 0
+let memoryHasVisited = false
+
+type BrowserStorage = Pick<Storage, 'getItem' | 'setItem'>
+
+function createSessionId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+}
+
+function getBrowserStorage(): BrowserStorage | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+function safeStorageGet(storage: BrowserStorage, key: string): string | null {
+  try {
+    return storage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeStorageSet(storage: BrowserStorage, key: string, value: string): boolean {
+  try {
+    storage.setItem(key, value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function getSessionId(): string {
   if (typeof window === 'undefined') return ''
 
-  let sessionId = localStorage.getItem(SESSION_KEY)
-  const lastActivity = localStorage.getItem('titm_last_activity')
   const now = Date.now()
+  const storage = getBrowserStorage()
 
-  // Create new session if doesn't exist or expired
-  if (!sessionId || !lastActivity || now - parseInt(lastActivity) > SESSION_DURATION) {
-    sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    localStorage.setItem(SESSION_KEY, sessionId)
-    localStorage.setItem('titm_is_new_session', 'true')
+  if (!storage) {
+    if (!memorySessionId || now - memoryLastActivity > SESSION_DURATION) {
+      memorySessionId = createSessionId()
+      memoryLastActivity = now
+    } else {
+      memoryLastActivity = now
+    }
+
+    return memorySessionId
   }
 
-  localStorage.setItem('titm_last_activity', now.toString())
+  let sessionId = safeStorageGet(storage, SESSION_KEY)
+  const lastActivityRaw = safeStorageGet(storage, 'titm_last_activity')
+  const lastActivity = Number.parseInt(lastActivityRaw ?? '', 10)
+  const hasValidLastActivity = Number.isFinite(lastActivity)
+  const effectiveLastActivity = hasValidLastActivity ? lastActivity : memoryLastActivity
+
+  if (!sessionId && memorySessionId) {
+    sessionId = memorySessionId
+  }
+
+  // Create new session if doesn't exist or expired
+  if (!sessionId || !effectiveLastActivity || now - effectiveLastActivity > SESSION_DURATION) {
+    sessionId = createSessionId()
+    memorySessionId = sessionId
+    memoryLastActivity = now
+    if (!safeStorageSet(storage, SESSION_KEY, sessionId)) {
+      memorySessionId = sessionId
+    }
+    safeStorageSet(storage, 'titm_is_new_session', 'true')
+  } else {
+    memorySessionId = sessionId
+    memoryLastActivity = now
+  }
+
+  if (!safeStorageSet(storage, 'titm_last_activity', now.toString())) {
+    memoryLastActivity = now
+    memorySessionId = sessionId
+  }
+
   return sessionId
 }
 
 export function isReturningVisitor(): boolean {
-  if (typeof window === 'undefined') return false
-  return localStorage.getItem('titm_has_visited') === 'true'
+  const storage = getBrowserStorage()
+  if (!storage) return memoryHasVisited
+  return safeStorageGet(storage, 'titm_has_visited') === 'true' || memoryHasVisited
 }
 
 export function markAsVisited() {
-  if (typeof window === 'undefined') return
-  localStorage.setItem('titm_has_visited', 'true')
+  const storage = getBrowserStorage()
+  if (!storage) {
+    memoryHasVisited = true
+    return
+  }
+
+  if (!safeStorageSet(storage, 'titm_has_visited', 'true')) {
+    memoryHasVisited = true
+  }
 }
 
 // ============================================
@@ -77,10 +153,9 @@ export function getDeviceInfo() {
 export async function initializeSession() {
   if (typeof window === 'undefined') return
 
-  const sessionId = getSessionId()
-  const isReturning = isReturningVisitor()
-
   try {
+    const sessionId = getSessionId()
+    const isReturning = isReturningVisitor()
     await upsertSession({
       session_id: sessionId,
       last_seen: new Date().toISOString(),
@@ -96,10 +171,9 @@ export async function initializeSession() {
 export async function trackPage(pagePath?: string) {
   if (typeof window === 'undefined') return
 
-  const sessionId = getSessionId()
-  const deviceInfo = getDeviceInfo()
-
   try {
+    const sessionId = getSessionId()
+    const deviceInfo = getDeviceInfo()
     await trackPageView({
       session_id: sessionId,
       page_path: pagePath || window.location.pathname,
@@ -118,9 +192,8 @@ export async function trackButtonClick(
 ) {
   if (typeof window === 'undefined') return
 
-  const sessionId = getSessionId()
-
   try {
+    const sessionId = getSessionId()
     await trackClick({
       session_id: sessionId,
       element_type: elementType,
@@ -136,9 +209,8 @@ export async function trackButtonClick(
 export async function trackEvent(eventType: string, eventValue?: string) {
   if (typeof window === 'undefined') return
 
-  const sessionId = getSessionId()
-
   try {
+    const sessionId = getSessionId()
     await trackConversion({
       session_id: sessionId,
       event_type: eventType,
@@ -162,7 +234,13 @@ export const Analytics = {
   trackPricingClick: (plan: string) => trackButtonClick('pricing_card', plan),
   trackNavClick: (label: string) => trackButtonClick('nav_link', label),
   trackSocialClick: (platform: string) => trackButtonClick('social_link', platform),
-  trackMemberNavItem: (label: string) => trackButtonClick('nav_item', label),
+  trackMemberNavItem: (label: string) => {
+    try {
+      void trackButtonClick('nav_item', label)
+    } catch (error) {
+      console.error('Failed to track member nav item:', error)
+    }
+  },
   trackJournalAction: (label: string) => trackButtonClick('journal_action', label),
   trackAICoachAction: (label: string) => trackButtonClick('ai_coach_action', label),
   trackMembersSocialAction: (label: string) => trackButtonClick('social_action', label),
