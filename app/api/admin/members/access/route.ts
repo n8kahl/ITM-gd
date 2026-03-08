@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/supabase-server'
 import {
-  MEMBERS_ALLOWED_ROLE_IDS,
   hasMembersAreaAccess,
+  resolveMembersAllowedRoleIds,
 } from '@/lib/discord-role-access'
 import { resolveDiscordUserIdFromAuthUser } from '@/lib/discord-user-sync'
+import { fetchRoleTierMapping } from '@/lib/role-tier-mapping'
+import { buildTierPermissionNameAssignments } from '@/lib/tier-permission-presets'
 
 type MembershipTier = 'core' | 'pro' | 'executive'
 
@@ -21,30 +23,6 @@ function getSupabaseAdmin() {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-}
-
-function parseRoleTierMapping(raw: unknown): Record<string, MembershipTier> {
-  let parsed: unknown = raw
-  if (typeof raw === 'string') {
-    try {
-      parsed = JSON.parse(raw)
-    } catch {
-      return {}
-    }
-  }
-
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {}
-  }
-
-  const result: Record<string, MembershipTier> = {}
-  for (const [roleId, tier] of Object.entries(parsed as Record<string, unknown>)) {
-    if (tier === 'core' || tier === 'pro' || tier === 'executive') {
-      result[String(roleId)] = tier
-    }
-  }
-
-  return result
 }
 
 function resolveTierFromRoles(roleIds: string[], mapping: Record<string, MembershipTier>): MembershipTier | null {
@@ -97,7 +75,87 @@ async function resolveTargetUserId(
       return { userId: null, resolution: { mode: 'discord_user_id', value: discordUserIdParam, error: error.message } }
     }
 
-    return { userId: data?.user_id ?? null, resolution: { mode: 'discord_user_id', value: discordUserIdParam } }
+    if (data?.user_id) {
+      return {
+        userId: data.user_id,
+        resolution: {
+          mode: 'discord_user_id',
+          value: discordUserIdParam,
+          source: 'user_discord_profiles',
+        },
+      }
+    }
+
+    let rpcLookupError: string | null = null
+    try {
+      const { data: rpcUserId, error: rpcError } = await supabaseAdmin.rpc('find_user_id_by_discord_user_id', {
+        target_discord_user_id: discordUserIdParam,
+      })
+
+      if (!rpcError && typeof rpcUserId === 'string' && rpcUserId.trim().length > 0) {
+        return {
+          userId: rpcUserId,
+          resolution: {
+            mode: 'discord_user_id',
+            value: discordUserIdParam,
+            source: 'auth_lookup_rpc',
+          },
+        }
+      }
+
+      if (rpcError) {
+        rpcLookupError = rpcError.message
+      }
+    } catch (rpcErr) {
+      rpcLookupError = rpcErr instanceof Error ? rpcErr.message : 'rpc_lookup_failed'
+    }
+
+    // Fallback: resolve directly from auth metadata/identities when profile rows are missing.
+    const perPage = 200
+    const maxPages = 10
+    for (let page = 1; page <= maxPages; page++) {
+      const { data: usersResult, error: listError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
+      if (listError) {
+        return {
+          userId: null,
+          resolution: {
+            mode: 'discord_user_id',
+            value: discordUserIdParam,
+            source: 'auth_users_scan',
+            error: listError.message,
+            rpc_lookup_error: rpcLookupError,
+          },
+        }
+      }
+
+      const users = usersResult?.users || []
+      const match = users.find((user) => resolveDiscordUserIdFromAuthUser(user) === discordUserIdParam)
+      if (match) {
+        return {
+          userId: match.id,
+          resolution: {
+            mode: 'discord_user_id',
+            value: discordUserIdParam,
+            source: 'auth_metadata',
+            scanned_pages: page,
+            rpc_lookup_error: rpcLookupError,
+          },
+        }
+      }
+
+      if (users.length < perPage) break
+    }
+
+    return {
+      userId: null,
+      resolution: {
+        mode: 'discord_user_id',
+        value: discordUserIdParam,
+        source: 'auth_users_scan',
+        error: 'not_found',
+        rpc_lookup_error: rpcLookupError,
+      },
+    }
   }
 
   if (emailParam) {
@@ -168,8 +226,9 @@ export async function GET(request: NextRequest) {
     const authUser = authUserResult.user
     const discordUserIdFromAuth = resolveDiscordUserIdFromAuthUser(authUser)
     const rolesFromJwt = extractDiscordRoleIds(authUser)
+    const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({ supabase: supabaseAdmin })
 
-    const [{ data: discordProfile }, { data: userPermissions }, { data: roleTierSetting }, { data: tabConfigs }] = await Promise.all([
+    const [{ data: discordProfile }, { data: userPermissions }, { data: tabConfigs }, roleTierMapping] = await Promise.all([
       supabaseAdmin
         .from('user_discord_profiles')
         .select('discord_user_id, discord_username, discord_avatar, discord_roles, last_synced_at')
@@ -190,15 +249,11 @@ export async function GET(request: NextRequest) {
         `)
         .eq('user_id', userId),
       supabaseAdmin
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'role_tier_mapping')
-        .maybeSingle(),
-      supabaseAdmin
         .from('tab_configurations')
         .select('*')
         .eq('is_active', true)
         .order('sort_order', { ascending: true }),
+      fetchRoleTierMapping(supabaseAdmin as any),
     ])
 
     const rolesFromProfile = Array.isArray(discordProfile?.discord_roles)
@@ -207,9 +262,8 @@ export async function GET(request: NextRequest) {
 
     const hasCachedDiscordProfile = !!discordProfile
     const effectiveRoleIds = hasCachedDiscordProfile ? rolesFromProfile : rolesFromJwt
-    const hasMembersRole = hasMembersAreaAccess(effectiveRoleIds)
+    const hasMembersRole = hasMembersAreaAccess(effectiveRoleIds, membersAllowedRoleIds)
 
-    const roleTierMapping = parseRoleTierMapping(roleTierSetting?.value)
     const resolvedTier = resolveTierFromRoles(effectiveRoleIds, roleTierMapping)
 
     const permissionRows = Array.isArray(userPermissions) ? userPermissions : []
@@ -229,6 +283,11 @@ export async function GET(request: NextRequest) {
         roleTitlesById[roleId] = roleName
       }
     }
+
+    const tierFallbackAssignments = buildTierPermissionNameAssignments({
+      roleIds: effectiveRoleIds,
+      roleTierMapping,
+    })
 
     if (effectiveRoleIds.length > 0) {
       const { data: rolePermissionMappings } = await supabaseAdmin
@@ -258,21 +317,33 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (tierFallbackAssignments.size > 0) {
+      expectedPermissionNames = Array.from(new Set([
+        ...expectedPermissionNames,
+        ...Array.from(tierFallbackAssignments.keys()),
+      ])).sort()
+    }
+
     const expectedMissing = expectedPermissionNames.filter((name) => !uniquePermissionNames.includes(name))
     const unexpectedExtra = uniquePermissionNames.filter((name) => !expectedPermissionNames.includes(name))
 
-    const membersAllowedRoleIdSet = new Set<string>(MEMBERS_ALLOWED_ROLE_IDS)
+    const membersAllowedRoleIdSet = new Set<string>(membersAllowedRoleIds)
     const membersAllowedRoleTitlesById: Record<string, string> = {}
     const roleIdsForCatalog = Array.from(new Set([
       ...effectiveRoleIds,
-      ...MEMBERS_ALLOWED_ROLE_IDS,
+      ...membersAllowedRoleIds,
     ]))
 
+    let guildRoleCatalogError: string | null = null
     if (roleIdsForCatalog.length > 0) {
-      const { data: guildRoleRows } = await supabaseAdmin
+      const { data: guildRoleRows, error: guildRoleError } = await supabaseAdmin
         .from('discord_guild_roles')
         .select('discord_role_id, discord_role_name')
         .in('discord_role_id', roleIdsForCatalog)
+
+      if (guildRoleError) {
+        guildRoleCatalogError = guildRoleError.message
+      }
 
       for (const row of Array.isArray(guildRoleRows) ? guildRoleRows : []) {
         const roleId = typeof row?.discord_role_id === 'string' ? row.discord_role_id : null
@@ -292,7 +363,7 @@ export async function GET(request: NextRequest) {
     const { data: membersAllowedRoleMappings } = await supabaseAdmin
       .from('discord_role_permissions')
       .select('discord_role_id, discord_role_name')
-      .in('discord_role_id', [...MEMBERS_ALLOWED_ROLE_IDS])
+      .in('discord_role_id', membersAllowedRoleIds)
 
     for (const row of Array.isArray(membersAllowedRoleMappings) ? membersAllowedRoleMappings : []) {
       const roleId = typeof row?.discord_role_id === 'string' ? row.discord_role_id : null
@@ -328,7 +399,7 @@ export async function GET(request: NextRequest) {
       success: true,
       resolution,
       constants: {
-        members_allowed_role_ids: MEMBERS_ALLOWED_ROLE_IDS,
+        members_allowed_role_ids: membersAllowedRoleIds,
         members_allowed_role_titles_by_id: membersAllowedRoleTitlesById,
       },
       user: {
@@ -376,6 +447,8 @@ export async function GET(request: NextRequest) {
         likely_members_access_issue: !hasMembersRole
           ? 'Missing required members role'
           : null,
+        tier_fallback_expected_permissions: Array.from(tierFallbackAssignments.keys()).sort(),
+        discord_guild_role_catalog_error: guildRoleCatalogError,
       },
     })
   } catch (error) {

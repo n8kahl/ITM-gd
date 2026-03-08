@@ -14,6 +14,8 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DiscordRolePicker } from '@/components/admin/discord-role-picker'
+import { cn } from '@/lib/utils'
 
 type MembershipTier = 'core' | 'pro' | 'executive' | 'admin'
 type BadgeVariant = 'emerald' | 'champagne' | 'destructive' | null
@@ -32,6 +34,11 @@ type TabConfig = {
   sort_order: number
   is_required: boolean
   is_active: boolean
+}
+
+interface DiscordRole {
+  id: string
+  name: string
 }
 
 const EMPTY_TAB = (index: number): TabConfig => ({
@@ -85,6 +92,9 @@ export default function AdminTabsPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [saveWarnings, setSaveWarnings] = useState<string[]>([])
+  const [discordRoleMap, setDiscordRoleMap] = useState<Record<string, string>>({})
+  const [newRoleSelectionByTabId, setNewRoleSelectionByTabId] = useState<Record<string, string>>({})
   const feedbackRef = useRef<HTMLDivElement>(null)
 
   const loadTabs = useCallback(async () => {
@@ -100,6 +110,7 @@ export default function AdminTabsPage() {
         return
       }
 
+      setSaveWarnings([])
       setTabs((payload.data || []).map((tab: TabConfig) => ({
         ...tab,
         required_discord_role_ids: normalizeRoleIds(tab.required_discord_role_ids),
@@ -114,6 +125,31 @@ export default function AdminTabsPage() {
   useEffect(() => {
     loadTabs()
   }, [loadTabs])
+
+  const loadDiscordRoles = useCallback(async () => {
+    try {
+      const response = await fetch('/api/admin/discord/roles', { cache: 'no-store' })
+      const payload = await response.json()
+      if (!response.ok || !payload?.success || !Array.isArray(payload?.roles)) {
+        return
+      }
+
+      const map: Record<string, string> = {}
+      for (const role of payload.roles as DiscordRole[]) {
+        const roleId = String(role.id || '').trim()
+        const roleName = String(role.name || '').trim()
+        if (!roleId || !roleName) continue
+        map[roleId] = roleName
+      }
+      setDiscordRoleMap(map)
+    } catch {
+      // Non-fatal: tab editor still works with plain role IDs.
+    }
+  }, [])
+
+  useEffect(() => {
+    loadDiscordRoles()
+  }, [loadDiscordRoles])
 
   useEffect(() => {
     if ((error || success) && feedbackRef.current) {
@@ -135,6 +171,28 @@ export default function AdminTabsPage() {
 
   const removeTab = (index: number) => {
     setTabs((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
+  }
+
+  const addRoleToTab = (index: number, roleId: string) => {
+    const normalizedRoleId = roleId.trim()
+    if (!normalizedRoleId) return
+
+    const existingRoleIds = normalizeRoleIds(tabs[index]?.required_discord_role_ids) || []
+    if (existingRoleIds.includes(normalizedRoleId)) {
+      return
+    }
+
+    updateTab(index, {
+      required_discord_role_ids: [...existingRoleIds, normalizedRoleId],
+    })
+
+    const tabId = tabs[index]?.tab_id || ''
+    if (tabId) {
+      setNewRoleSelectionByTabId((prev) => ({
+        ...prev,
+        [tabId]: '',
+      }))
+    }
   }
 
   const duplicateTabIds = useMemo(() => {
@@ -194,18 +252,31 @@ export default function AdminTabsPage() {
       const payload = await response.json()
 
       if (!response.ok || !payload.success) {
+        setSaveWarnings([])
         setError(payload?.error?.message || 'Failed to save tab configurations')
         return
       }
 
+      const unknownRoleIds = Array.isArray(payload?.warnings?.unknown_role_ids)
+        ? payload.warnings.unknown_role_ids.map((id: unknown) => String(id))
+        : []
+      setSaveWarnings(unknownRoleIds)
       setTabs(payload.data || payloadTabs)
-      setSuccess('Tab configuration saved')
+      setSuccess(unknownRoleIds.length > 0
+        ? 'Tab configuration saved with warnings'
+        : 'Tab configuration saved')
       setTimeout(() => setSuccess(null), 3000)
     } catch {
+      setSaveWarnings([])
       setError('Failed to save tab configurations')
     } finally {
       setSaving(false)
     }
+  }
+
+  const resolveRoleTitle = (roleId: string): string => {
+    const title = discordRoleMap[roleId]
+    return title && title.length > 0 ? title : roleId
   }
 
   if (loading) {
@@ -274,6 +345,18 @@ export default function AdminTabsPage() {
           <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <p className="text-sm text-emerald-400">{success}</p>
+          </div>
+        )}
+
+        {saveWarnings.length > 0 && (
+          <div className="mt-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-amber-200 font-medium">Unknown Discord role IDs detected</p>
+              <p className="text-xs text-amber-100/80 mt-1 break-all">
+                {saveWarnings.join(', ')}
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -393,6 +476,45 @@ export default function AdminTabsPage() {
                   <span className="block text-[11px] text-white/40">
                     If set, users must have one of these Discord role IDs to see this tab.
                   </span>
+                  {(tab.required_discord_role_ids || []).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(tab.required_discord_role_ids || []).map((roleId) => {
+                        const isKnownRole = Boolean(discordRoleMap[roleId])
+                        return (
+                          <span
+                            key={roleId}
+                            className={cn(
+                              'px-2 py-1 rounded-md text-xs border',
+                              isKnownRole
+                                ? 'bg-white/5 border-white/10 text-white/80'
+                                : 'bg-amber-500/10 border-amber-500/30 text-amber-100',
+                            )}
+                          >
+                            {resolveRoleTitle(roleId)}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                    <div className="flex-1">
+                      <DiscordRolePicker
+                        value={newRoleSelectionByTabId[tab.tab_id] || ''}
+                        onChange={(roleId) => setNewRoleSelectionByTabId((prev) => ({
+                          ...prev,
+                          [tab.tab_id]: roleId,
+                        }))}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => addRoleToTab(index, newRoleSelectionByTabId[tab.tab_id] || '')}
+                      className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                    >
+                      Add Role
+                    </Button>
+                  </div>
                 </label>
 
                 <label className="space-y-1">

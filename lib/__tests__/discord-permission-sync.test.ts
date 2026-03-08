@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { recomputeUsersForRoleIds } from '@/lib/discord-permission-sync'
-import { DISCORD_PRIVILEGED_ROLE_ID } from '@/lib/discord-role-access'
+import { DISCORD_MEMBERS_ROLE_ID, DISCORD_PRIVILEGED_ROLE_ID } from '@/lib/discord-role-access'
 
 type MockInput = {
   profiles: Array<{
@@ -9,15 +9,31 @@ type MockInput = {
     discord_roles: string[]
   }>
   rolePermissionRows: any[]
+  membersRequiredRoleIds?: string[]
+  pricingTierRows?: any[]
+  appPermissionRows?: any[]
 }
 
 function createSupabaseAdminMock(input: MockInput) {
+  const membersRequiredRoleIds = input.membersRequiredRoleIds || [
+    DISCORD_MEMBERS_ROLE_ID,
+    DISCORD_PRIVILEGED_ROLE_ID,
+  ]
+
   const overlapsMock = vi.fn(async () => ({
     data: input.profiles,
     error: null,
   }))
   const rolePermissionInMock = vi.fn(async () => ({
     data: input.rolePermissionRows,
+    error: null,
+  }))
+  const pricingTierNotMock = vi.fn(async () => ({
+    data: input.pricingTierRows || [],
+    error: null,
+  }))
+  const appPermissionInMock = vi.fn(async () => ({
+    data: input.appPermissionRows || [],
     error: null,
   }))
 
@@ -59,6 +75,39 @@ function createSupabaseAdminMock(input: MockInput) {
         return {
           upsert: upsertMock,
           delete: deleteMock,
+        }
+      }
+
+      if (table === 'app_settings') {
+        return {
+          select: vi.fn(() => ({
+            in: vi.fn(async () => ({
+              data: [{ key: 'members_required_role_ids', value: JSON.stringify(membersRequiredRoleIds) }],
+              error: null,
+            })),
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn(async () => ({
+                data: null,
+                error: null,
+              })),
+            })),
+          })),
+        }
+      }
+
+      if (table === 'pricing_tiers') {
+        return {
+          select: vi.fn(() => ({
+            not: pricingTierNotMock,
+          })),
+        }
+      }
+
+      if (table === 'app_permissions') {
+        return {
+          select: vi.fn(() => ({
+            in: appPermissionInMock,
+          })),
         }
       }
 
@@ -158,6 +207,48 @@ describe('recomputeUsersForRoleIds', () => {
           is_admin: false,
           is_member: true,
           discord_roles: [DISCORD_PRIVILEGED_ROLE_ID],
+        }),
+      }),
+    )
+  })
+
+  it('applies tier-based permission fallback when explicit role mappings are missing', async () => {
+    const corePermissionRows = [
+      { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', name: 'access_core_content' },
+      { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', name: 'access_trading_journal' },
+      { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3', name: 'access_course_library' },
+      { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', name: 'access_live_alerts' },
+    ]
+
+    const { supabaseAdmin, upsertMock, updateUserByIdMock } = createSupabaseAdminMock({
+      profiles: [
+        {
+          user_id: '00000000-0000-4000-8000-000000000003',
+          discord_user_id: 'discord-3',
+          discord_roles: ['role-core'],
+        },
+      ],
+      rolePermissionRows: [],
+      membersRequiredRoleIds: ['role-core'],
+      pricingTierRows: [
+        { id: 'core', discord_role_id: 'role-core' },
+      ],
+      appPermissionRows: corePermissionRows,
+    })
+
+    const result = await recomputeUsersForRoleIds({
+      supabaseAdmin,
+      roleIds: ['role-core'],
+    })
+
+    expect(result.processed).toBe(1)
+    expect(upsertMock).toHaveBeenCalledTimes(1)
+    expect(upsertMock.mock.calls[0][0]).toHaveLength(corePermissionRows.length)
+    expect(updateUserByIdMock).toHaveBeenCalledWith(
+      '00000000-0000-4000-8000-000000000003',
+      expect.objectContaining({
+        app_metadata: expect.objectContaining({
+          discord_roles: ['role-core'],
         }),
       }),
     )

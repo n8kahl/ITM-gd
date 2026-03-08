@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { fetchRoleTierMapping } from '@/lib/role-tier-mapping'
 
 export const TIER_HIERARCHY: Record<string, number> = { core: 1, pro: 2, executive: 3 }
 
@@ -15,32 +16,24 @@ export function getAccessibleTiers(userTier: string): string[] {
  */
 export async function getUserTier(supabase: SupabaseClient, userId: string): Promise<string> {
   try {
-    const [profileResult, settingsResult] = await Promise.all([
+    const [profileResult, roleTierMapping] = await Promise.all([
       supabase
         .from('user_discord_profiles')
         .select('discord_roles')
         .eq('user_id', userId)
         .maybeSingle(),
-      supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'role_tier_mapping')
-        .maybeSingle(),
+      fetchRoleTierMapping(supabase),
     ])
 
-    const roles: string[] = profileResult.data?.discord_roles || []
+    const roles: string[] = Array.isArray(profileResult.data?.discord_roles)
+      ? profileResult.data.discord_roles.map((roleId: unknown) => String(roleId))
+      : []
     if (roles.length === 0) return 'core'
-
-    const rawMapping = settingsResult.data?.value
-    if (!rawMapping) return 'core'
-
-    const mapping: Record<string, string> =
-      typeof rawMapping === 'string' ? JSON.parse(rawMapping) : rawMapping
 
     // Check in order of highest tier first
     const tierOrder: string[] = ['executive', 'pro', 'core']
     for (const tier of tierOrder) {
-      for (const [roleId, mappedTier] of Object.entries(mapping)) {
+      for (const [roleId, mappedTier] of Object.entries(roleTierMapping)) {
         if (mappedTier === tier && roles.includes(roleId)) {
           return tier
         }

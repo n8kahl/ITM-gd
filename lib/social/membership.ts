@@ -1,10 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-
-export type MembershipTier = 'core' | 'pro' | 'executive'
-
-interface RoleTierMapping {
-  [roleId: string]: MembershipTier
-}
+import {
+  fetchRoleTierMapping as fetchCanonicalRoleTierMapping,
+  type MembershipTier,
+  type RoleTierMapping,
+} from '@/lib/role-tier-mapping'
 
 export interface SocialUserMeta {
   display_name: string | null
@@ -20,47 +19,6 @@ const TIER_PRIORITY: Record<MembershipTier, number> = {
   core: 1,
   pro: 2,
   executive: 3,
-}
-
-function normalizeTier(value: unknown): MembershipTier | null {
-  if (value === 'core' || value === 'pro' || value === 'executive') {
-    return value
-  }
-
-  if (value === 'execute') {
-    return 'executive'
-  }
-
-  return null
-}
-
-function parseRoleTierMapping(rawValue: unknown): RoleTierMapping {
-  if (!rawValue) return {}
-
-  let parsed: unknown = rawValue
-
-  if (typeof rawValue === 'string') {
-    try {
-      parsed = JSON.parse(rawValue)
-    } catch {
-      return {}
-    }
-  }
-
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {}
-  }
-
-  const mapping: RoleTierMapping = {}
-
-  for (const [roleId, rawTier] of Object.entries(parsed)) {
-    const normalized = normalizeTier(rawTier)
-    if (normalized) {
-      mapping[String(roleId)] = normalized
-    }
-  }
-
-  return mapping
 }
 
 export function resolveMembershipTierFromRoles(
@@ -85,17 +43,7 @@ export function resolveMembershipTierFromRoles(
 export async function fetchRoleTierMapping(
   supabase: SupabaseClient,
 ): Promise<RoleTierMapping> {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'role_tier_mapping')
-    .maybeSingle()
-
-  if (error) {
-    return {}
-  }
-
-  return parseRoleTierMapping(data?.value)
+  return fetchCanonicalRoleTierMapping(supabase)
 }
 
 export async function getSocialUserMetaMap(

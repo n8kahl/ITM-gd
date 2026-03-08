@@ -7,6 +7,7 @@ import {
 
 function createSupabaseMock(config: {
   roleTierSetting: unknown
+  pricingTierRows?: any[]
   profiles?: any[]
   discordProfiles?: any[]
   guildRoles?: any[]
@@ -14,6 +15,17 @@ function createSupabaseMock(config: {
 }) {
   return {
     from: vi.fn((table: string) => {
+      if (table === 'pricing_tiers') {
+        const chain: any = {}
+        chain.not = vi.fn(async () => ({
+          data: config.pricingTierRows || [],
+          error: null,
+        }))
+        return {
+          select: vi.fn(() => chain),
+        }
+      }
+
       if (table === 'app_settings') {
         const chain: any = {}
         chain.eq = vi.fn(() => chain)

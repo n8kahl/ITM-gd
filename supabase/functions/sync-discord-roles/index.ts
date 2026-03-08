@@ -9,10 +9,48 @@ const corsHeaders = {
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
 const DISCORD_PRIVILEGED_ROLE_ID = '1465515598640447662'
 const DISCORD_MEMBERS_ROLE_ID = '1471195516070264863'
-const MEMBERS_ALLOWED_ROLE_IDS = new Set([
+const DEFAULT_MEMBERS_ALLOWED_ROLE_IDS = [
   DISCORD_MEMBERS_ROLE_ID,
   DISCORD_PRIVILEGED_ROLE_ID,
-])
+]
+const MEMBERS_REQUIRED_ROLE_IDS_SETTING_KEY = 'members_required_role_ids'
+const MEMBERS_REQUIRED_ROLE_ID_LEGACY_SETTING_KEY = 'members_required_role_id'
+const ROLE_TIER_MAPPING_SETTING_KEY = 'role_tier_mapping'
+
+type MembershipTier = 'core' | 'pro' | 'executive'
+type RoleTierMapping = Record<string, MembershipTier>
+
+const TIER_PERMISSION_PRESETS: Record<MembershipTier, string[]> = {
+  core: [
+    'access_core_content',
+    'access_trading_journal',
+    'access_course_library',
+    'access_live_alerts',
+  ],
+  pro: [
+    'access_core_content',
+    'access_pro_content',
+    'access_trading_journal',
+    'access_ai_analysis',
+    'access_course_library',
+    'access_live_alerts',
+    'access_position_builder',
+    'access_community_chat',
+  ],
+  executive: [
+    'access_core_content',
+    'access_pro_content',
+    'access_executive_content',
+    'access_trading_journal',
+    'access_ai_analysis',
+    'access_course_library',
+    'access_live_alerts',
+    'access_position_builder',
+    'access_market_structure',
+    'access_premium_tools',
+    'access_community_chat',
+  ],
+}
 
 // Error codes for specific error handling on frontend
 const ERROR_CODES = {
@@ -66,6 +104,7 @@ interface SyncResult {
     description: string | null
     granted_by_role: string | null
   }>
+  members_allowed_role_ids: string[]
   synced_at: string
 }
 
@@ -75,8 +114,138 @@ interface SyncError {
   code: string
 }
 
-function hasMembersAreaAccess(roleIds: string[]): boolean {
-  return roleIds.some((roleId) => MEMBERS_ALLOWED_ROLE_IDS.has(roleId))
+function parseRoleIdsFromString(raw: string): string[] {
+  const trimmed = raw.trim()
+  if (!trimmed) return []
+
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed)) {
+      return normalizeRoleIds(parsed)
+    }
+    if (typeof parsed === 'string') {
+      return parseRoleIdsFromString(parsed)
+    }
+  } catch {
+    // Fall back to CSV parser.
+  }
+
+  return normalizeRoleIds(trimmed.split(','))
+}
+
+function parseRoleIdsFromUnknown(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return normalizeRoleIds(raw)
+  }
+  if (typeof raw === 'string') {
+    return parseRoleIdsFromString(raw)
+  }
+  return []
+}
+
+function normalizeTier(value: unknown): MembershipTier | null {
+  if (value === 'core' || value === 'pro' || value === 'executive') {
+    return value
+  }
+  if (value === 'execute') {
+    return 'executive'
+  }
+  return null
+}
+
+function parseRoleTierMapping(raw: unknown): RoleTierMapping {
+  if (!raw) return {}
+
+  let parsed: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return {}
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {}
+  }
+
+  const roleTierMapping: RoleTierMapping = {}
+  for (const [roleId, tier] of Object.entries(parsed as Record<string, unknown>)) {
+    const normalizedTier = normalizeTier(tier)
+    const normalizedRoleId = String(roleId || '').trim()
+    if (!normalizedTier || !normalizedRoleId) continue
+    roleTierMapping[normalizedRoleId] = normalizedTier
+  }
+
+  return roleTierMapping
+}
+
+async function resolveRoleTierMapping(
+  supabaseAdmin: any,
+  settingsMap: Record<string, unknown>,
+): Promise<RoleTierMapping> {
+  try {
+    const { data: pricingRows, error: pricingError } = await supabaseAdmin
+      .from('pricing_tiers')
+      .select('id, discord_role_id')
+      .not('discord_role_id', 'is', null)
+
+    if (!pricingError && Array.isArray(pricingRows)) {
+      const fromPricing: RoleTierMapping = {}
+      for (const row of pricingRows) {
+        const roleId = typeof row?.discord_role_id === 'string' ? row.discord_role_id.trim() : ''
+        const tier = normalizeTier(row?.id)
+        if (!roleId || !tier) continue
+        fromPricing[roleId] = tier
+      }
+
+      if (Object.keys(fromPricing).length > 0) {
+        return fromPricing
+      }
+    }
+  } catch (error) {
+    console.warn('[sync-discord-roles] Failed to resolve role tiers from pricing_tiers:', error)
+  }
+
+  return parseRoleTierMapping(settingsMap[ROLE_TIER_MAPPING_SETTING_KEY])
+}
+
+function buildTierPermissionNameAssignments(params: {
+  roleIds: string[]
+  roleTierMapping: RoleTierMapping
+}): Map<string, string> {
+  const { roleIds, roleTierMapping } = params
+  const assignments = new Map<string, string>()
+
+  for (const roleId of normalizeRoleIds(roleIds)) {
+    const tier = roleTierMapping[roleId]
+    if (!tier) continue
+
+    const tierPermissions = TIER_PERMISSION_PRESETS[tier] || []
+    for (const permissionName of tierPermissions) {
+      if (!assignments.has(permissionName)) {
+        assignments.set(permissionName, roleId)
+      }
+    }
+  }
+
+  return assignments
+}
+
+function resolveMembersAllowedRoleIdsFromSettings(settingsMap: Record<string, unknown>): string[] {
+  const preferred = parseRoleIdsFromUnknown(settingsMap[MEMBERS_REQUIRED_ROLE_IDS_SETTING_KEY])
+  if (preferred.length > 0) return preferred
+
+  const legacy = parseRoleIdsFromUnknown(settingsMap[MEMBERS_REQUIRED_ROLE_ID_LEGACY_SETTING_KEY])
+  if (legacy.length > 0) return legacy
+
+  return [...DEFAULT_MEMBERS_ALLOWED_ROLE_IDS]
+}
+
+function hasMembersAreaAccess(roleIds: string[], membersAllowedRoleIds: string[]): boolean {
+  if (membersAllowedRoleIds.length === 0) return false
+  const membersAllowedRoleIdSet = new Set(membersAllowedRoleIds)
+  return roleIds.some((roleId) => membersAllowedRoleIdSet.has(roleId))
 }
 
 function getBestEffortDiscordUsername(user: any): string {
@@ -383,11 +552,17 @@ serve(async (req) => {
       )
     }
 
-    // Fetch discord_guild_id and discord_bot_token from app_settings table
+    // Fetch Discord integration settings + members gate role config from app_settings.
     const { data: settings, error: settingError } = await supabaseAdmin
       .from('app_settings')
       .select('key, value')
-      .in('key', ['discord_guild_id', 'discord_bot_token'])
+      .in('key', [
+        'discord_guild_id',
+        'discord_bot_token',
+        MEMBERS_REQUIRED_ROLE_IDS_SETTING_KEY,
+        MEMBERS_REQUIRED_ROLE_ID_LEGACY_SETTING_KEY,
+        ROLE_TIER_MAPPING_SETTING_KEY,
+      ])
 
     if (settingError) {
       console.error('Error fetching app_settings:', settingError)
@@ -401,6 +576,8 @@ serve(async (req) => {
     const settingsMap = Object.fromEntries((settings || []).map(s => [s.key, s.value]))
     const guildId = settingsMap['discord_guild_id']
     const botToken = settingsMap['discord_bot_token']
+    const membersAllowedRoleIds = resolveMembersAllowedRoleIdsFromSettings(settingsMap)
+    const roleTierMapping = await resolveRoleTierMapping(supabaseAdmin, settingsMap)
 
     if (!guildId) {
       console.error('Discord Guild ID not configured in app_settings')
@@ -517,6 +694,51 @@ serve(async (req) => {
       }
     }
 
+    // Tier fallback: when explicit discord_role_permissions are sparse, infer
+    // baseline permissions from the role->tier mapping.
+    const tierPermissionAssignments = buildTierPermissionNameAssignments({
+      roleIds: discordRoles,
+      roleTierMapping,
+    })
+    if (tierPermissionAssignments.size > 0) {
+      const existingPermissionNames = new Set(
+        Array.from(permissionMap.values()).map(({ permission }) => permission.name)
+      )
+      const missingTierPermissionNames = Array.from(tierPermissionAssignments.keys())
+        .filter((permissionName) => !existingPermissionNames.has(permissionName))
+
+      if (missingTierPermissionNames.length > 0) {
+        const { data: fallbackPermissionRows, error: fallbackPermissionError } = await supabaseAdmin
+          .from('app_permissions')
+          .select('id, name, description')
+          .in('name', missingTierPermissionNames)
+
+        if (fallbackPermissionError) {
+          console.warn('[sync-discord-roles] Failed to load tier fallback permissions:', fallbackPermissionError)
+        } else {
+          for (const row of Array.isArray(fallbackPermissionRows) ? fallbackPermissionRows : []) {
+            const permissionId = typeof row?.id === 'string' ? row.id : null
+            const permissionName = typeof row?.name === 'string' ? row.name : null
+            if (!permissionId || !permissionName) continue
+            if (permissionMap.has(permissionId)) continue
+
+            const grantedByRoleId = tierPermissionAssignments.get(permissionName)
+            if (!grantedByRoleId) continue
+
+            permissionMap.set(permissionId, {
+              permission: {
+                id: permissionId,
+                name: permissionName,
+                description: typeof row?.description === 'string' ? row.description : null,
+              },
+              grantedByRoleId,
+              grantedByRoleName: guildRoleNameById.get(grantedByRoleId) || null,
+            })
+          }
+        }
+      }
+    }
+
     // Update user_discord_profiles table
     const { error: profileError } = await supabaseAdmin
       .from('user_discord_profiles')
@@ -602,7 +824,7 @@ serve(async (req) => {
     const hasAdminPermission = Array.from(permissionMap.values()).some(
       ({ permission }) => permission.name === 'admin_dashboard'
     )
-    const hasMemberPermission = hasMembersAreaAccess(discordRoles)
+    const hasMemberPermission = hasMembersAreaAccess(discordRoles, membersAllowedRoleIds)
 
     console.log(`Updating auth claims: is_admin=${hasAdminPermission}, is_member=${hasMemberPermission}`)
 
@@ -664,6 +886,7 @@ serve(async (req) => {
       discord_avatar: memberData.user?.avatar || null,
       roles: roleDetails,
       permissions: permissionDetails,
+      members_allowed_role_ids: membersAllowedRoleIds,
       synced_at: new Date().toISOString(),
     }
 

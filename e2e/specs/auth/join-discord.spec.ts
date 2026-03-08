@@ -10,13 +10,13 @@ test.describe('Join Discord Page', () => {
   test('displays membership required page correctly', async ({ page }) => {
     await page.goto('/join-discord')
     await expect(page.getByRole('heading', { name: /Active Membership Required/i })).toBeVisible()
-    await expect(page.getByText(/could not verify your access/i)).toBeVisible()
+    await expect(page.getByText(/could not verify your members-area access yet/i).first()).toBeVisible()
   })
 
   test('shows access denied warning copy', async ({ page }) => {
     await page.goto('/join-discord')
-    await expect(page.getByText(/Access Denied/i)).toBeVisible()
-    await expect(page.getByText(/does not have an active TradeITM membership role/i)).toBeVisible()
+    await expect(page.getByText(/Access Check/i)).toBeVisible()
+    await expect(page.getByText(/members-area access/i).first()).toBeVisible()
   })
 
   test('has membership plans call-to-action link', async ({ page }) => {
@@ -28,7 +28,7 @@ test.describe('Join Discord Page', () => {
 
   test('has refresh access button', async ({ page }) => {
     await page.goto('/join-discord')
-    await expect(page.getByRole('button', { name: /Refresh Access/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Retry Discord Sync/i })).toBeVisible()
   })
 
   test('has sign out option', async ({ page }) => {

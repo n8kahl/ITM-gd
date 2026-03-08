@@ -6,7 +6,19 @@ export const DISCORD_PRIVILEGED_ROLE_ID = '1465515598640447662'
 // Existing members-gate role that should continue to grant member access.
 export const DISCORD_MEMBERS_ROLE_ID = '1471195516070264863'
 
-export const MEMBERS_ALLOWED_ROLE_IDS = [
+const MEMBERS_ALLOWED_ROLE_IDS_ENV_KEY = 'DISCORD_MEMBERS_ALLOWED_ROLE_IDS'
+export const MEMBERS_REQUIRED_ROLE_IDS_SETTING_KEY = 'members_required_role_ids'
+export const MEMBERS_REQUIRED_ROLE_ID_LEGACY_SETTING_KEY = 'members_required_role_id'
+const MEMBERS_ALLOWED_ROLE_IDS_CACHE_TTL_MS = 60_000
+
+type MembersAllowedRoleIdsCache = {
+  value: string[]
+  expiresAt: number
+}
+
+let membersAllowedRoleIdsCache: MembersAllowedRoleIdsCache | null = null
+
+const DEFAULT_MEMBERS_ALLOWED_ROLE_IDS = [
   DISCORD_MEMBERS_ROLE_ID,
   DISCORD_PRIVILEGED_ROLE_ID,
 ] as const
@@ -14,6 +26,129 @@ export const MEMBERS_ALLOWED_ROLE_IDS = [
 export const ADMIN_ALLOWED_ROLE_IDS = [
   DISCORD_PRIVILEGED_ROLE_ID,
 ] as const
+
+function parseRoleIdsFromString(value: string): string[] {
+  const trimmed = value.trim()
+  if (!trimmed) return []
+
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed)) {
+      return normalizeDiscordRoleIds(parsed)
+    }
+    if (typeof parsed === 'string') {
+      return parseRoleIdsFromString(parsed)
+    }
+  } catch {
+    // Fall through to CSV parser.
+  }
+
+  return normalizeDiscordRoleIds(trimmed.split(','))
+}
+
+function parseRoleIdsFromUnknown(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return normalizeDiscordRoleIds(raw)
+  }
+  if (typeof raw === 'string') {
+    return parseRoleIdsFromString(raw)
+  }
+  return []
+}
+
+function getConfiguredMembersAllowedRoleIdsFromRows(rows: Array<{ key?: unknown; value?: unknown }>): string[] {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return []
+  }
+
+  const settingByKey = new Map<string, unknown>()
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue
+    const key = typeof row.key === 'string' ? row.key.trim() : ''
+    if (!key) continue
+    settingByKey.set(key, row.value)
+  }
+
+  const preferred = parseRoleIdsFromUnknown(settingByKey.get(MEMBERS_REQUIRED_ROLE_IDS_SETTING_KEY))
+  if (preferred.length > 0) {
+    return preferred
+  }
+
+  const legacy = parseRoleIdsFromUnknown(settingByKey.get(MEMBERS_REQUIRED_ROLE_ID_LEGACY_SETTING_KEY))
+  if (legacy.length > 0) {
+    return legacy
+  }
+
+  return []
+}
+
+export function getDefaultMembersAllowedRoleIds(): string[] {
+  const fromEnv = parseRoleIdsFromString(process.env[MEMBERS_ALLOWED_ROLE_IDS_ENV_KEY] || '')
+  if (fromEnv.length > 0) {
+    return fromEnv
+  }
+
+  return [...DEFAULT_MEMBERS_ALLOWED_ROLE_IDS]
+}
+
+export const MEMBERS_ALLOWED_ROLE_IDS = getDefaultMembersAllowedRoleIds()
+
+export function clearMembersAllowedRoleIdsCache(): void {
+  membersAllowedRoleIdsCache = null
+}
+
+export async function resolveMembersAllowedRoleIds(params?: {
+  supabase?: any
+  useCache?: boolean
+  forceRefresh?: boolean
+}): Promise<string[]> {
+  const supabase = params?.supabase
+  const useCache = params?.useCache !== false
+  const forceRefresh = params?.forceRefresh === true
+
+  if (!supabase) {
+    return getDefaultMembersAllowedRoleIds()
+  }
+
+  const now = Date.now()
+  if (!forceRefresh && useCache && membersAllowedRoleIdsCache && membersAllowedRoleIdsCache.expiresAt > now) {
+    return membersAllowedRoleIdsCache.value
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .in('key', [MEMBERS_REQUIRED_ROLE_IDS_SETTING_KEY, MEMBERS_REQUIRED_ROLE_ID_LEGACY_SETTING_KEY])
+
+    if (error) {
+      const fallback = getDefaultMembersAllowedRoleIds()
+      membersAllowedRoleIdsCache = {
+        value: fallback,
+        expiresAt: now + MEMBERS_ALLOWED_ROLE_IDS_CACHE_TTL_MS,
+      }
+      return fallback
+    }
+
+    const configuredRoleIds = getConfiguredMembersAllowedRoleIdsFromRows((data || []) as Array<{ key?: unknown; value?: unknown }>)
+    const resolvedRoleIds = configuredRoleIds.length > 0
+      ? configuredRoleIds
+      : getDefaultMembersAllowedRoleIds()
+
+    membersAllowedRoleIdsCache = {
+      value: resolvedRoleIds,
+      expiresAt: now + MEMBERS_ALLOWED_ROLE_IDS_CACHE_TTL_MS,
+    }
+    return resolvedRoleIds
+  } catch {
+    const fallback = getDefaultMembersAllowedRoleIds()
+    membersAllowedRoleIdsCache = {
+      value: fallback,
+      expiresAt: now + MEMBERS_ALLOWED_ROLE_IDS_CACHE_TTL_MS,
+    }
+    return fallback
+  }
+}
 
 export function normalizeDiscordRoleIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
@@ -43,8 +178,11 @@ export function hasAnyDiscordRole(
   return roleIds.some((roleId) => allowedRoleIds.includes(roleId))
 }
 
-export function hasMembersAreaAccess(roleIds: string[]): boolean {
-  return hasAnyDiscordRole(roleIds, MEMBERS_ALLOWED_ROLE_IDS)
+export function hasMembersAreaAccess(
+  roleIds: string[],
+  allowedRoleIds: readonly string[] = MEMBERS_ALLOWED_ROLE_IDS,
+): boolean {
+  return hasAnyDiscordRole(roleIds, allowedRoleIds)
 }
 
 export function hasAdminRoleAccess(roleIds: string[]): boolean {

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/supabase-server'
 import { logAdminActivity } from '@/lib/admin/audit-log'
-import { hasMembersAreaAccess } from '@/lib/discord-role-access'
+import { hasMembersAreaAccess, resolveMembersAllowedRoleIds } from '@/lib/discord-role-access'
+import { fetchRoleTierMapping } from '@/lib/role-tier-mapping'
+import { buildTierPermissionNameAssignments } from '@/lib/tier-permission-presets'
 import {
   buildSyncedAppMetadata,
   buildSyncedUserMetadata,
@@ -246,6 +248,66 @@ function buildPermissionMap(rolePermissions: any[]): Map<string, { permission: a
   return permissionMap
 }
 
+async function applyTierPermissionFallback(params: {
+  supabaseAdmin: ReturnType<typeof getSupabaseAdmin>
+  permissionMap: Map<string, { permission: any; grantedByRoleId: string; grantedByRoleName: string | null }>
+  discordRoles: string[]
+  guildRoleNameById: Map<string, string>
+}): Promise<void> {
+  const { supabaseAdmin, permissionMap, discordRoles, guildRoleNameById } = params
+
+  if (discordRoles.length === 0) return
+
+  const roleTierMapping = await fetchRoleTierMapping(supabaseAdmin as any)
+  const tierAssignments = buildTierPermissionNameAssignments({
+    roleIds: discordRoles,
+    roleTierMapping,
+  })
+
+  if (tierAssignments.size === 0) return
+
+  const existingPermissionNames = new Set<string>(
+    Array.from(permissionMap.values())
+      .map(({ permission }) => (typeof permission?.name === 'string' ? String(permission.name) : null))
+      .filter((name): name is string => Boolean(name)),
+  )
+
+  const missingPermissionNames = Array.from(tierAssignments.keys())
+    .filter((permissionName) => !existingPermissionNames.has(permissionName))
+
+  if (missingPermissionNames.length === 0) return
+
+  const { data: fallbackPermissions, error: fallbackPermissionsError } = await supabaseAdmin
+    .from('app_permissions')
+    .select('id, name, description')
+    .in('name', missingPermissionNames)
+
+  if (fallbackPermissionsError) {
+    console.warn('[Admin Force Sync] Failed to fetch fallback tier permissions:', fallbackPermissionsError.message)
+    return
+  }
+
+  for (const row of Array.isArray(fallbackPermissions) ? fallbackPermissions : []) {
+    const permissionId = typeof row?.id === 'string' ? row.id : null
+    const permissionName = typeof row?.name === 'string' ? row.name : null
+    if (!permissionId || !permissionName) continue
+    if (permissionMap.has(permissionId)) continue
+
+    const grantedByRoleId = tierAssignments.get(permissionName)
+    if (!grantedByRoleId) continue
+
+    permissionMap.set(permissionId, {
+      permission: {
+        id: permissionId,
+        name: permissionName,
+        description: typeof row?.description === 'string' ? row.description : null,
+      },
+      grantedByRoleId,
+      grantedByRoleName: guildRoleNameById.get(grantedByRoleId) || null,
+    })
+  }
+}
+
 /**
  * POST /api/admin/members/force-sync
  * Admin-only. Forces a Discord role sync for a target user using the bot token (no end-user token required).
@@ -272,6 +334,7 @@ export async function POST(request: NextRequest) {
     }
 
     supabaseAdmin = getSupabaseAdmin()
+    const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({ supabase: supabaseAdmin })
 
     const { data: authUserResult, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
     if (authUserError || !authUserResult?.user) {
@@ -333,6 +396,12 @@ export async function POST(request: NextRequest) {
       ...rp,
       discord_role_name: rp.discord_role_name || guildRoleNameById.get(String(rp.discord_role_id)) || null,
     })))
+    await applyTierPermissionFallback({
+      supabaseAdmin,
+      permissionMap,
+      discordRoles,
+      guildRoleNameById,
+    })
 
     // Upsert cached Discord profile
     const { error: profileError } = await supabaseAdmin
@@ -403,7 +472,7 @@ export async function POST(request: NextRequest) {
     const hasAdminPermission = Array.from(permissionMap.values()).some(
       ({ permission }) => permission?.name === 'admin_dashboard',
     )
-    const hasMemberPermission = hasMembersAreaAccess(discordRoles)
+    const hasMemberPermission = hasMembersAreaAccess(discordRoles, membersAllowedRoleIds)
 
     // Persist claims + discord_roles into auth app_metadata (so middleware can read them).
     const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
@@ -447,7 +516,7 @@ export async function POST(request: NextRequest) {
       discord_user_id: discordUserId,
       discord_username: username,
       discord_roles: discordRoles,
-      has_members_required_role: hasMembersAreaAccess(discordRoles),
+      has_members_required_role: hasMembersAreaAccess(discordRoles, membersAllowedRoleIds),
       permissions: Array.from(permissionMap.values()).map(({ permission, grantedByRoleName }) => ({
         id: permission.id,
         name: permission.name,

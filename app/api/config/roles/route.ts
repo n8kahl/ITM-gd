@@ -1,23 +1,19 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { fetchRoleTierMapping, type MembershipTier } from '@/lib/role-tier-mapping'
 
-// Default role mapping fallback (Discord role ID -> tier)
-// NOTE: These are placeholder IDs. Configure actual Discord role IDs in app_settings.
-// To configure: INSERT INTO app_settings (key, value) VALUES ('role_tier_mapping', '{"YOUR_ROLE_ID": "executive", ...}')
-const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'executive'> = {
-  // Empty by default - must be configured in database with actual Discord role IDs
-  // Example: '1234567890123456789': 'executive'
-}
+const DEFAULT_ROLE_MAPPING: Record<string, MembershipTier> = {}
 
 // Public endpoint to fetch role-to-tier mappings (Discord role ID -> tier)
-// This allows the mapping to be configured in admin without redeploying
+// Source-of-truth preference:
+// 1) pricing_tiers.discord_role_id
+// 2) app_settings.role_tier_mapping (legacy fallback)
 export async function GET() {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      // Return fallback if Supabase not configured
       return NextResponse.json(DEFAULT_ROLE_MAPPING)
     }
 
@@ -28,34 +24,12 @@ export async function GET() {
       },
     })
 
-    // Try to fetch role_tier_mapping from app_settings
-    // Expected format: JSON object like {"role_name": "tier", ...}
-    const { data, error } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'role_tier_mapping')
-      .single()
-
-    if (error || !data?.value) {
-      // Return default mapping if not configured in database
+    const mapping = await fetchRoleTierMapping(supabase)
+    if (!mapping || Object.keys(mapping).length === 0) {
       return NextResponse.json(DEFAULT_ROLE_MAPPING)
     }
 
-    // Parse the stored JSON value
-    try {
-      const mapping = typeof data.value === 'string'
-        ? JSON.parse(data.value)
-        : data.value
-
-      // Validate it's an object with string values
-      if (typeof mapping === 'object' && mapping !== null) {
-        return NextResponse.json(mapping)
-      }
-    } catch {
-      // JSON parse failed, return default
-    }
-
-    return NextResponse.json(DEFAULT_ROLE_MAPPING)
+    return NextResponse.json(mapping)
   } catch (error) {
     console.error('Error fetching role mapping:', error)
     return NextResponse.json(DEFAULT_ROLE_MAPPING)

@@ -7,6 +7,7 @@ import {
   hasAdminRoleAccess,
   hasMembersAreaAccess,
   normalizeDiscordRoleIds,
+  resolveMembersAllowedRoleIds,
 } from '@/lib/discord-role-access'
 
 /**
@@ -293,11 +294,12 @@ export async function proxy(request: NextRequest) {
       return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
     }
 
+    const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({ supabase })
     let roleIds = await resolveDiscordRoleIds(supabase, user)
-    let hasMembersRole = hasMembersAreaAccess(roleIds)
+    let hasMembersRole = hasMembersAreaAccess(roleIds, membersAllowedRoleIds)
     if (!hasMembersRole) {
       roleIds = await resolveDiscordRoleIds(supabase, user, true)
-      hasMembersRole = hasMembersAreaAccess(roleIds)
+      hasMembersRole = hasMembersAreaAccess(roleIds, membersAllowedRoleIds)
     }
 
     if (!hasMembersRole) {

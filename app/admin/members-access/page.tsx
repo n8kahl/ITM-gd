@@ -110,6 +110,11 @@ export default function AdminMembersAccessPage() {
   ))
   const lastSyncedAt = result?.discord_profile?.last_synced_at || null
   const expectedMissing = Array.isArray(result?.permissions?.expected_missing) ? result.permissions.expected_missing : []
+  const lookupSource = String(result?.resolution?.source || 'direct')
+  const effectiveRolesSource = String(result?.diagnosis?.effective_roles_source || 'none')
+  const guildRoleCatalogError = typeof result?.diagnosis?.discord_guild_role_catalog_error === 'string'
+    ? result.diagnosis.discord_guild_role_catalog_error
+    : null
 
   return (
     <div className="space-y-6">
@@ -218,6 +223,14 @@ export default function AdminMembersAccessPage() {
                 <span className="text-white/60">Expected missing perms</span>
                 <span className="text-white">{expectedMissing.length}</span>
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60">Lookup source</span>
+                <span className="text-white">{lookupSource}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60">Roles source</span>
+                <span className="text-white">{effectiveRolesSource}</span>
+              </div>
 
               <div className="pt-2">
                 <Button
@@ -299,6 +312,15 @@ export default function AdminMembersAccessPage() {
                   <p className="text-red-200 text-sm font-medium">Members gate failed</p>
                   <p className="text-xs text-red-200/70 mt-1">
                     The user is missing all allowed members roles ({membersAllowedRoleTitles.join(', ') || 'none configured'}).
+                  </p>
+                </div>
+              )}
+
+              {guildRoleCatalogError && (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-amber-200 text-sm font-medium">Guild role catalog unavailable</p>
+                  <p className="text-xs text-amber-200/80 mt-1 break-all">
+                    {guildRoleCatalogError}
                   </p>
                 </div>
               )}

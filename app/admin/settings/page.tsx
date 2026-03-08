@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Settings,
   Save,
@@ -84,9 +84,25 @@ const DISCORD_FIELDS = [
     placeholder: 'https://discord.gg/yourinvite',
   },
 ]
+const DISCORD_SETTING_KEY_SET = new Set(DISCORD_FIELDS.map((field) => field.key))
 
 // Tier types
 type MembershipTier = 'core' | 'pro' | 'executive'
+
+function parseRoleIdsValue(raw: string | null): string[] {
+  if (!raw) return []
+
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      return Array.from(new Set(parsed.map((id) => String(id).trim()).filter(Boolean)))
+    }
+  } catch {
+    // fall back to CSV parser
+  }
+
+  return Array.from(new Set(raw.split(',').map((id) => id.trim()).filter(Boolean)))
+}
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<DiscordConfig>({
@@ -109,21 +125,18 @@ export default function SettingsPage() {
   const [newTier, setNewTier] = useState<MembershipTier>('core')
   const [savingTiers, setSavingTiers] = useState(false)
   const [discordRoleMap, setDiscordRoleMap] = useState<Record<string, string>>({})
+  const [membersRequiredRoleIds, setMembersRequiredRoleIds] = useState<string[]>([])
+  const [newMembersRoleId, setNewMembersRoleId] = useState('')
+  const [savingMembersRoles, setSavingMembersRoles] = useState(false)
 
   // AI Prompt state
   const [aiPrompt, setAiPrompt] = useState('')
   const [savingPrompt, setSavingPrompt] = useState(false)
 
-  useEffect(() => {
-    loadSettings()
-    loadTierMapping()
-    loadAIPrompt()
-    loadDiscordRoles()
-  }, [])
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setMembersRequiredRoleIds([])
 
     try {
       const response = await fetch('/api/admin/settings?reveal=true')
@@ -132,7 +145,11 @@ export default function SettingsPage() {
       if (data.success) {
         const newConfig: Partial<DiscordConfig> = {}
         data.data.forEach((setting: AppSetting) => {
-          if (setting.key in config) {
+          if (setting.key === 'members_required_role_ids') {
+            setMembersRequiredRoleIds(parseRoleIdsValue(setting.value))
+            return
+          }
+          if (DISCORD_SETTING_KEY_SET.has(setting.key)) {
             newConfig[setting.key as keyof DiscordConfig] = setting.value || ''
           }
         })
@@ -145,9 +162,9 @@ export default function SettingsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const loadTierMapping = async () => {
+  const loadTierMapping = useCallback(async () => {
     try {
       const response = await fetch('/api/config/roles')
       const data = await response.json()
@@ -157,9 +174,9 @@ export default function SettingsPage() {
     } catch (err) {
       console.error('Failed to load tier mapping:', err)
     }
-  }
+  }, [])
 
-  const loadAIPrompt = async () => {
+  const loadAIPrompt = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/settings')
       const data = await response.json()
@@ -172,9 +189,9 @@ export default function SettingsPage() {
     } catch (err) {
       console.error('Failed to load AI prompt:', err)
     }
-  }
+  }, [])
 
-  const loadDiscordRoles = async () => {
+  const loadDiscordRoles = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/discord/roles')
       const data = await response.json()
@@ -192,7 +209,14 @@ export default function SettingsPage() {
     } catch (err) {
       console.error('Failed to load Discord roles:', err)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadSettings()
+    loadTierMapping()
+    loadAIPrompt()
+    loadDiscordRoles()
+  }, [loadSettings, loadTierMapping, loadAIPrompt, loadDiscordRoles])
 
   const resolveRoleTitle = (roleId: string): string => {
     const title = discordRoleMap[roleId]
@@ -278,6 +302,61 @@ export default function SettingsPage() {
     })
   }
 
+  const addMembersRequiredRole = () => {
+    const roleId = newMembersRoleId.trim()
+    if (!roleId) {
+      setError('Discord role is required')
+      return
+    }
+
+    if (membersRequiredRoleIds.includes(roleId)) {
+      setError('That role is already configured for members access')
+      return
+    }
+
+    setMembersRequiredRoleIds((prev) => [...prev, roleId])
+    setNewMembersRoleId('')
+    setError(null)
+  }
+
+  const removeMembersRequiredRole = (roleId: string) => {
+    setMembersRequiredRoleIds((prev) => prev.filter((id) => id !== roleId))
+  }
+
+  const saveMembersRequiredRoles = async () => {
+    if (membersRequiredRoleIds.length === 0) {
+      setError('At least one members-required role is needed')
+      return
+    }
+
+    setSavingMembersRoles(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'members_required_role_ids',
+          value: membersRequiredRoleIds,
+        }),
+      })
+
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        setError(payload?.error || 'Failed to save members-required roles')
+        return
+      }
+
+      setSuccess('Members role gate updated successfully')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch {
+      setError('Failed to save members-required roles')
+    } finally {
+      setSavingMembersRoles(false)
+    }
+  }
+
   const toggleReveal = (key: string) => {
     setRevealedFields(prev => {
       const next = new Set(prev)
@@ -342,7 +421,8 @@ export default function SettingsPage() {
       )
 
       if (result.success) {
-        setSuccess(`✅ Connected to ${result.name}`)
+        const details = result.details ? ` ${result.details}` : ''
+        setSuccess(`✅ Connected to ${result.name}.${details}`)
         setTimeout(() => setSuccess(null), 5000)
       } else {
         setError(`❌ Failed: ${result.error}`)
@@ -519,6 +599,89 @@ export default function SettingsPage() {
               )}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Members Gate Roles */}
+      <Card className="glass-card-heavy border-white/10">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Shield className="w-5 h-5 text-emerald-500" />
+            Members Area Role Gate
+          </CardTitle>
+          <p className="text-sm text-white/60">
+            Configure which Discord role IDs unlock `/members` and protected member APIs.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {membersRequiredRoleIds.length === 0 ? (
+            <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+              <p className="text-sm text-red-300">
+                No members-required roles configured. Add at least one role to avoid access lockouts.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {membersRequiredRoleIds.map((roleId) => (
+                <div
+                  key={roleId}
+                  className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-white/80 bg-white/5 px-2 py-1 rounded">
+                      {resolveRoleTitle(roleId)}
+                    </span>
+                    <span className="text-xs text-white/40 font-mono">{roleId}</span>
+                  </div>
+                  <button
+                    onClick={() => removeMembersRequiredRole(roleId)}
+                    className="p-2 text-white/40 hover:text-red-400 transition-colors"
+                    title="Remove role"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+            <h4 className="text-sm font-medium text-white mb-3">Add Members Role</h4>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <DiscordRolePicker
+                  value={newMembersRoleId}
+                  onChange={(id) => setNewMembersRoleId(id)}
+                />
+              </div>
+              <Button
+                onClick={addMembersRequiredRole}
+                variant="outline"
+                className="border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add
+              </Button>
+            </div>
+          </div>
+
+          <Button
+            onClick={saveMembersRequiredRoles}
+            disabled={savingMembersRoles}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-medium h-12"
+          >
+            {savingMembersRoles ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Members Role Gate
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 

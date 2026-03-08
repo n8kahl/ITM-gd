@@ -14,6 +14,8 @@ type DynamicTabRecord = Record<string, unknown> & {
   sort_order?: unknown
 }
 
+const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/
+
 function sortBySortOrder<T extends { sort_order?: unknown }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
 }
@@ -173,6 +175,23 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    const requiredRoleIds = Array.from(new Set(
+      normalizedTabs.flatMap((tab) => Array.isArray(tab.required_discord_role_ids) ? tab.required_discord_role_ids : [])
+    ))
+    const invalidRoleIds = requiredRoleIds.filter((roleId) => !DISCORD_SNOWFLAKE_REGEX.test(roleId))
+    if (invalidRoleIds.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `Invalid Discord role IDs: ${invalidRoleIds.join(', ')}`,
+          },
+        },
+        { status: 400 },
+      )
+    }
+
     const { data: existingRows, error: existingRowsError } = await supabase
       .from('tab_configurations')
       .select('tab_id')
@@ -244,7 +263,28 @@ export async function PUT(request: NextRequest) {
       .select('*')
       .order('sort_order', { ascending: true })
 
-    return NextResponse.json({ success: true, data: updatedTabs })
+    let unknownRoleIds: string[] = []
+    if (requiredRoleIds.length > 0) {
+      const { data: knownGuildRoles } = await supabase
+        .from('discord_guild_roles')
+        .select('discord_role_id')
+        .in('discord_role_id', requiredRoleIds)
+
+      const knownRoleIdSet = new Set(
+        (knownGuildRoles || [])
+          .map((row: any) => String(row?.discord_role_id || '').trim())
+          .filter(Boolean),
+      )
+      unknownRoleIds = requiredRoleIds.filter((roleId) => !knownRoleIdSet.has(roleId))
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: updatedTabs,
+      warnings: unknownRoleIds.length > 0
+        ? { unknown_role_ids: unknownRoleIds }
+        : null,
+    })
   } catch (error) {
     return NextResponse.json(
       { success: false, error: { code: 'INTERNAL', message: error instanceof Error ? error.message : 'Internal server error' } },
