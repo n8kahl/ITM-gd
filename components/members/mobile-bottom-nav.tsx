@@ -14,13 +14,13 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
-import { Analytics } from '@/lib/analytics'
 import {
   getMemberTabHref,
   getMemberTabIcon,
   isMemberTabActive,
   resolveMemberTabLabel,
 } from '@/lib/member-navigation'
+import { useMemberNavHandler } from '@/hooks/use-member-nav-handler'
 
 interface NavTab {
   id: string
@@ -60,6 +60,7 @@ function triggerHaptic() {
 export function MemberBottomNav() {
   const pathname = usePathname()
   const { getMobileTabs } = useMemberAuth()
+  const { handleMemberNavClick } = useMemberNavHandler()
   const [moreOpenPath, setMoreOpenPath] = useState<string | null>(null)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
   const moreOpen = moreOpenPath === pathname
@@ -101,11 +102,11 @@ export function MemberBottomNav() {
               <Link
                 key={tab.id}
                 href={tab.href}
-                onClick={() => {
+                prefetch={false}
+                onClick={(event) => handleMemberNavClick(event, tab.href, tab.label, () => {
                   triggerHaptic()
-                  Analytics.trackMemberNavItem(tab.label)
                   setMoreOpenPath(null)
-                }}
+                })}
                 className="relative min-w-0 flex-1 flex flex-col items-center justify-center py-1.5"
                 aria-current={active ? 'page' : undefined}
               >
@@ -196,11 +197,11 @@ export function MemberBottomNav() {
                         <Link
                           key={item.id}
                           href={item.href}
-                          onClick={() => {
+                          prefetch={false}
+                          onClick={(event) => handleMemberNavClick(event, item.href, item.label, () => {
                             triggerHaptic()
-                            Analytics.trackMemberNavItem(item.label)
                             setMoreOpenPath(null)
-                          }}
+                          })}
                           className={cn(
                             'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-white/[0.06]',
                             active ? 'bg-emerald-500/10 text-emerald-200' : 'text-ivory/85',

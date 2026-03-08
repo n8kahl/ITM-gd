@@ -212,6 +212,50 @@ test.describe('Rapid Tab Switching', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Navigation Resilience
+// ---------------------------------------------------------------------------
+
+test.describe('Navigation Resilience', () => {
+  test.describe.configure({ mode: 'serial' })
+
+  test.beforeEach(async ({ page }) => {
+    test.setTimeout(90_000)
+    await setupAllNavigationMocks(page)
+  })
+
+  test('sidebar tab clicks still navigate when browser storage APIs throw', async ({ page }) => {
+    await page.addInitScript(() => {
+      const throwStorageError = () => {
+        throw new DOMException('Storage blocked by browser policy', 'SecurityError')
+      }
+
+      for (const method of ['getItem', 'setItem', 'removeItem', 'clear'] as const) {
+        Object.defineProperty(Storage.prototype, method, {
+          configurable: true,
+          value: throwStorageError,
+        })
+      }
+    })
+
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto(BYPASS_URL('/members'), { waitUntil: 'domcontentloaded' })
+    await waitForPageReady(page)
+
+    const sidebar = page.locator('aside').first()
+    await expect(sidebar).toBeVisible({ timeout: 10_000 })
+
+    const profileLink = sidebar.getByRole('link', { name: /^profile$/i }).first()
+    await profileLink.click({ timeout: 10_000 })
+    await page.waitForURL('**/members/profile**', { timeout: 15_000 })
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/members/profile')
+
+    const dashboardLink = sidebar.getByRole('link', { name: /^dashboard$/i }).first()
+    await dashboardLink.click({ timeout: 10_000 })
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/members')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Browser History (Back/Forward)
 // ---------------------------------------------------------------------------
 
