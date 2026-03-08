@@ -405,7 +405,7 @@ export default function Home() {
                   "💬 Community Access",
                   "📊 81% Win Rate Track Record",
                 ]}
-                whopLink="https://whop.com/trade-in-the-money/pro-sniper-copy/"
+                whopLink="https://whop.com/checkout/plan_7Mu2Es9z1CsUF"
                 tier="trial"
                 tagline="Limited Time"
                 isYearly={false}
@@ -762,7 +762,7 @@ export default function Home() {
                 <>
                   <span className="text-sm text-muted-foreground/40 font-medium">or</span>
                   <a
-                    href="https://whop.com/trade-in-the-money/pro-sniper-copy/"
+                    href="https://whop.com/checkout/plan_7Mu2Es9z1CsUF"
                     className={cn(
                       "inline-flex items-center justify-center min-w-[220px]",
                       "px-8 py-4 rounded-sm text-sm font-semibold tracking-wider uppercase",
