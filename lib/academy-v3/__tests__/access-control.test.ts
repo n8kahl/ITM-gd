@@ -5,7 +5,7 @@ import {
   assertModuleContentAccess,
   ensureProgramEnrollment,
 } from '@/lib/academy-v3/access-control'
-import { DISCORD_PRIVILEGED_ROLE_ID } from '@/lib/discord-role-access'
+import { DISCORD_MEMBERS_ROLE_ID, DISCORD_PRIVILEGED_ROLE_ID } from '@/lib/discord-role-access'
 
 function createMaybeSingleChain(result: { data: any; error: any }) {
   const chain: any = {}
@@ -26,6 +26,16 @@ describe('academy-v3 access control', () => {
         if (table === 'user_discord_profiles') {
           return {
             select: vi.fn(() => profileChain),
+          }
+        }
+        if (table === 'app_settings') {
+          return {
+            select: vi.fn(() => ({
+              in: vi.fn(async () => ({
+                data: [{ key: 'members_required_role_ids', value: JSON.stringify([DISCORD_MEMBERS_ROLE_ID, DISCORD_PRIVILEGED_ROLE_ID]) }],
+                error: null,
+              })),
+            })),
           }
         }
         throw new Error(`Unexpected table: ${table}`)
@@ -51,6 +61,16 @@ describe('academy-v3 access control', () => {
         if (table === 'user_discord_profiles') {
           return {
             select: vi.fn(() => profileChain),
+          }
+        }
+        if (table === 'app_settings') {
+          return {
+            select: vi.fn(() => ({
+              in: vi.fn(async () => ({
+                data: [{ key: 'members_required_role_ids', value: JSON.stringify([DISCORD_MEMBERS_ROLE_ID, DISCORD_PRIVILEGED_ROLE_ID]) }],
+                error: null,
+              })),
+            })),
           }
         }
         throw new Error(`Unexpected table: ${table}`)

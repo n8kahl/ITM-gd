@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { getSafeRedirect } from '@/lib/safe-redirect'
 import { getAbsoluteUrl } from '@/lib/url-helpers'
@@ -7,6 +8,7 @@ import {
   hasAdminRoleAccess,
   hasMembersAreaAccess,
   normalizeDiscordRoleIds,
+  resolveMembersAllowedRoleIds,
 } from '@/lib/discord-role-access'
 
 /**
@@ -100,6 +102,22 @@ export async function GET(request: NextRequest) {
 
     console.log('✓ Session created for user:', session.user.id)
 
+    const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        },
+      )
+      : null
+    const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({
+      supabase: supabaseAdmin || supabase,
+    })
+
     // STEP 2: Sync Discord roles and permissions (best-effort)
     // This updates the user_permissions table and triggers the sync_permissions_to_claims() function
     let syncResult: { success: boolean; code?: string; permissions?: any[] } | null = null
@@ -176,7 +194,7 @@ export async function GET(request: NextRequest) {
               ? (syncResult as any).roles.map((r: any) => r?.id)
               : [],
           )
-          const expectedMember = hasMembersAreaAccess(rolesFromSync)
+          const expectedMember = hasMembersAreaAccess(rolesFromSync, membersAllowedRoleIds)
 
           if ((!expectedAdmin || isAdmin) && (!expectedMember || isMember)) {
             console.log(`✓ Claims propagated on attempt ${attempt}`)
@@ -201,7 +219,7 @@ export async function GET(request: NextRequest) {
           ? (syncResult as any).roles.map((r: any) => r?.id)
           : [],
       )
-      const hasMemberPerm = hasMembersAreaAccess(rolesFromSync)
+      const hasMemberPerm = hasMembersAreaAccess(rolesFromSync, membersAllowedRoleIds)
 
       // Override with sync result if it's more permissive
       if (hasAdminPerm && !isAdmin) {
@@ -242,7 +260,7 @@ export async function GET(request: NextRequest) {
       const rolesFromJwt = normalizeDiscordRoleIds(
         (currentSession.user.app_metadata as { discord_roles?: unknown } | undefined)?.discord_roles,
       )
-      hasMembersRole = hasMembersAreaAccess(rolesFromJwt)
+      hasMembersRole = hasMembersAreaAccess(rolesFromJwt, membersAllowedRoleIds)
       hasAdminRole = hasAdminRoleAccess(rolesFromJwt)
 
       // 2) Fall back to edge function response.
@@ -252,7 +270,7 @@ export async function GET(request: NextRequest) {
             ? (syncResult as any).roles.map((r: any) => r?.id)
             : [],
         )
-        if (!hasMembersRole) hasMembersRole = hasMembersAreaAccess(rolesFromSync)
+        if (!hasMembersRole) hasMembersRole = hasMembersAreaAccess(rolesFromSync, membersAllowedRoleIds)
         if (!hasAdminRole) hasAdminRole = hasAdminRoleAccess(rolesFromSync)
       }
 
@@ -266,7 +284,7 @@ export async function GET(request: NextRequest) {
             .maybeSingle()
 
           const rolesFromProfile = normalizeDiscordRoleIds(discordProfile?.discord_roles)
-          if (!hasMembersRole) hasMembersRole = hasMembersAreaAccess(rolesFromProfile)
+          if (!hasMembersRole) hasMembersRole = hasMembersAreaAccess(rolesFromProfile, membersAllowedRoleIds)
           if (!hasAdminRole) hasAdminRole = hasAdminRoleAccess(rolesFromProfile)
         } catch (err) {
           console.warn('Role lookup failed during callback (non-fatal):', err)

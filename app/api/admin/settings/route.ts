@@ -19,6 +19,144 @@ const SENSITIVE_KEYS = [
   'discord_client_secret',
 ]
 
+const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/
+const VALID_TIERS = new Set(['core', 'pro', 'executive'])
+
+function normalizeRoleIds(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return Array.from(new Set(raw.map((id) => String(id).trim()).filter(Boolean)))
+  }
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    if (!trimmed) return []
+
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) {
+        return normalizeRoleIds(parsed)
+      }
+      if (typeof parsed === 'string') {
+        return normalizeRoleIds(parsed)
+      }
+    } catch {
+      // fall back to CSV parser
+    }
+
+    return Array.from(new Set(trimmed.split(',').map((id) => id.trim()).filter(Boolean)))
+  }
+
+  return []
+}
+
+function normalizeRoleTierMapping(raw: unknown): { value: string | null; error?: string } {
+  let parsed: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return { value: null, error: 'role_tier_mapping must be valid JSON' }
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { value: null, error: 'role_tier_mapping must be an object' }
+  }
+
+  const normalized: Record<string, string> = {}
+  for (const [roleId, tierValue] of Object.entries(parsed as Record<string, unknown>)) {
+    const normalizedRoleId = String(roleId).trim()
+    const normalizedTier = String(tierValue || '').trim().toLowerCase()
+    if (!normalizedRoleId) continue
+
+    if (!VALID_TIERS.has(normalizedTier)) {
+      return {
+        value: null,
+        error: `role_tier_mapping contains invalid tier '${normalizedTier}' for role '${normalizedRoleId}'`,
+      }
+    }
+
+    normalized[normalizedRoleId] = normalizedTier
+  }
+
+  return { value: JSON.stringify(normalized) }
+}
+
+function normalizeSettingValue(params: {
+  key: string
+  value: unknown
+  forCreate?: boolean
+}): { value: string | null; error?: string } {
+  const { key, value, forCreate } = params
+  const normalizedKey = key.trim()
+
+  if (!/^[a-z0-9_]+$/i.test(normalizedKey)) {
+    return { value: null, error: 'Invalid key format' }
+  }
+
+  if (value === undefined && !forCreate) {
+    return { value: null, error: 'Value is required' }
+  }
+
+  if (normalizedKey === 'discord_guild_id' || normalizedKey === 'discord_client_id') {
+    const normalized = String(value || '').trim()
+    if (normalized && !DISCORD_SNOWFLAKE_REGEX.test(normalized)) {
+      return { value: null, error: `${normalizedKey} must be a valid Discord snowflake` }
+    }
+    return { value: normalized }
+  }
+
+  if (normalizedKey === 'discord_invite_url') {
+    const normalized = String(value || '').trim()
+    if (!normalized) return { value: '' }
+
+    try {
+      const url = new URL(normalized)
+      const hostname = url.hostname.toLowerCase()
+      const isDiscordHost = hostname === 'discord.gg' || hostname.endsWith('.discord.gg') || hostname === 'discord.com' || hostname.endsWith('.discord.com')
+      if (!isDiscordHost) {
+        return { value: null, error: 'discord_invite_url must point to discord.gg or discord.com' }
+      }
+      return { value: normalized }
+    } catch {
+      return { value: null, error: 'discord_invite_url must be a valid URL' }
+    }
+  }
+
+  if (normalizedKey === 'members_required_role_ids') {
+    const roleIds = normalizeRoleIds(value).filter((roleId) => DISCORD_SNOWFLAKE_REGEX.test(roleId))
+    if (roleIds.length === 0) {
+      return { value: null, error: 'members_required_role_ids must include at least one valid Discord role ID' }
+    }
+    return { value: JSON.stringify(roleIds) }
+  }
+
+  if (normalizedKey === 'members_required_role_id') {
+    const normalized = String(value || '').trim()
+    if (normalized && !DISCORD_SNOWFLAKE_REGEX.test(normalized)) {
+      return { value: null, error: 'members_required_role_id must be a valid Discord role ID' }
+    }
+    return { value: normalized }
+  }
+
+  if (normalizedKey === 'role_tier_mapping') {
+    return normalizeRoleTierMapping(value)
+  }
+
+  if (value === null) {
+    return { value: null }
+  }
+
+  if (typeof value === 'string') {
+    if (normalizedKey === 'ai_system_prompt') {
+      return { value }
+    }
+    return { value: value.trim() }
+  }
+
+  return { value: JSON.stringify(value) }
+}
+
 // GET - Fetch all settings
 export async function GET(request: NextRequest) {
   if (!await isAdminUser()) {
@@ -73,11 +211,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 })
     }
 
+    const normalized = normalizeSettingValue({ key: String(key), value, forCreate: true })
+    if (normalized.error) {
+      return NextResponse.json({ error: normalized.error }, { status: 400 })
+    }
+
     const supabase = getSupabaseAdmin()
 
     const { data, error } = await supabase
       .from('app_settings')
-      .insert({ key, value })
+      .insert({ key, value: normalized.value })
       .select()
       .single()
 
@@ -110,11 +253,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 })
     }
 
+    const normalized = normalizeSettingValue({ key: String(key), value })
+    if (normalized.error) {
+      return NextResponse.json({ error: normalized.error }, { status: 400 })
+    }
+
     const supabase = getSupabaseAdmin()
 
     // Build update object
     const updates: Record<string, any> = {}
-    if (value !== undefined) updates.value = value
+    if (value !== undefined) updates.value = normalized.value
     updates.updated_at = new Date().toISOString()
 
     const { data, error } = await supabase
@@ -131,7 +279,7 @@ export async function PATCH(request: NextRequest) {
       // Setting doesn't exist, create it
       const { data: newData, error: insertError } = await supabase
         .from('app_settings')
-        .insert({ key, value })
+        .insert({ key, value: normalized.value })
         .select()
         .single()
 
@@ -145,7 +293,7 @@ export async function PATCH(request: NextRequest) {
         targetId: key,
         details: {
           created: true,
-          value,
+          value: normalized.value,
         },
       })
 
@@ -158,7 +306,7 @@ export async function PATCH(request: NextRequest) {
       targetId: key,
       details: {
         created: false,
-        value,
+        value: normalized.value,
       },
     })
 

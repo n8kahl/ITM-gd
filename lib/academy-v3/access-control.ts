@@ -3,6 +3,7 @@ import {
   extractDiscordRoleIdsFromUser,
   hasMembersAreaAccess,
   normalizeDiscordRoleIds,
+  resolveMembersAllowedRoleIds,
 } from '@/lib/discord-role-access'
 
 export class AcademyAccessError extends Error {
@@ -65,9 +66,11 @@ export async function assertMembersAreaRoleAccess(params: {
   user: User
   supabase: SupabaseClient
 }): Promise<string[]> {
+  const { supabase } = params
   const roleIds = await resolveEffectiveDiscordRoleIds(params)
+  const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({ supabase })
 
-  if (!hasMembersAreaAccess(roleIds)) {
+  if (!hasMembersAreaAccess(roleIds, membersAllowedRoleIds)) {
     throw new AcademyAccessError(
       403,
       'MEMBERS_ROLE_REQUIRED',

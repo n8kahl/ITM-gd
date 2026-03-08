@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { hasMembersAreaAccess } from '@/lib/discord-role-access'
+import { hasMembersAreaAccess, resolveMembersAllowedRoleIds } from '@/lib/discord-role-access'
+import { fetchRoleTierMapping, type RoleTierMapping } from '@/lib/role-tier-mapping'
+import { buildTierPermissionNameAssignments } from '@/lib/tier-permission-presets'
 import {
   buildSyncedAppMetadata,
   buildSyncedUserMetadata,
@@ -66,8 +68,10 @@ async function recomputeSingleUser(params: {
   supabaseAdmin: SupabaseClient
   userProfile: UserDiscordProfileRow
   rolePermissionMap: Map<string, RolePermissionRow[]>
+  membersAllowedRoleIds: string[]
+  roleTierMapping: RoleTierMapping
 }) {
-  const { supabaseAdmin, userProfile, rolePermissionMap } = params
+  const { supabaseAdmin, userProfile, rolePermissionMap, membersAllowedRoleIds, roleTierMapping } = params
   const roleIds = normalizeRoleIds(userProfile.discord_roles)
 
   const permissionById = new Map<string, {
@@ -88,6 +92,52 @@ async function recomputeSingleUser(params: {
           permissionName: permission.name,
           grantedByRoleId: row.discord_role_id,
           grantedByRoleName: row.discord_role_name,
+        })
+      }
+    }
+  }
+
+  const tierAssignments = buildTierPermissionNameAssignments({
+    roleIds,
+    roleTierMapping,
+  })
+  if (tierAssignments.size > 0) {
+    const existingPermissionNames = new Set<string>(
+      Array.from(permissionById.values()).map(({ permissionName }) => permissionName)
+    )
+
+    const missingTierPermissionNames = Array.from(tierAssignments.keys())
+      .filter((permissionName) => !existingPermissionNames.has(permissionName))
+
+    if (missingTierPermissionNames.length > 0) {
+      const { data: fallbackPermissionRows, error: fallbackPermissionError } = await supabaseAdmin
+        .from('app_permissions')
+        .select('id, name')
+        .in('name', missingTierPermissionNames)
+
+      if (fallbackPermissionError) {
+        throw new Error(`Failed to query app_permissions for tier fallback: ${fallbackPermissionError.message}`)
+      }
+
+      for (const row of (fallbackPermissionRows || [])) {
+        const permissionId = typeof (row as any)?.id === 'string'
+          ? String((row as any).id).trim()
+          : ''
+        const permissionName = typeof (row as any)?.name === 'string'
+          ? String((row as any).name).trim()
+          : ''
+
+        if (!permissionId || !permissionName) continue
+        if (permissionById.has(permissionId)) continue
+
+        const grantedByRoleId = tierAssignments.get(permissionName)
+        if (!grantedByRoleId) continue
+
+        permissionById.set(permissionId, {
+          permissionId,
+          permissionName,
+          grantedByRoleId,
+          grantedByRoleName: null,
         })
       }
     }
@@ -139,7 +189,7 @@ async function recomputeSingleUser(params: {
   const hasAdminPermission = Array.from(permissionById.values()).some(
     ({ permissionName }) => permissionName === 'admin_dashboard',
   )
-  const hasMemberRole = hasMembersAreaAccess(roleIds)
+  const hasMemberRole = hasMembersAreaAccess(roleIds, membersAllowedRoleIds)
 
   const { data: authUserResult, error: authUserError } = await supabaseAdmin.auth.admin.getUserById(userProfile.user_id)
   if (authUserError || !authUserResult?.user) {
@@ -231,6 +281,8 @@ export async function recomputeUsersForRoleIds(params: {
     scopedRows.push(row)
     rolePermissionMap.set(row.discord_role_id, scopedRows)
   }
+  const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({ supabase: supabaseAdmin })
+  const roleTierMapping = await fetchRoleTierMapping(supabaseAdmin as any)
 
   let processed = 0
   let failed = 0
@@ -242,6 +294,8 @@ export async function recomputeUsersForRoleIds(params: {
         supabaseAdmin,
         userProfile,
         rolePermissionMap,
+        membersAllowedRoleIds,
+        roleTierMapping,
       })
       processed += 1
     } catch (error) {

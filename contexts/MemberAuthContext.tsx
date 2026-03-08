@@ -673,32 +673,19 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   // Fetch allowed tabs (now based on tier, not database)
   const fetchAllowedTabs = useCallback(async (
-    userId: string,
+    _userId: string,
     tier?: 'core' | 'pro' | 'executive' | null,
     isAdmin?: boolean,
   ): Promise<string[]> => {
-    // If tier is provided, use it directly
-    if (tier !== undefined) {
-      return getAllowedTabsForTier(tier, !!isAdmin)
-    }
+    const effectiveTier = tier === undefined
+      ? (state.profile?.membership_tier ?? null)
+      : tier
+    const effectiveIsAdmin = isAdmin === undefined
+      ? (state.profile?.role === 'admin')
+      : Boolean(isAdmin)
 
-    // Otherwise, this is a fallback - shouldn't happen in normal flow
-    try {
-      const { data, error } = await supabase.rpc('get_user_allowed_tabs', {
-        user_id: userId
-      })
-
-      if (error) {
-        console.error('Error fetching allowed tabs:', error)
-        return []
-      }
-
-      return data || []
-    } catch (error) {
-      console.error('fetchAllowedTabs error:', error)
-      return []
-    }
-  }, [getAllowedTabsForTier])
+    return getAllowedTabsForTier(effectiveTier, effectiveIsAdmin)
+  }, [getAllowedTabsForTier, state.profile?.membership_tier, state.profile?.role])
 
   // Refs for stable access to latest callback versions (breaks dependency chains)
   const getMembershipTierRef = useRef(getMembershipTier)
