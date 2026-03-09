@@ -4,32 +4,19 @@
 import useSWR from 'swr';
 import { useMemberAuth } from '@/contexts/MemberAuthContext';
 
-type MarketKey = [url: string, token: string];
-
-const DIRECT_MARKET_API_BASE = (process.env.NEXT_PUBLIC_AI_COACH_API_URL || '').replace(/\/+$/, '');
-
-function resolveMarketUrl(url: string): string {
-    if (DIRECT_MARKET_API_BASE && url.startsWith('/api/market/')) {
-        return `${DIRECT_MARKET_API_BASE}${url}`;
-    }
-    return url;
-}
+type MarketKey = [url: string, token: string | null];
 
 const fetcher = async (key: MarketKey) => {
     const [url, token] = key;
-    const targetUrl = resolveMarketUrl(url);
-    const res = await fetch(targetUrl, {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
+    const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     const fallbackHeader = res.headers.get('X-Market-Fallback');
     if (fallbackHeader) {
         const body = await res.json().catch(() => null);
-        const detail = typeof body?.message === 'string'
-            ? body.message
-            : (typeof body?.error === 'string' ? body.error : '');
-        throw new Error(`Market data unavailable (${fallbackHeader})${detail ? `: ${detail}` : ''}`);
+        if (body !== null) {
+            return body;
+        }
     }
     if (!res.ok) {
         let detail = '';
@@ -90,9 +77,9 @@ export interface StockSplit {
 
 export function useMarketIndices() {
     const { session } = useMemberAuth();
-    const token = session?.access_token;
+    const token = session?.access_token ?? null;
 
-    const { data, error, isLoading } = useSWR<MarketIndicesResponse>(token ? ['/api/market/indices', token] : null, fetcher, {
+    const { data, error, isLoading } = useSWR<MarketIndicesResponse>(['/api/market/indices', token], fetcher, {
         refreshInterval: 10000, // Poll every 10s
     });
 
@@ -107,9 +94,9 @@ export function useMarketIndices() {
 
 export function useMarketStatus() {
     const { session } = useMemberAuth();
-    const token = session?.access_token;
+    const token = session?.access_token ?? null;
 
-    const { data, error, isLoading } = useSWR<MarketStatusResponse>(token ? ['/api/market/status', token] : null, fetcher, {
+    const { data, error, isLoading } = useSWR<MarketStatusResponse>(['/api/market/status', token], fetcher, {
         refreshInterval: 60000, // Poll every minute
     });
 
@@ -122,10 +109,10 @@ export function useMarketStatus() {
 
 export function useMarketMovers(limit: number = 5) {
     const { session } = useMemberAuth();
-    const token = session?.access_token;
+    const token = session?.access_token ?? null;
     const url = `/api/market/movers?limit=${limit}`;
 
-    const { data, error, isLoading } = useSWR<MarketMoversResponse>(token ? [url, token] : null, fetcher, {
+    const { data, error, isLoading } = useSWR<MarketMoversResponse>([url, token], fetcher, {
         refreshInterval: 60000, // Poll every minute
     });
 
@@ -139,9 +126,9 @@ export function useMarketMovers(limit: number = 5) {
 
 export function useUpcomingSplits() {
     const { session } = useMemberAuth();
-    const token = session?.access_token;
+    const token = session?.access_token ?? null;
 
-    const { data, error, isLoading } = useSWR<StockSplit[]>(token ? ['/api/market/splits', token] : null, fetcher, {
+    const { data, error, isLoading } = useSWR<StockSplit[]>(['/api/market/splits', token], fetcher, {
         refreshInterval: 3600000, // Poll every hour
     });
 
@@ -180,9 +167,9 @@ export interface MarketHealthSnapshot {
 
 export function useMarketAnalytics() {
     const { session } = useMemberAuth();
-    const token = session?.access_token;
+    const token = session?.access_token ?? null;
 
-    const { data, error, isLoading } = useSWR<MarketHealthSnapshot>(token ? ['/api/market/analytics', token] : null, fetcher, {
+    const { data, error, isLoading } = useSWR<MarketHealthSnapshot>(['/api/market/analytics', token], fetcher, {
         refreshInterval: 30000, // Poll every 30s
     });
 

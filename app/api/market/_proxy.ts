@@ -72,31 +72,42 @@ export async function proxyMarketGet(request: Request, endpoint: MarketEndpoint)
     const backendBase = resolveBackendBaseUrl(request).replace(/\/+$/, '');
     const upstream = `${backendBase}/api/market/${endpoint}${url.search}`;
 
-    let authHeader: string | undefined;
+    let incomingAuthHeader: string | undefined;
+    let sessionAuthHeader: string | undefined;
     const incomingAuth = request.headers.get('authorization') || request.headers.get('Authorization');
     if (incomingAuth && /^bearer\s+/i.test(incomingAuth)) {
-      authHeader = incomingAuth;
+      incomingAuthHeader = incomingAuth;
     }
 
     try {
-      if (!authHeader) {
-        const supabase = await createServerSupabaseClient();
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          authHeader = `Bearer ${session.access_token}`;
-        }
+      const supabase = await createServerSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        sessionAuthHeader = `Bearer ${session.access_token}`;
       }
     } catch {
       // Keep proxy public when no session is available.
     }
 
-    const response = await fetch(upstream, {
-      headers: {
-        ...(authHeader ? { Authorization: authHeader } : {}),
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-    });
+    const primaryAuthHeader = incomingAuthHeader || sessionAuthHeader;
+    const fallbackAuthHeader =
+      incomingAuthHeader && sessionAuthHeader && incomingAuthHeader !== sessionAuthHeader
+        ? sessionAuthHeader
+        : undefined;
+
+    const fetchUpstream = (authHeader?: string) =>
+      fetch(upstream, {
+        headers: {
+          ...(authHeader ? { Authorization: authHeader } : {}),
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      });
+
+    let response = await fetchUpstream(primaryAuthHeader);
+    if (response.status === 401 && fallbackAuthHeader) {
+      response = await fetchUpstream(fallbackAuthHeader);
+    }
 
     if (!response.ok) {
       return NextResponse.json(getMarketFallback(endpoint), {
