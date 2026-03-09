@@ -76,6 +76,26 @@ test.describe('Mobile navigation regression suite', () => {
     await page.goto(MOBILE_STUDIO_URL, { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: 'Media Command Studio' })).toBeVisible()
   })
+
+  test('rapid tab switching keeps client-side navigation state without full reload fallback', async ({ page }) => {
+    await page.goto(MOBILE_STUDIO_URL, { waitUntil: 'domcontentloaded' })
+
+    const stateToken = `member-nav-${Date.now()}`
+    await page.evaluate((token) => {
+      ;(window as unknown as { __memberNavStateToken?: string }).__memberNavStateToken = token
+    }, stateToken)
+
+    const bottomNav = page.locator('[data-mobile-bottom-nav]')
+    await bottomNav.getByRole('link', { name: /^AI Coach$/ }).click()
+    await page.waitForTimeout(40)
+    await bottomNav.getByRole('link', { name: /^Journal$/ }).click()
+
+    await expect(page).toHaveURL(/\/members\/journal/)
+    const retainedToken = await page.evaluate(() => {
+      return (window as unknown as { __memberNavStateToken?: string }).__memberNavStateToken ?? null
+    })
+    expect(retainedToken).toBe(stateToken)
+  })
 })
 
 test.describe('Mobile options chain toggle regression', () => {

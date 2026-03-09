@@ -134,7 +134,6 @@ export function MemberSidebar() {
             <Link
               key={tab.tab_id}
               href={href}
-              prefetch={false}
               onClick={(event) => handleMemberNavClick(event, href, tabLabel)}
               className={cn(
                 'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-500 ease-out group overflow-hidden',

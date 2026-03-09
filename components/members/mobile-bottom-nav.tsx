@@ -57,10 +57,29 @@ function triggerHaptic() {
   }
 }
 
+function getHrefPathname(href: string): string {
+  if (typeof window === 'undefined') {
+    return href.split(/[?#]/)[0] || href
+  }
+
+  try {
+    return new URL(href, window.location.origin).pathname
+  } catch {
+    return href.split(/[?#]/)[0] || href
+  }
+}
+
 export function MemberBottomNav() {
   const pathname = usePathname()
   const { getMobileTabs } = useMemberAuth()
-  const { handleMemberNavClick } = useMemberNavHandler()
+  const {
+    handleMemberNavClick,
+    isNavigationPending,
+    isNavigationStalled,
+    navigationTargetPathname,
+    navigationTargetLabel,
+    retryPendingNavigation,
+  } = useMemberNavHandler()
   const [moreOpenPath, setMoreOpenPath] = useState<string | null>(null)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
   const moreOpen = moreOpenPath === pathname
@@ -94,22 +113,51 @@ export function MemberBottomNav() {
   return (
     <div data-mobile-bottom-nav className="fixed bottom-6 left-4 right-4 z-40 lg:hidden">
       <nav className="glass-card-heavy rounded-2xl border border-white/10 shadow-2xl px-2 pt-2 pb-safe">
+        {isNavigationStalled ? (
+          <div className="mb-1 flex items-center justify-between gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-100">
+            <span className="truncate">
+              Navigation to {navigationTargetLabel ?? 'tab'} is taking longer than expected.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic()
+                retryPendingNavigation()
+              }}
+              className="shrink-0 rounded-md border border-amber-200/40 px-2 py-0.5 font-semibold text-amber-100 hover:bg-amber-200/10"
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+
         <div className="flex items-end justify-between gap-1">
           {primaryTabs.map((tab) => {
             const Icon = tab.icon
             const active = isActivePath(pathname, tab)
+            const tabPathname = getHrefPathname(tab.href)
+            const isPendingTarget = navigationTargetPathname === tabPathname
             return (
               <Link
                 key={tab.id}
                 href={tab.href}
-                prefetch={false}
                 onClick={(event) => handleMemberNavClick(event, tab.href, tab.label, () => {
                   triggerHaptic()
                   setMoreOpenPath(null)
                 })}
                 className="relative min-w-0 flex-1 flex flex-col items-center justify-center py-1.5"
                 aria-current={active ? 'page' : undefined}
-              >
+                >
+                  {isPendingTarget ? (
+                    <span
+                      className={cn(
+                        'pointer-events-none absolute right-3 top-0.5 h-1.5 w-1.5 rounded-full',
+                        isNavigationStalled ? 'bg-amber-300' : isNavigationPending ? 'animate-pulse bg-emerald-300' : 'bg-transparent',
+                      )}
+                      aria-hidden
+                    />
+                  ) : null}
+
                 {active && (
                   <span
                     className="absolute -top-1 h-0.5 w-8 rounded-full bg-emerald-400"
@@ -197,7 +245,6 @@ export function MemberBottomNav() {
                         <Link
                           key={item.id}
                           href={item.href}
-                          prefetch={false}
                           onClick={(event) => handleMemberNavClick(event, item.href, item.label, () => {
                             triggerHaptic()
                             setMoreOpenPath(null)

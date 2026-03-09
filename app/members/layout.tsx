@@ -10,6 +10,7 @@ import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
 import { MemberSidebar } from '@/components/members/member-sidebar'
 import { MobileTopBar } from '@/components/members/mobile-top-bar'
 import { MemberBottomNav } from '@/components/members/mobile-bottom-nav'
+import { NetworkStatusBanner } from '@/components/members/network-status-banner'
 import { InstallCta } from '@/components/pwa/install-cta'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 import { useIsMobile } from '@/hooks/use-is-mobile'
@@ -34,6 +35,13 @@ export default function MembersLayout({
 // ============================================
 // LAYOUT CONTENT
 // ============================================
+
+const WARM_MEMBER_ROUTES = [
+  '/members',
+  '/members/journal',
+  '/members/ai-coach',
+  '/members/academy',
+]
 
 function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -71,6 +79,31 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     }
     previousSectionPathRef.current = currentSectionPath
   }, [pathname])
+
+  // Warm a small set of high-frequency member routes after shell mount.
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return
+    if (typeof window === 'undefined') return
+
+    const timeoutIds: number[] = []
+    const queueRouteWarmup = window.setTimeout(() => {
+      WARM_MEMBER_ROUTES.forEach((route, index) => {
+        const routeTimeout = window.setTimeout(() => {
+          try {
+            router.prefetch(route)
+          } catch (error) {
+            console.error('Failed to prefetch member route:', error)
+          }
+        }, index * 160)
+        timeoutIds.push(routeTimeout)
+      })
+    }, 350)
+
+    timeoutIds.push(queueRouteWarmup)
+    return () => {
+      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId))
+    }
+  }, [isAuthenticated, isLoading, router])
 
   // Loading state — pulsing logo
   if (isLoading) {
@@ -148,6 +181,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
       {/* Mobile Top Bar */}
       <MobileTopBar />
       <InstallCta immersive={hideMobileNav} />
+      <NetworkStatusBanner />
 
       {/* Main Content Area */}
       <div className={cn(
