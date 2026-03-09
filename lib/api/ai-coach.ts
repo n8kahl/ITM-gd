@@ -614,12 +614,10 @@ async function fetchWithAuth(
   token: string,
   signal?: AbortSignal
 ): Promise<Response> {
-  const headers = {
-    ...options.headers,
-    'Authorization': `Bearer ${token}`,
-  }
-
-  const response = await fetch(url, { ...options, headers, signal })
+  const proxyUrl = resolveAICoachProxyUrl(url)
+  const response = proxyUrl
+    ? await fetchWithTransportFallback(url, proxyUrl, options, token, signal)
+    : await fetchWithAuthorization(url, options, token, signal)
 
   if (response.status === 401) {
     // Token might be expired - throw specific error so hook can handle refresh
@@ -633,6 +631,29 @@ async function fetchWithAuth(
   return response
 }
 
+async function fetchWithAuthorization(
+  url: string,
+  options: RequestInit & { headers: Record<string, string> },
+  token: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const headers = {
+    ...options.headers,
+    'Authorization': `Bearer ${token}`,
+  }
+
+  return fetch(url, { ...options, headers, signal })
+}
+
+function resolveAICoachProxyUrl(url: string): string | null {
+  if (typeof window === 'undefined') return null
+  const normalizedBase = API_BASE.replace(/\/+$/, '')
+  const apiPrefix = `${normalizedBase}/api/`
+
+  if (!url.startsWith(apiPrefix)) return null
+  return `${BROWSER_PROXY_BASE}/${url.slice(apiPrefix.length)}`
+}
+
 function isBrowserAbortError(error: unknown): boolean {
   if (!error) return false
   if (error instanceof DOMException && error.name === 'AbortError') return true
@@ -642,17 +663,6 @@ function isBrowserAbortError(error: unknown): boolean {
     && 'name' in error
     && (error as { name?: string }).name === 'AbortError'
   )
-}
-
-function isMobileOrStandaloneBrowser(): boolean {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
-
-  const userAgent = navigator.userAgent.toLowerCase()
-  const isMobileUa = /iphone|ipad|ipod|android/.test(userAgent)
-  const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches
-    || (navigator as Navigator & { standalone?: boolean }).standalone === true
-
-  return isMobileUa || isStandalone
 }
 
 function shouldRetryViaAlternateTransport(error: unknown): boolean {
@@ -670,31 +680,55 @@ function shouldRetryStatusViaAlternateTransport(status: number): boolean {
 async function fetchWithTransportFallback(
   directUrl: string,
   proxyUrl: string,
+  options: RequestInit & { headers: Record<string, string> },
   token: string,
   signal?: AbortSignal,
 ): Promise<Response> {
   const canUseProxy = typeof window !== 'undefined'
   if (!canUseProxy) {
-    return fetchWithAuth(directUrl, { headers: {} }, token, signal)
+    return fetchWithAuthorization(directUrl, options, token, signal)
   }
 
-  const preferProxy = isMobileOrStandaloneBrowser()
+  // Always prefer same-origin proxy in the browser so mobile/desktop share
+  // a single auth + transport path.
+  const preferProxy = true
   const primaryUrl = preferProxy ? proxyUrl : directUrl
   const secondaryUrl = preferProxy ? directUrl : proxyUrl
 
   try {
-    const response = await fetchWithAuth(primaryUrl, { headers: {} }, token, signal)
+    const response = await fetchWithAuthorization(primaryUrl, options, token, signal)
     if (response.ok || !shouldRetryStatusViaAlternateTransport(response.status)) {
       return response
     }
 
-    return fetchWithAuth(secondaryUrl, { headers: {} }, token, signal)
+    return fetchWithAuthorization(secondaryUrl, options, token, signal)
   } catch (error) {
     if (!shouldRetryViaAlternateTransport(error)) {
       throw error
     }
-    return fetchWithAuth(secondaryUrl, { headers: {} }, token, signal)
+    return fetchWithAuthorization(secondaryUrl, options, token, signal)
   }
+}
+
+async function fetchAICoach(
+  path: string,
+  options: RequestInit & { headers?: Record<string, string> },
+  token: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const normalizedPath = path.startsWith('/api/')
+    ? path
+    : `/api/${path.replace(/^\/+/, '')}`
+
+  return fetchWithAuth(
+    `${API_BASE}${normalizedPath}`,
+    {
+      ...options,
+      headers: options.headers || {},
+    },
+    token,
+    signal,
+  )
 }
 
 // ============================================
@@ -736,8 +770,8 @@ export async function sendMessage(
     }
   }
 
-  const response = await fetchWithAuth(
-    `${API_BASE}/api/chat/message`,
+  const response = await fetchAICoach(
+    '/api/chat/message',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -779,8 +813,8 @@ export async function getSessions(
   limit: number = 10,
   signal?: AbortSignal
 ): Promise<{ sessions: ChatSession[]; count: number }> {
-  const response = await fetchWithAuth(
-    `${API_BASE}/api/chat/sessions?limit=${limit}`,
+  const response = await fetchAICoach(
+    `/api/chat/sessions?limit=${limit}`,
     { headers: {} },
     token,
     signal
@@ -805,8 +839,8 @@ export async function deleteSession(
   token: string,
   signal?: AbortSignal
 ): Promise<{ success: boolean; message: string }> {
-  const response = await fetchWithAuth(
-    `${API_BASE}/api/chat/sessions/${sessionId}`,
+  const response = await fetchAICoach(
+    `/api/chat/sessions/${sessionId}`,
     { method: 'DELETE', headers: {} },
     token,
     signal
@@ -833,8 +867,8 @@ export async function getSessionMessages(
   offset: number = 0,
   signal?: AbortSignal
 ): Promise<SessionMessagesResponse> {
-  const response = await fetchWithAuth(
-    `${API_BASE}/api/chat/sessions/${sessionId}/messages?limit=${limit}&offset=${offset}`,
+  const response = await fetchAICoach(
+    `/api/chat/sessions/${sessionId}/messages?limit=${limit}&offset=${offset}`,
     { headers: {} },
     token,
     signal
@@ -869,9 +903,9 @@ export async function getChartData(
   }
 
   const encodedSymbol = encodeURIComponent(symbol)
-  const response = await fetchWithTransportFallback(
-    `${API_BASE}/api/chart/${encodedSymbol}?${params.toString()}`,
-    `${BROWSER_PROXY_BASE}/chart/${encodedSymbol}?${params.toString()}`,
+  const response = await fetchAICoach(
+    `/api/chart/${encodedSymbol}?${params.toString()}`,
+    { headers: {} },
     token,
     signal,
   )
@@ -898,9 +932,9 @@ export async function getKeyLevels(
 ): Promise<KeyLevelsResponse> {
   const params = new URLSearchParams({ timeframe })
   const encodedSymbol = encodeURIComponent(symbol)
-  const response = await fetchWithTransportFallback(
-    `${API_BASE}/api/levels/${encodedSymbol}?${params.toString()}`,
-    `${BROWSER_PROXY_BASE}/levels/${encodedSymbol}?${params.toString()}`,
+  const response = await fetchAICoach(
+    `/api/levels/${encodedSymbol}?${params.toString()}`,
+    { headers: {} },
     token,
     signal,
   )
@@ -926,8 +960,8 @@ export async function getFibonacciLevels(
   lookback: number = 20,
   signal?: AbortSignal,
 ): Promise<FibonacciLevelsResponse> {
-  const response = await fetchWithAuth(
-    `${API_BASE}/api/fibonacci`,
+  const response = await fetchAICoach(
+    '/api/fibonacci',
     {
       method: 'POST',
       headers: {
@@ -964,8 +998,8 @@ export async function searchSymbols(
   signal?: AbortSignal
 ): Promise<SymbolSearchResponse> {
   const params = new URLSearchParams({ q: query, limit: String(limit) })
-  const response = await fetchWithAuth(
-    `${API_BASE}/api/symbols/search?${params}`,
+  const response = await fetchAICoach(
+    `/api/symbols/search?${params}`,
     { headers: {} },
     token,
     signal
@@ -998,11 +1032,10 @@ export async function getOptionsChain(
   const params = new URLSearchParams({ strikeRange: strikeRange.toString() })
   if (expiry) params.set('expiry', expiry)
 
-  const response = await fetch(
-    `${API_BASE}/api/options/${symbol}/chain?${params}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` },
-    }
+  const response = await fetchAICoach(
+    `/api/options/${symbol}/chain?${params}`,
+    { headers: {} },
+    token,
   )
 
   if (!response.ok) {
@@ -1023,11 +1056,10 @@ export async function getExpirations(
   symbol: string,
   token: string
 ): Promise<ExpirationsResponse> {
-  const response = await fetch(
-    `${API_BASE}/api/options/${symbol}/expirations`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` },
-    }
+  const response = await fetchAICoach(
+    `/api/options/${symbol}/expirations`,
+    { headers: {} },
+    token,
   )
 
   if (!response.ok) {
@@ -1057,11 +1089,11 @@ export async function getOptionsMatrix(
   if (typeof options?.strikes === 'number') params.set('strikes', String(options.strikes))
 
   const query = params.toString()
-  const url = `${API_BASE}/api/options/${symbol}/matrix${query ? `?${query}` : ''}`
-
-  const response = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  })
+  const response = await fetchAICoach(
+    `/api/options/${symbol}/matrix${query ? `?${query}` : ''}`,
+    { headers: {} },
+    token,
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -1094,11 +1126,11 @@ export async function getGammaExposure(
   if (options?.forceRefresh) params.set('forceRefresh', 'true')
 
   const query = params.toString()
-  const url = `${API_BASE}/api/options/${symbol}/gex${query ? `?${query}` : ''}`
-
-  const response = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  })
+  const response = await fetchAICoach(
+    `/api/options/${symbol}/gex${query ? `?${query}` : ''}`,
+    { headers: {} },
+    token,
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -1127,11 +1159,11 @@ export async function getZeroDTEAnalysis(
   if (options?.type) params.set('type', options.type)
 
   const query = params.toString()
-  const url = `${API_BASE}/api/options/${symbol}/0dte${query ? `?${query}` : ''}`
-
-  const response = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  })
+  const response = await fetchAICoach(
+    `/api/options/${symbol}/0dte${query ? `?${query}` : ''}`,
+    { headers: {} },
+    token,
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -1164,11 +1196,11 @@ export async function getIVAnalysis(
   if (options?.forceRefresh) params.set('forceRefresh', 'true')
 
   const query = params.toString()
-  const url = `${API_BASE}/api/options/${symbol}/iv${query ? `?${query}` : ''}`
-
-  const response = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  })
+  const response = await fetchAICoach(
+    `/api/options/${symbol}/iv${query ? `?${query}` : ''}`,
+    { headers: {} },
+    token,
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -1195,9 +1227,10 @@ export async function getEarningsCalendar(
   }
   params.set('days', String(days))
 
-  const response = await fetch(
-    `${API_BASE}/api/earnings/calendar?${params.toString()}`,
-    { headers: { 'Authorization': `Bearer ${token}` } },
+  const response = await fetchAICoach(
+    `/api/earnings/calendar?${params.toString()}`,
+    { headers: {} },
+    token,
   )
 
   if (!response.ok) {
@@ -1223,9 +1256,10 @@ export async function getEconomicCalendar(
   params.set('days', String(daysAhead))
   params.set('impact', impactFilter)
 
-  const response = await fetch(
-    `${API_BASE}/api/economic/calendar?${params.toString()}`,
-    { headers: { 'Authorization': `Bearer ${token}` } },
+  const response = await fetchAICoach(
+    `/api/economic/calendar?${params.toString()}`,
+    { headers: {} },
+    token,
   )
 
   if (!response.ok) {
@@ -1246,9 +1280,10 @@ export async function getEarningsAnalysis(
   symbol: string,
   token: string,
 ): Promise<EarningsAnalysisResponse> {
-  const response = await fetch(
-    `${API_BASE}/api/earnings/${symbol}/analysis`,
-    { headers: { 'Authorization': `Bearer ${token}` } },
+  const response = await fetchAICoach(
+    `/api/earnings/${symbol}/analysis`,
+    { headers: {} },
+    token,
   )
 
   if (!response.ok) {
@@ -1269,14 +1304,17 @@ export async function analyzePosition(
   position: PositionInput,
   token: string
 ): Promise<PositionAnalysis> {
-  const response = await fetch(`${API_BASE}/api/positions/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+  const response = await fetchAICoach(
+    '/api/positions/analyze',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ position }),
     },
-    body: JSON.stringify({ position }),
-  })
+    token,
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -1296,14 +1334,17 @@ export async function analyzePortfolio(
   positions: PositionInput[],
   token: string
 ): Promise<PortfolioAnalysis> {
-  const response = await fetch(`${API_BASE}/api/positions/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+  const response = await fetchAICoach(
+    '/api/positions/analyze',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ positions }),
     },
-    body: JSON.stringify({ positions }),
-  })
+    token,
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -1322,11 +1363,11 @@ export async function analyzePortfolio(
 export async function getLivePositions(
   token: string
 ): Promise<LivePositionsResponse> {
-  const response = await fetch(`${API_BASE}/api/positions/live`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  })
+  const response = await fetchAICoach(
+    '/api/positions/live',
+    { headers: {} },
+    token,
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -1350,11 +1391,11 @@ export async function getPositionAdvice(
   if (positionId) params.set('positionId', positionId)
   const query = params.toString()
 
-  const response = await fetch(`${API_BASE}/api/positions/advice${query ? `?${query}` : ''}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  })
+  const response = await fetchAICoach(
+    `/api/positions/advice${query ? `?${query}` : ''}`,
+    { headers: {} },
+    token,
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -1424,15 +1465,18 @@ export async function analyzeScreenshot(
   token: string,
   options?: { signal?: AbortSignal }
 ): Promise<ScreenshotAnalysisResponse> {
-  const response = await fetch(`${API_BASE}/api/screenshot/analyze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+  const response = await fetchAICoach(
+    '/api/screenshot/analyze',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ image: imageBase64, mimeType }),
     },
-    body: JSON.stringify({ image: imageBase64, mimeType }),
-    signal: options?.signal,
-  })
+    token,
+    options?.signal,
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({
@@ -1766,8 +1810,8 @@ export async function getMorningBrief(
   const params = new URLSearchParams()
   if (options?.force) params.set('force', 'true')
 
-  const response = await fetchWithAuth(
-    `${API_BASE}/api/brief/today${params.toString() ? `?${params}` : ''}`,
+  const response = await fetchAICoach(
+    `/api/brief/today${params.toString() ? `?${params}` : ''}`,
     { headers: {} },
     token,
     signal
@@ -1835,15 +1879,19 @@ export async function* streamMessage(
     }
   }
 
-  const response = await fetch(`${API_BASE}/api/chat/stream`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+  const response = await fetchAICoach(
+    '/api/chat/stream',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
+    token,
     signal,
-  })
+  )
 
   if (!response.ok) {
     const error: APIError = await response.json().catch(() => ({

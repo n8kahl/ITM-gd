@@ -2,11 +2,27 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 type MarketEndpoint = 'indices' | 'status' | 'movers' | 'splits' | 'analytics' | 'holidays';
+
+const DEFAULT_LOCAL_BACKEND = 'http://localhost:3001';
+const DEFAULT_REMOTE_BACKEND = 'https://itm-gd-production.up.railway.app';
+
+function ensureProtocol(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  const isLocal =
+    /^localhost(?::\d+)?$/i.test(trimmed)
+    || /^127\.0\.0\.1(?::\d+)?$/i.test(trimmed);
+
+  return `${isLocal ? 'http' : 'https'}://${trimmed}`;
+}
+
 function resolveBackendBaseUrl(request: Request): string {
-  const configured =
+  const configuredRaw =
     process.env.AI_COACH_API_URL ||
     process.env.NEXT_PUBLIC_AI_COACH_API_URL ||
-    'http://localhost:3001';
+    '';
 
   const host = (() => {
     try {
@@ -19,15 +35,25 @@ function resolveBackendBaseUrl(request: Request): string {
 
   // Local host should default to local backend even if production URL is present in env.
   const preferLocalInDev = process.env.NEXT_PUBLIC_FORCE_REMOTE_AI_COACH !== 'true';
-  if (
-    isLocalHost &&
-    preferLocalInDev &&
-    /railway\.app/i.test(configured)
-  ) {
-    return 'http://localhost:3001';
+  const fallbackDefault = isLocalHost && preferLocalInDev
+    ? DEFAULT_LOCAL_BACKEND
+    : DEFAULT_REMOTE_BACKEND;
+  const configured = ensureProtocol(configuredRaw || fallbackDefault).replace(/\/+$/, '');
+
+  if (isLocalHost && preferLocalInDev && /railway\.app/i.test(configured)) {
+    return DEFAULT_LOCAL_BACKEND;
   }
 
-  return configured.replace(/\/+$/, '');
+  try {
+    const hostname = new URL(configured).hostname.toLowerCase();
+    if (!isLocalHost && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+      return DEFAULT_REMOTE_BACKEND;
+    }
+  } catch {
+    return fallbackDefault;
+  }
+
+  return configured;
 }
 
 function getMarketFallback(endpoint: MarketEndpoint) {

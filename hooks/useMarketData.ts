@@ -6,10 +6,12 @@ import { useMemberAuth } from '@/contexts/MemberAuthContext';
 
 type MarketKey = [url: string, token: string];
 
+const FORCE_DIRECT_MARKET_API = process.env.NEXT_PUBLIC_FORCE_DIRECT_MARKET_API === 'true';
 const DIRECT_MARKET_API_BASE = (process.env.NEXT_PUBLIC_AI_COACH_API_URL || '').replace(/\/+$/, '');
 
 function resolveMarketUrl(url: string): string {
-    if (DIRECT_MARKET_API_BASE && url.startsWith('/api/market/')) {
+    // Keep same-origin /api/market by default so mobile + desktop share auth and transport behavior.
+    if (FORCE_DIRECT_MARKET_API && DIRECT_MARKET_API_BASE && url.startsWith('/api/market/')) {
         return `${DIRECT_MARKET_API_BASE}${url}`;
     }
     return url;
