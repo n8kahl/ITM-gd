@@ -603,8 +603,8 @@ export interface APIError {
 // ============================================
 
 /**
- * Authenticated fetch helper.
- * Throws a 401-specific API error so callers can recover session state.
+ * Enhanced fetch with automatic 401 retry
+ * On 401, attempts to refresh the session before retrying once.
  */
 async function fetchWithAuth(
   url: string,
@@ -803,7 +803,7 @@ export async function getChartData(
   }
 
   const response = await fetchWithAuth(
-    `/api/chart/${encodeURIComponent(symbol)}?${params.toString()}`,
+    `${API_BASE}/api/chart/${symbol}?${params.toString()}`,
     { headers: {} },
     token,
     signal
@@ -831,7 +831,7 @@ export async function getKeyLevels(
 ): Promise<KeyLevelsResponse> {
   const params = new URLSearchParams({ timeframe })
   const response = await fetchWithAuth(
-    `/api/levels/${encodeURIComponent(symbol)}?${params.toString()}`,
+    `${API_BASE}/api/levels/${symbol}?${params.toString()}`,
     { headers: {} },
     token,
     signal,
