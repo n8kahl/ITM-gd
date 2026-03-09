@@ -137,7 +137,7 @@ export function MemberBottomNav() {
 
                 <span
                   className={cn(
-                    'text-[10px] mt-0.5 leading-none transition-colors',
+                    'mt-0.5 w-full text-center text-[10px] leading-none transition-colors',
                     active ? 'font-bold text-emerald-300' : 'font-normal text-muted-foreground',
                   )}
                 >
@@ -173,7 +173,7 @@ export function MemberBottomNav() {
                 </span>
                 <span
                   className={cn(
-                    'text-[10px] mt-0.5 leading-none transition-colors',
+                    'mt-0.5 w-full text-center text-[10px] leading-none transition-colors',
                     moreOpen || isMoreActive ? 'font-bold text-emerald-300' : 'font-normal text-muted-foreground',
                   )}
                 >
