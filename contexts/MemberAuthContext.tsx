@@ -110,8 +110,9 @@ const E2E_BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001'
 const E2E_BYPASS_SHARED_SECRET = process.env.NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET || ''
 const DISCORD_GUILD_ROLES_MISSING_CACHE_KEY = 'member_auth:discord_guild_roles_missing_at_ms'
 const DISCORD_GUILD_ROLES_MISSING_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const SWING_SNIPER_LEAD_ROLE_ID = '1465515598640447662'
 const SNIPER_MEMBERSHIP_ROLE_ID = '1468748795234881597'
-const SNIPER_MEMBERSHIP_TAB_ALLOWLIST = new Set(['dashboard', 'journal', 'ai-coach', 'mentorship', 'profile'])
+const SNIPER_MEMBERSHIP_TAB_ALLOWLIST = new Set(['dashboard', 'journal', 'ai-coach', 'swing-sniper', 'mentorship', 'profile'])
 
 const FALLBACK_TAB_CONFIGS: TabConfig[] = [
   {
@@ -175,6 +176,22 @@ const FALLBACK_TAB_CONFIGS: TabConfig[] = [
     is_active: true,
   },
   {
+    id: 'swing-sniper',
+    tab_id: 'swing-sniper',
+    label: 'Swing Sniper',
+    icon: 'Radar',
+    path: '/members/swing-sniper',
+    required_tier: 'core',
+    badge_text: 'New',
+    badge_variant: 'champagne',
+    description: 'Options research workspace for catalysts, contracts, and thesis monitoring.',
+    mobile_visible: true,
+    sort_order: 5,
+    is_required: false,
+    is_active: true,
+    required_discord_role_ids: [SWING_SNIPER_LEAD_ROLE_ID],
+  },
+  {
     id: 'library',
     tab_id: 'library',
     label: 'Academy',
@@ -185,7 +202,7 @@ const FALLBACK_TAB_CONFIGS: TabConfig[] = [
     badge_variant: null,
     description: null,
     mobile_visible: true,
-    sort_order: 5,
+    sort_order: 6,
     is_required: false,
     is_active: true,
   },
@@ -200,7 +217,7 @@ const FALLBACK_TAB_CONFIGS: TabConfig[] = [
     badge_variant: null,
     description: null,
     mobile_visible: true,
-    sort_order: 6,
+    sort_order: 7,
     is_required: false,
     is_active: true,
   },
@@ -215,7 +232,7 @@ const FALLBACK_TAB_CONFIGS: TabConfig[] = [
     badge_variant: null,
     description: null,
     mobile_visible: false,
-    sort_order: 7,
+    sort_order: 8,
     is_required: false,
     is_active: true,
   },
@@ -230,7 +247,7 @@ const FALLBACK_TAB_CONFIGS: TabConfig[] = [
     badge_variant: null,
     description: null,
     mobile_visible: true,
-    sort_order: 8,
+    sort_order: 99,
     is_required: true,
     is_active: true,
   },
@@ -320,11 +337,12 @@ function createE2EBypassAuthState(): MemberAuthState {
       discord_user_id: '000000000000000001',
       discord_username: 'E2E Member',
       discord_avatar: null,
-      discord_roles: ['role-member', 'role-pro', '1468748795234881597'],
+      discord_roles: ['role-member', 'role-pro', '1468748795234881597', SWING_SNIPER_LEAD_ROLE_ID],
       discord_role_titles: {
         'role-member': 'Member',
         'role-pro': 'Pro',
         '1468748795234881597': 'Sniper Mentorship',
+        [SWING_SNIPER_LEAD_ROLE_ID]: 'Lead',
       },
       membership_tier: 'pro',
       role: null,
@@ -335,7 +353,7 @@ function createE2EBypassAuthState(): MemberAuthState {
       description: 'Playwright E2E bypass permission',
       granted_by_role: 'role-pro',
     }],
-    allowedTabs: ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'mentorship', 'profile'],
+    allowedTabs: ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'swing-sniper', 'library', 'social', 'mentorship', 'profile'],
     tabConfigs: [],
     isLoading: false,
     isAuthenticated: true,
@@ -635,7 +653,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     // If we have tab configurations from the API, use them
     if (allTabConfigs.length > 0) {
       const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
-      const userTierLevel = tier ? tierHierarchy[tier] || 0 : 0
+      const userTierLevel = isAdmin
+        ? Number.MAX_SAFE_INTEGER
+        : tier
+          ? tierHierarchy[tier] || 0
+          : 0
 
       const allowedTabIds = allTabConfigs
         .filter(tab => {
@@ -651,6 +673,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Fallback: hardcoded tabs if API not yet loaded
+    if (!tier && isAdmin) {
+      return ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'swing-sniper', 'library', 'social', 'studio', 'profile', 'mentorship']
+    }
     if (!tier) return ['dashboard', 'profile']
 
     let fallbackTabs: string[]
@@ -1181,7 +1206,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // 2. Legacy permission names: 'access_trading_journal', etc.
   const hasPermission = useCallback((permissionName: string): boolean => {
     // Check if it's a tab ID (Simple RBAC)
-    const tabIds = ['dashboard', 'journal', 'spx-command-center', 'library', 'social', 'profile', 'ai-coach']
+    const tabIds = ['dashboard', 'journal', 'spx-command-center', 'library', 'social', 'profile', 'ai-coach', 'swing-sniper']
     if (tabIds.includes(permissionName)) {
       return state.allowedTabs.includes(permissionName)
     }
@@ -1328,9 +1353,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   // V3: Compute filtered tab configs based on user's tier
   const getVisibleTabs = useCallback((): TabConfig[] => {
     const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
-    const userTierLevel = state.profile?.membership_tier
-      ? tierHierarchy[state.profile.membership_tier] || 0
-      : 0
+    const userTierLevel = state.profile?.role === 'admin'
+      ? Number.MAX_SAFE_INTEGER
+      : state.profile?.membership_tier
+        ? tierHierarchy[state.profile.membership_tier] || 0
+        : 0
     const isAdmin = state.profile?.role === 'admin'
     const userDiscordRoles = state.profile?.discord_roles ?? []
     const hasSniperMembershipRole = userDiscordRoles.includes(SNIPER_MEMBERSHIP_ROLE_ID)
@@ -1344,11 +1371,24 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         buildFallbackTabConfig(tabId, index + 1)
       ))
 
+      const fallbackVisible = fallbackTabs.filter((tab) => {
+        const requiredRoles = tab.required_discord_role_ids
+        if (requiredRoles && requiredRoles.length > 0 && !isAdmin) {
+          const hasRequiredRole = requiredRoles.some(roleId => userDiscordRoles.includes(roleId))
+          if (!hasRequiredRole) return false
+        }
+
+        if (tab.required_tier === 'admin') return isAdmin
+        if (tab.is_required) return true
+        const requiredLevel = tierHierarchy[tab.required_tier] || 0
+        return userTierLevel >= requiredLevel
+      })
+
       if (!isAdmin && hasSniperMembershipRole) {
-        return fallbackTabs.filter((tab) => SNIPER_MEMBERSHIP_TAB_ALLOWLIST.has(tab.tab_id))
+        return fallbackVisible.filter((tab) => SNIPER_MEMBERSHIP_TAB_ALLOWLIST.has(tab.tab_id))
       }
 
-      return fallbackTabs
+      return fallbackVisible
     }
 
     const visibleTabs = allTabConfigs.filter(tab => {

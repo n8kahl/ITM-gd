@@ -35,4 +35,8 @@ describe('member navigation academy mapping', () => {
     expect(getMemberSectionPath('/members/academy-v3/progress')).toBe('/members/academy')
     expect(getMemberFallbackTitle('/members/academy/progress')).toBe('Academy')
   })
+
+  it('returns the Swing Sniper fallback title for its route', () => {
+    expect(getMemberFallbackTitle('/members/swing-sniper')).toBe('Swing Sniper')
+  })
 })

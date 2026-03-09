@@ -40,6 +40,7 @@ const WARM_MEMBER_ROUTES = [
   '/members',
   '/members/journal',
   '/members/ai-coach',
+  '/members/swing-sniper',
   '/members/academy',
 ]
 

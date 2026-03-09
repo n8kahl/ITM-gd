@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Palette,
   Play,
+  Radar,
   Target,
   type LucideIcon,
   UserCircle,
@@ -25,6 +26,7 @@ const TAB_ID_ICON_MAP: Record<string, LucideIcon> = {
   journal: BookOpen,
   'spx-command-center': Target,
   'ai-coach': Bot,
+  'swing-sniper': Radar,
   'trade-day-replay': Play,
   library: GraduationCap,
   social: Users,
@@ -118,6 +120,7 @@ export function getMemberFallbackTitle(pathname: string): string {
   if (pathname.startsWith('/members/journal')) return 'Journal'
   if (pathname.startsWith('/members/spx-command-center')) return 'SPX Command Center'
   if (pathname.startsWith('/members/ai-coach')) return 'AI Coach'
+  if (pathname.startsWith('/members/swing-sniper')) return 'Swing Sniper'
   if (pathname.startsWith('/members/trade-day-replay')) return 'Trade Day Replay'
   if (pathname.startsWith('/members/social')) return 'Social'
   if (pathname.startsWith('/members/studio')) return 'Studio'

@@ -1,0 +1,1920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Swing Sniper Member Center Mockup</title>
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --panel: rgba(16, 16, 18, 0.82);
+      --panel-soft: rgba(255, 255, 255, 0.04);
+      --line: rgba(255, 255, 255, 0.08);
+      --line-strong: rgba(16, 185, 129, 0.35);
+      --text: #f5f5f3;
+      --muted: rgba(255, 255, 255, 0.62);
+      --emerald: #10b981;
+      --emerald-deep: #065f46;
+      --champagne: #f3e5ab;
+      --red: #ef4444;
+      --shadow: 0 22px 60px rgba(0, 0, 0, 0.38);
+      --radius: 22px;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(16, 185, 129, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(243, 229, 171, 0.1), transparent 24%),
+        linear-gradient(180deg, #0a0a0b 0%, #101214 100%);
+    }
+
+    .frame {
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 28px 24px 40px;
+    }
+
+    .banner {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 12px 14px;
+      border: 1px solid rgba(243, 229, 171, 0.18);
+      border-radius: 999px;
+      background: rgba(243, 229, 171, 0.06);
+      color: rgba(243, 229, 171, 0.92);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .hero-card,
+    .panel,
+    .memo-card,
+    .scope-card {
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-card {
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-card::after {
+      content: "";
+      position: absolute;
+      right: -12%;
+      top: -40px;
+      width: 320px;
+      height: 320px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.18), transparent 66%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--champagne);
+      margin-bottom: 12px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--emerald);
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.8);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(36px, 4vw, 58px);
+      line-height: 0.98;
+      font-family: var(--serif);
+      letter-spacing: -0.04em;
+      max-width: 760px;
+    }
+
+    .hero-copy {
+      margin-top: 16px;
+      max-width: 720px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.65;
+    }
+
+    .hero-stats {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .stat-meta {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .scope-card {
+      padding: 20px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .scope-title {
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--champagne);
+    }
+
+    .scope-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .scope-row {
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .scope-row strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+    }
+
+    .scope-row span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .chip-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 18px 0 14px;
+    }
+
+    .chip,
+    .filter-pill,
+    .mini-pill,
+    .tab-btn {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+    }
+
+    .chip {
+      padding: 10px 14px;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .chip.active {
+      border-color: rgba(243, 229, 171, 0.35);
+      background: rgba(243, 229, 171, 0.1);
+      color: var(--champagne);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr) 320px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 18px;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .section-title h2,
+    .section-title h3 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .section-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .filter-pill {
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .filter-pill.active {
+      color: var(--text);
+      border-color: var(--line-strong);
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .opportunity-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .opportunity {
+      padding: 16px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+
+    .opportunity:hover {
+      transform: translateY(-2px);
+      border-color: rgba(16, 185, 129, 0.32);
+    }
+
+    .opportunity.active {
+      border-color: rgba(16, 185, 129, 0.4);
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.14), rgba(255, 255, 255, 0.03));
+    }
+
+    .opp-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .symbol {
+      font-size: 25px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+
+    .score {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.16);
+      color: #9cf7d0;
+      font-family: var(--mono);
+      font-size: 12px;
+      border: 1px solid rgba(16, 185, 129, 0.28);
+    }
+
+    .opp-subtitle {
+      margin-bottom: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      padding: 10px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .metric label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 10px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .detail-headline {
+      display: grid;
+      gap: 10px;
+    }
+
+    .detail-kicker {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .detail-symbol {
+      font-size: 40px;
+      font-family: var(--serif);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+    }
+
+    .detail-title {
+      margin: 0;
+      font-size: 16px;
+      color: var(--muted);
+      max-width: 840px;
+      line-height: 1.55;
+    }
+
+    .detail-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-content: start;
+    }
+
+    .action {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .action.primary {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.28), rgba(16, 185, 129, 0.12));
+      border-color: rgba(16, 185, 129, 0.34);
+    }
+
+    .tab-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .tab-btn {
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .tab-btn.active {
+      border-color: rgba(243, 229, 171, 0.34);
+      background: rgba(243, 229, 171, 0.08);
+      color: var(--champagne);
+    }
+
+    .detail-tab {
+      display: none;
+    }
+
+    .detail-tab.active {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .subcard {
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .subcard h4 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--champagne);
+    }
+
+    .subcard p,
+    .subcard li {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .subcard ul {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .bars {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+      min-height: 140px;
+      margin-top: 14px;
+    }
+
+    .overlay-legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 14px;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-swatch {
+      width: 18px;
+      height: 3px;
+      border-radius: 999px;
+    }
+
+    .legend-swatch.iv {
+      background: linear-gradient(90deg, rgba(16, 185, 129, 0.9), rgba(16, 185, 129, 0.35));
+    }
+
+    .legend-swatch.rv {
+      background: linear-gradient(90deg, rgba(243, 229, 171, 0.9), rgba(243, 229, 171, 0.45));
+    }
+
+    .overlay-chart {
+      position: relative;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+      padding: 10px 10px 8px;
+      overflow: hidden;
+    }
+
+    .overlay-chart::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.06), transparent 70%);
+      pointer-events: none;
+    }
+
+    .overlay-svg {
+      width: 100%;
+      height: 130px;
+      display: block;
+    }
+
+    .overlay-axis {
+      stroke: rgba(255, 255, 255, 0.08);
+      stroke-width: 1;
+      stroke-dasharray: 3 5;
+    }
+
+    .overlay-area {
+      fill: rgba(16, 185, 129, 0.15);
+      stroke: none;
+    }
+
+    .overlay-line-iv {
+      fill: none;
+      stroke: rgba(16, 185, 129, 0.95);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .overlay-line-rv {
+      fill: none;
+      stroke: rgba(243, 229, 171, 0.95);
+      stroke-width: 2.25;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .overlay-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .bar-col {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+    }
+
+    .bar {
+      width: 100%;
+      border-radius: 12px 12px 8px 8px;
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.92), rgba(6, 95, 70, 0.88));
+      border: 1px solid rgba(16, 185, 129, 0.34);
+      min-height: 18px;
+    }
+
+    .bar-col span {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .timeline {
+      display: grid;
+      gap: 12px;
+    }
+
+    .density-strip {
+      margin-bottom: 14px;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .density-caption {
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .density-track {
+      position: relative;
+      height: 18px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.05));
+      overflow: hidden;
+    }
+
+    .density-track::before {
+      content: "";
+      position: absolute;
+      inset: 8px 0 auto;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .density-marker {
+      position: absolute;
+      top: 3px;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: var(--champagne);
+      border: 2px solid rgba(10, 10, 11, 0.95);
+      box-shadow: 0 0 0 3px rgba(243, 229, 171, 0.12);
+      transform: translateX(-50%);
+    }
+
+    .density-marker.now {
+      background: var(--emerald);
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
+    }
+
+    .density-labels {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .timeline-row {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      padding: 12px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .timeline-row:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .timeline-row strong {
+      color: var(--champagne);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .timeline-row .body {
+      display: grid;
+      gap: 4px;
+    }
+
+    .timeline-row .body span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .mini-pill {
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .structure-stack,
+    .memo-stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .structure {
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(16, 185, 129, 0.18);
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.03));
+    }
+
+    .structure-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .structure-name {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .fit {
+      font-family: var(--mono);
+      color: #9cf7d0;
+      font-size: 12px;
+    }
+
+    .structure-copy {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .structure-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .structure-grid div {
+      padding: 10px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .structure-grid label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .structure-grid strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .payoff-wrap {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .payoff-svg {
+      width: 100%;
+      height: 120px;
+      display: block;
+    }
+
+    .payoff-axis {
+      stroke: rgba(255, 255, 255, 0.12);
+      stroke-width: 1;
+      stroke-dasharray: 4 5;
+    }
+
+    .payoff-fill {
+      fill: rgba(16, 185, 129, 0.1);
+      stroke: none;
+    }
+
+    .payoff-line {
+      fill: none;
+      stroke: rgba(16, 185, 129, 0.95);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .payoff-caption {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .memo-card {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      position: sticky;
+      top: 20px;
+    }
+
+    .memo-label {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--champagne);
+    }
+
+    .memo-title {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 28px;
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .regime-block {
+      padding: 12px 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(243, 229, 171, 0.16);
+      background: rgba(243, 229, 171, 0.06);
+      display: grid;
+      gap: 8px;
+    }
+
+    .regime-pill {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(243, 229, 171, 0.22);
+      background: rgba(243, 229, 171, 0.08);
+      color: rgba(243, 229, 171, 0.95);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .regime-note {
+      color: rgba(243, 229, 171, 0.86);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .memo-body {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .memo-block {
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .memo-block h4 {
+      margin: 0 0 10px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--champagne);
+    }
+
+    .memo-block ul {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .memo-block li,
+    .memo-block p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .saved-thesis-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .saved-thesis-item {
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.03);
+      display: grid;
+      gap: 6px;
+    }
+
+    .saved-thesis-item.active {
+      border-color: rgba(16, 185, 129, 0.24);
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    .saved-thesis-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .saved-thesis-symbol {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .saved-thesis-state {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--champagne);
+    }
+
+    .saved-thesis-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .signoff {
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .signoff-row {
+      display: flex;
+      gap: 10px;
+      align-items: start;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .check {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      background: rgba(16, 185, 129, 0.14);
+      margin-top: 2px;
+      flex: 0 0 auto;
+    }
+
+    .signoff-row strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 5px;
+    }
+
+    .signoff-row span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .footer-note {
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(243, 229, 171, 0.16);
+      background: rgba(243, 229, 171, 0.06);
+      color: rgba(243, 229, 171, 0.88);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .loss {
+      color: #fca5a5;
+    }
+
+    .gain {
+      color: #9cf7d0;
+    }
+
+    @media (max-width: 1220px) {
+      .workspace {
+        grid-template-columns: 320px minmax(0, 1fr);
+      }
+
+      .memo-card {
+        position: static;
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 980px) {
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-stats,
+      .grid-2,
+      .mini-grid,
+      .structure-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .frame {
+        padding: 18px 14px 28px;
+      }
+
+      h1 {
+        font-size: 34px;
+      }
+
+      .hero-stats,
+      .metrics,
+      .grid-2,
+      .mini-grid,
+      .structure-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .detail-symbol {
+        font-size: 32px;
+      }
+
+      .timeline-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="banner">
+      <span>Mockup only</span>
+      <span>Scope alignment before implementation</span>
+      <span>Route target: /members/swing-sniper</span>
+      <span>Access target: All members</span>
+    </div>
+
+    <section class="hero">
+      <div class="hero-card">
+        <div class="eyebrow"><span class="dot"></span> Swing Sniper - Options Research & Adaptive Intelligence</div>
+        <h1>Not a scanner. A member-center decision engine for options ideas.</h1>
+        <div class="hero-copy">
+          This mockup locks the information hierarchy for Swing Sniper as a new members tab. The launch shape is a three-part workspace:
+          a ranked opportunity board, a symbol dossier that explains why volatility may be mispriced, and a right rail with the Swing Sniper memo,
+          saved theses, active monitoring, and scope guardrails. It is designed to stay clean and easy to navigate while still covering the full Swing Sniper system.
+        </div>
+        <div class="chip-row">
+          <div class="chip active">Launch includes all four phases</div>
+          <div class="chip">Discovery</div>
+          <div class="chip">Contracts</div>
+          <div class="chip">Monitoring</div>
+          <div class="chip">Adaptive confidence</div>
+        </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <div class="stat-label">Access</div>
+            <div class="stat-value">All</div>
+            <div class="stat-meta">All member tiers</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Universe</div>
+            <div class="stat-value">150</div>
+            <div class="stat-meta">Liquid names at launch</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Structure picker</div>
+            <div class="stat-value">Exact</div>
+            <div class="stat-meta">Strikes and expiries selected</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Monitoring</div>
+            <div class="stat-value">Live</div>
+            <div class="stat-meta">Risk Sentinel in tab</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Confidence</div>
+            <div class="stat-value">Adaptive</div>
+            <div class="stat-meta">Backtest context layered in</div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="scope-card">
+        <div class="scope-title">Launch scope lock</div>
+        <div class="scope-grid">
+          <div class="scope-row">
+            <strong>Included in launch</strong>
+            <span>Opportunity board, thesis dossier, catalyst timeline, exact contract picking, monitoring, Swing Sniper memo, and adaptive confidence.</span>
+          </div>
+          <div class="scope-row">
+            <strong>Explicitly out of scope</strong>
+            <span>Broker linkage, order routing, and one-click trade execution. Massive.com is the only required market-data dependency.</span>
+          </div>
+          <div class="scope-row">
+            <strong>Navigation guardrail</strong>
+            <span>Swing Sniper should feel powerful without feeling crowded. The board, dossier, and monitoring states need to stay obvious at a glance on both desktop and mobile.</span>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="workspace">
+      <aside class="panel">
+        <div class="section-title">
+          <h2>Signal Board</h2>
+          <span>Ranked by mispricing + catalysts + liquidity</span>
+        </div>
+        <div class="filter-row">
+          <div class="filter-pill active">All</div>
+          <div class="filter-pill">Long vol</div>
+          <div class="filter-pill">Short vol</div>
+          <div class="filter-pill">Event stack</div>
+          <div class="filter-pill">7 day</div>
+        </div>
+        <div id="opportunity-list" class="opportunity-list"></div>
+      </aside>
+
+      <main class="panel">
+        <div class="detail-header">
+          <div class="detail-headline">
+            <div class="detail-kicker">
+              <span class="score" id="detail-score">Edge 88</span>
+              <span class="mini-pill" id="detail-view">Long vol</span>
+              <span class="mini-pill" id="detail-catalyst">Earnings in 8D</span>
+            </div>
+            <div class="detail-symbol" id="detail-symbol">NVDA</div>
+            <p class="detail-title" id="detail-title">Front-month implied volatility looks too cheap versus event risk and historical move profile.</p>
+          </div>
+          <div class="detail-actions">
+            <button class="action primary">Save thesis</button>
+            <button class="action">View contracts</button>
+            <button class="action">Add to watchlist</button>
+          </div>
+        </div>
+
+        <div class="tab-row">
+          <button class="tab-btn active" data-tab="thesis">Thesis</button>
+          <button class="tab-btn" data-tab="vol">Vol Map</button>
+          <button class="tab-btn" data-tab="catalysts">Catalysts</button>
+          <button class="tab-btn" data-tab="structure">Structure</button>
+          <button class="tab-btn" data-tab="risk">Risk</button>
+        </div>
+
+        <div class="detail-tab active" data-panel="thesis">
+          <div class="grid-2">
+            <div class="subcard">
+              <h4>Why Swing Sniper cares</h4>
+              <p id="thesis-summary"></p>
+            </div>
+            <div class="subcard">
+              <h4>What could invalidate it</h4>
+              <ul id="thesis-risks"></ul>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="subcard">
+              <h4>Narrative shift</h4>
+              <ul id="narrative-list"></ul>
+            </div>
+            <div class="subcard">
+              <h4>Factor breakdown</h4>
+              <div class="mini-grid" id="factor-grid"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-tab" data-panel="vol">
+          <div class="grid-2">
+            <div class="subcard">
+              <h4>Surface read</h4>
+              <p id="vol-summary"></p>
+              <div class="overlay-legend">
+                <span class="legend-item"><span class="legend-swatch iv"></span> Implied vol</span>
+                <span class="legend-item"><span class="legend-swatch rv"></span> Realized vol</span>
+              </div>
+              <div class="overlay-chart">
+                <svg id="overlay-svg" class="overlay-svg" viewBox="0 0 320 130" preserveAspectRatio="none"></svg>
+                <div class="overlay-footer">
+                  <span>30D trailing mispricing</span>
+                  <span id="overlay-gap">Gap +7 vol pts</span>
+                </div>
+              </div>
+              <div class="bars" id="term-bars"></div>
+            </div>
+            <div class="subcard">
+              <h4>Current context</h4>
+              <div class="mini-grid" id="vol-grid"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-tab" data-panel="catalysts">
+          <div class="subcard">
+            <h4>Catalyst stack</h4>
+            <div class="density-strip">
+              <div class="density-caption">Catalyst density</div>
+              <div id="density-track" class="density-track"></div>
+              <div class="density-labels">
+                <span>Now</span>
+                <span>+7D</span>
+                <span>+14D</span>
+              </div>
+            </div>
+            <div class="timeline" id="timeline"></div>
+          </div>
+        </div>
+
+        <div class="detail-tab" data-panel="structure">
+          <div class="structure-stack" id="structure-stack"></div>
+        </div>
+
+        <div class="detail-tab" data-panel="risk">
+          <div class="grid-2">
+            <div class="subcard">
+              <h4>What kills the idea</h4>
+              <ul id="risk-killers"></ul>
+            </div>
+            <div class="subcard">
+              <h4>Phase alignment</h4>
+              <ul>
+                <li>Launch includes thesis risk language and scenario guardrails.</li>
+                <li>Launch includes contract-level monitoring and health scoring.</li>
+                <li>Adaptive confidence remains visible without taking over the layout.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <aside class="memo-card">
+        <div class="memo-label">Swing Sniper memo</div>
+        <h3 class="memo-title">Desk note for the next 7-14 trading days</h3>
+        <div class="regime-block">
+          <div id="regime-pill" class="regime-pill">Regime</div>
+          <div id="regime-note" class="regime-note"></div>
+        </div>
+        <div class="memo-body" id="memo-copy">
+          Large-cap tech remains the cleanest long-vol pocket where event timing and realized-move history still justify premium. Swing Sniper should surface the idea, pick the contracts, and then keep tracking whether the thesis is still alive.
+        </div>
+        <div class="memo-stack">
+          <div class="memo-block">
+            <h4>Top board themes</h4>
+            <ul id="memo-themes"></ul>
+          </div>
+          <div class="memo-block">
+            <h4>Saved thesis queue</h4>
+            <div id="saved-thesis-list" class="saved-thesis-list"></div>
+          </div>
+          <div class="memo-block">
+            <h4>Scope sign-off</h4>
+            <p>Desktop keeps three persistent rails. Mobile collapses detail panels into stacked cards. The structure view is contract-specific, but broker-free.</p>
+          </div>
+        </div>
+        <div class="signoff">
+          <div class="signoff-row">
+            <span class="check"></span>
+            <div>
+              <strong>Information hierarchy</strong>
+              <span>The board answers "what changed," the dossier answers "why it matters," and the structure view answers "how to express it."</span>
+            </div>
+          </div>
+          <div class="signoff-row">
+            <span class="check"></span>
+            <div>
+              <strong>Scope lock</strong>
+              <span>Research quality, contract selection, and monitoring all ship together. Broker integration remains explicitly deferred.</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <div class="footer-note">
+      Recommended decision from this mockup: approve Swing Sniper as a new all-member tab with the full product scope intact. The implementation can still move in slices, but the shipped experience should include discovery, contracts, monitoring, and confidence in one clean workspace.
+    </div>
+  </div>
+
+  <script>
+    const ideas = [
+      {
+        symbol: "NVDA",
+        score: 88,
+        view: "Long vol",
+        catalyst: "Earnings in 8D",
+        blurb: "Event risk is approaching while front-month premium remains below the stock's average pre-earnings move profile.",
+        headline: "Front-month implied volatility looks too cheap versus event risk and historical move profile.",
+        thesis: "Swing Sniper is flagging NVDA because the near-term surface is not yet pricing the full event stack. The front expiry remains below what the stock usually commands when earnings, AI narrative momentum, and index-level sensitivity converge in the same window.",
+        risks: [
+          "If implied volatility gaps higher before entry, the edge is mostly gone.",
+          "If the stock drifts higher without narrative acceleration, long premium may decay faster than the catalyst matures.",
+          "If broad market beta dominates single-name drivers, structure selection matters more than directional conviction."
+        ],
+        narrative: [
+          "Headline mix has shifted from valuation fatigue toward enterprise AI monetization.",
+          "Analyst tone is stabilizing after estimate resets rather than deteriorating.",
+          "The name remains index-relevant enough that macro tape can still distort the single-name setup."
+        ],
+        factors: [
+          ["Volatility", "91"],
+          ["Catalyst", "86"],
+          ["Liquidity", "94"]
+        ],
+        regime: "Pre-event vol expansion",
+        regimeNote: "Index tape is range-bound, but single-name event premium is beginning to lift ahead of earnings.",
+        volSummary: "The front expiration sits lower than Swing Sniper expects given the event window. Term structure is rising, but not enough to fully reflect the coming binary. Realized versus implied divergence still supports a long-vol stance.",
+        volGrid: [
+          ["IV Rank", "58"],
+          ["IV Percentile", "61"],
+          ["RV 20D", "47%"],
+          ["IV Now", "54%"],
+          ["Skew", "Balanced"],
+          ["Term", "Contango"]
+        ],
+        overlay: [
+          [45, 41], [46, 42], [46, 43], [47, 42], [48, 43],
+          [49, 44], [50, 45], [51, 46], [53, 47], [54, 47]
+        ],
+        term: [
+          ["7D", 52],
+          ["14D", 56],
+          ["21D", 58],
+          ["35D", 54],
+          ["49D", 51]
+        ],
+        catalysts: [
+          ["8D", "Earnings", "Expected move baseline remains under historical average. This is the primary event anchor."],
+          ["5D", "Narrative shift", "Recent headline tone is more constructive than the last earnings window."],
+          ["3D", "Macro overlap", "Upcoming rates-sensitive macro prints can amplify index-linked vol."],
+          ["Now", "Liquidity", "Chain quality supports exact contract selection without obvious spread friction."]
+        ],
+        structures: [
+          {
+            name: "Call Calendar",
+            fit: "Fit 9.1",
+            copy: "Best when you want event exposure without paying full front-gamma cost. Swing Sniper selects the actual expiries and strikes rather than stopping at a generic calendar label.",
+            metrics: [
+              ["Contract pick", "Selected"],
+              ["Max loss", "Defined"],
+              ["POP", "Medium"],
+              ["Style", "Time spread"]
+            ],
+            payoff: [-55, -42, -12, 28, 12, -18, -48]
+          },
+          {
+            name: "Long Strangle",
+            fit: "Fit 8.6",
+            copy: "Cleaner pure long-vol expression if you want the idea without directional commitment. The trade only works if entry happens before the surface catches up.",
+            metrics: [
+              ["Contract pick", "Selected"],
+              ["Max loss", "Premium paid"],
+              ["POP", "Lower"],
+              ["Style", "Convex"]
+            ],
+            payoff: [36, 6, -48, -56, -48, 10, 42]
+          }
+        ],
+        killers: [
+          "Pre-event IV expansion above Swing Sniper fair-value band",
+          "Catalyst date change or reduced event significance",
+          "Liquidity deterioration in target strikes"
+        ],
+        memo: "Large-cap tech remains the cleanest long-vol pocket where event timing and realized-move history still justify premium.",
+        themes: [
+          "Event-sensitive long vol remains favored in select mega-cap tech.",
+          "Do not chase already-expanded premium unless the narrative regime actually changed.",
+          "Use calendars or strangles only while surface catch-up is incomplete."
+        ]
+      },
+      {
+        symbol: "TSLA",
+        score: 81,
+        view: "Bearish defined risk",
+        catalyst: "Analyst reset + macro in 6D",
+        blurb: "Put skew is bid, but the structure still favors a bearish spread rather than outright premium ownership.",
+        headline: "Skew is signaling caution, but Swing Sniper prefers directional defined risk over pure vol ownership.",
+        thesis: "TSLA is interesting because downside hedging demand is already visible in skew, yet outright long-vol pricing is not especially cheap. That creates a setup where direction matters more than simply buying premium.",
+        risks: [
+          "If the stock squeezes on index beta, skew can remain elevated while the directional thesis fails.",
+          "If vol keeps lifting, debit spreads may underperform pure long-vol expressions.",
+          "Headline velocity can reverse quickly in this name."
+        ],
+        narrative: [
+          "Estimate pressure is still the dominant narrative.",
+          "Recent revisions are more about margin durability than growth surprise.",
+          "Social/news velocity can create unstable intraday path dependence."
+        ],
+        factors: [
+          ["Volatility", "72"],
+          ["Catalyst", "84"],
+          ["Liquidity", "92"]
+        ],
+        regime: "Range-bound index, skew-led downside",
+        regimeNote: "Macro is not trending cleanly, so downside setups need directional clarity rather than blind long-premium ownership.",
+        volSummary: "Put skew is visibly heavy and the near-term surface is not cheap enough for blind premium buying. Swing Sniper reads this as a directional setup where structure discipline matters more than raw vega appetite.",
+        volGrid: [
+          ["IV Rank", "66"],
+          ["IV Percentile", "73"],
+          ["RV 20D", "58%"],
+          ["IV Now", "63%"],
+          ["Skew", "Put heavy"],
+          ["Term", "Flat"]
+        ],
+        overlay: [
+          [59, 54], [60, 55], [61, 56], [62, 56], [61, 57],
+          [62, 57], [63, 58], [64, 58], [64, 59], [63, 58]
+        ],
+        term: [
+          ["7D", 64],
+          ["14D", 63],
+          ["21D", 62],
+          ["35D", 60],
+          ["49D", 60]
+        ],
+        catalysts: [
+          ["6D", "Macro overlap", "High-beta tape sensitivity increases around rates and risk-on rotations."],
+          ["4D", "Analyst revisions", "Bearish estimate framing is accelerating rather than fading."],
+          ["Now", "Skew signal", "Downside demand is already visible in the chain."],
+          ["Now", "Execution note", "Best expressed with limited debit and explicit invalidation."]
+        ],
+        structures: [
+          {
+            name: "Put Debit Spread",
+            fit: "Fit 9.0",
+            copy: "This is the cleanest structure because the view is directional and skew already prices in some downside fear. Swing Sniper should choose exact legs and keep the rationale easy to read.",
+            metrics: [
+              ["Contract pick", "Selected"],
+              ["Max loss", "Defined"],
+              ["POP", "Medium"],
+              ["Style", "Directional"]
+            ],
+            payoff: [-58, -40, -18, 18, 46, 52, 52]
+          },
+          {
+            name: "Put Calendar",
+            fit: "Fit 7.8",
+            copy: "Only makes sense if you want to lean into timing uncertainty rather than immediate downside. Lower priority than the spread.",
+            metrics: [
+              ["Contract pick", "Selected"],
+              ["Max loss", "Defined"],
+              ["POP", "Medium"],
+              ["Style", "Timing"]
+            ],
+            payoff: [-48, -34, -10, 24, 18, -6, -38]
+          }
+        ],
+        killers: [
+          "Narrative reversal via bullish delivery or regulatory headline",
+          "Broad market squeeze that overwhelms single-name weakness",
+          "Further skew inflation before entry"
+        ],
+        memo: "Directional bear structures look cleaner than blind long-vol when skew is already expensive.",
+        themes: [
+          "Avoid paying for downside twice when skew already embeds fear.",
+          "Direction-first names should not be handled like symmetric event plays.",
+          "Debit spreads fit the member experience better than fully open-ended premium buys."
+        ]
+      },
+      {
+        symbol: "XOM",
+        score: 77,
+        view: "Short vol candidate",
+        catalyst: "Post-event premium extension",
+        blurb: "Front-month implied volatility still looks elevated relative to realized movement after the last catalyst window cleared.",
+        headline: "Event premium appears sticky even though realized movement has already normalized.",
+        thesis: "Swing Sniper likes XOM on the short-vol side because the catalyst stack has thinned out while the front end of the surface remains elevated. This is the type of setup where time decay can work if the tape stays orderly.",
+        risks: [
+          "Commodities can reintroduce event risk quickly.",
+          "A fresh geopolitical headline can instantly break the short-vol thesis.",
+          "If realized volatility re-expands, post-event premium may prove justified."
+        ],
+        narrative: [
+          "Energy headlines are quieter than the chain still implies.",
+          "Macro sensitivity is more input-cost and commodity driven than earnings-driven right now.",
+          "This is a cleaner short-vol candidate than most tech names because narrative velocity is lower."
+        ],
+        factors: [
+          ["Volatility", "82"],
+          ["Catalyst", "61"],
+          ["Liquidity", "88"]
+        ],
+        regime: "Post-event vol compression",
+        regimeNote: "Macro is quiet enough for decay ideas to work, but cross-asset shocks can still reawaken the front of the surface quickly.",
+        volSummary: "Realized movement has cooled faster than implied volatility. The term structure is flattening after the last catalyst window, which supports a measured short-vol expression rather than continued premium buying.",
+        volGrid: [
+          ["IV Rank", "79"],
+          ["IV Percentile", "81"],
+          ["RV 20D", "29%"],
+          ["IV Now", "38%"],
+          ["Skew", "Balanced"],
+          ["Term", "Backwardation"]
+        ],
+        overlay: [
+          [44, 39], [43, 37], [42, 35], [41, 34], [40, 33],
+          [39, 32], [39, 31], [38, 30], [38, 29], [38, 29]
+        ],
+        term: [
+          ["7D", 39],
+          ["14D", 37],
+          ["21D", 35],
+          ["35D", 34],
+          ["49D", 34]
+        ],
+        catalysts: [
+          ["Now", "Post-event drift", "Major scheduled catalysts have cleared, but premium remains elevated."],
+          ["2D", "Crude linkage", "Cross-asset tape remains the main reason this idea is not a free short."],
+          ["Now", "Execution note", "Short-vol ideas can appear in research output without requiring any broker workflow."],
+          ["Later", "Portfolio fit", "Best paired with other long-vol ideas to avoid one-way exposure."]
+        ],
+        structures: [
+          {
+            name: "Iron Condor",
+            fit: "Fit 7.4",
+            copy: "Shown to validate how a short-vol structure could live in the same panel. It can be recommended as research without requiring any broker workflow.",
+            metrics: [
+              ["Contract pick", "Selected"],
+              ["Max loss", "Defined"],
+              ["POP", "Higher"],
+              ["Style", "Range"]
+            ],
+            payoff: [14, 18, 10, -30, 10, 18, 14]
+          },
+          {
+            name: "Call Calendar",
+            fit: "Fit 6.9",
+            copy: "A safer alternative if you want a lower-intensity expression while keeping the contract output clean and legible.",
+            metrics: [
+              ["Contract pick", "Selected"],
+              ["Max loss", "Defined"],
+              ["POP", "Medium"],
+              ["Style", "Decay"]
+            ],
+            payoff: [-28, -18, 6, 24, 14, -6, -24]
+          }
+        ],
+        killers: [
+          "Fresh geopolitical shock",
+          "Commodity spike with equity lag catch-up",
+          "Any new scheduled event reintroducing short-dated premium"
+        ],
+        memo: "Short-vol candidates exist, but Swing Sniper should keep their tradeoffs obvious and easy to read when shown beside long-vol ideas.",
+        themes: [
+          "Post-event premium can be fertile, but only when narrative velocity actually cooled.",
+          "Short-vol recommendations need cleaner guardrails than long-vol ideas.",
+          "The UI should make different trade-expression styles easy to compare without adding clutter."
+        ]
+      }
+    ];
+
+    const savedTheses = [
+      {
+        symbol: "NVDA",
+        savedIvRank: 58,
+        nowIvRank: 67,
+        state: "edge narrowing",
+        note: "Event premium is catching up; watch entry timing."
+      },
+      {
+        symbol: "TSLA",
+        savedIvRank: 66,
+        nowIvRank: 63,
+        state: "setup stabilizing",
+        note: "Skew remains bid, but the directional edge has not degraded."
+      },
+      {
+        symbol: "XOM",
+        savedIvRank: 79,
+        nowIvRank: 72,
+        state: "premium still rich",
+        note: "Compression thesis is intact, but headline shock risk remains."
+      }
+    ];
+
+    let activeSymbol = "NVDA";
+    let activeTab = "thesis";
+
+    const listEl = document.getElementById("opportunity-list");
+    const detailScore = document.getElementById("detail-score");
+    const detailView = document.getElementById("detail-view");
+    const detailCatalyst = document.getElementById("detail-catalyst");
+    const detailSymbol = document.getElementById("detail-symbol");
+    const detailTitle = document.getElementById("detail-title");
+    const thesisSummary = document.getElementById("thesis-summary");
+    const thesisRisks = document.getElementById("thesis-risks");
+    const narrativeList = document.getElementById("narrative-list");
+    const factorGrid = document.getElementById("factor-grid");
+    const volSummary = document.getElementById("vol-summary");
+    const volGrid = document.getElementById("vol-grid");
+    const overlaySvg = document.getElementById("overlay-svg");
+    const overlayGap = document.getElementById("overlay-gap");
+    const termBars = document.getElementById("term-bars");
+    const densityTrack = document.getElementById("density-track");
+    const timeline = document.getElementById("timeline");
+    const structureStack = document.getElementById("structure-stack");
+    const riskKillers = document.getElementById("risk-killers");
+    const regimePill = document.getElementById("regime-pill");
+    const regimeNote = document.getElementById("regime-note");
+    const memoCopy = document.getElementById("memo-copy");
+    const memoThemes = document.getElementById("memo-themes");
+    const savedThesisList = document.getElementById("saved-thesis-list");
+
+    function currentIdea() {
+      return ideas.find((idea) => idea.symbol === activeSymbol) || ideas[0];
+    }
+
+    function dayFromWhenLabel(label) {
+      const normalized = String(label || "").trim().toUpperCase();
+      if (normalized === "NOW") return 0;
+      if (normalized === "LATER") return 14;
+      const match = normalized.match(/(\d+)/);
+      return match ? Number(match[1]) : 14;
+    }
+
+    function buildPolyline(values, width, height, padding) {
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = Math.max(1, max - min);
+      return values.map((value, index) => {
+        const x = padding + ((width - padding * 2) * index / Math.max(1, values.length - 1));
+        const y = height - padding - ((value - min) / range) * (height - padding * 2);
+        return { x, y };
+      });
+    }
+
+    function pointsToPath(points) {
+      return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+    }
+
+    function pointsToArea(points, width, height, padding) {
+      if (!points.length) return "";
+      const first = points[0];
+      const last = points[points.length - 1];
+      return `${pointsToPath(points)} L ${last.x.toFixed(2)} ${(height - padding).toFixed(2)} L ${first.x.toFixed(2)} ${(height - padding).toFixed(2)} Z`;
+    }
+
+    function renderVolOverlay(idea) {
+      const width = 320;
+      const height = 130;
+      const padding = 12;
+      const ivValues = idea.overlay.map(([iv]) => iv);
+      const rvValues = idea.overlay.map(([, rv]) => rv);
+      const merged = buildPolyline([...ivValues, ...rvValues], width, height, padding);
+      const min = Math.min(...[...ivValues, ...rvValues]);
+      const max = Math.max(...[...ivValues, ...rvValues]);
+      const range = Math.max(1, max - min);
+
+      const toPoints = (values) => values.map((value, index) => {
+        const x = padding + ((width - padding * 2) * index / Math.max(1, values.length - 1));
+        const y = height - padding - ((value - min) / range) * (height - padding * 2);
+        return { x, y };
+      });
+
+      const ivPoints = toPoints(ivValues);
+      const rvPoints = toPoints(rvValues);
+      const midY = height - padding - (((min + max) / 2 - min) / range) * (height - padding * 2);
+
+      overlaySvg.innerHTML = `
+        <line class="overlay-axis" x1="${padding}" y1="${midY.toFixed(2)}" x2="${width - padding}" y2="${midY.toFixed(2)}"></line>
+        <path class="overlay-area" d="${pointsToArea(ivPoints, width, height, padding)}"></path>
+        <path class="overlay-line-iv" d="${pointsToPath(ivPoints)}"></path>
+        <path class="overlay-line-rv" d="${pointsToPath(rvPoints)}"></path>
+      `;
+
+      const currentIv = ivValues[ivValues.length - 1];
+      const currentRv = rvValues[rvValues.length - 1];
+      const gap = (currentIv - currentRv).toFixed(0);
+      overlayGap.textContent = `Gap ${gap >= 0 ? "+" : ""}${gap} vol pts`;
+    }
+
+    function renderCatalystDensity(idea) {
+      densityTrack.innerHTML = "";
+      idea.catalysts.forEach(([when, _title], index) => {
+        const day = dayFromWhenLabel(when);
+        const marker = document.createElement("div");
+        marker.className = `density-marker${day === 0 ? " now" : ""}`;
+        marker.style.left = `${Math.min(100, Math.max(0, (day / 14) * 100))}%`;
+        marker.title = `${when} - ${_title}`;
+        marker.style.top = `${3 + (index % 2) * 1}px`;
+        densityTrack.appendChild(marker);
+      });
+    }
+
+    function renderPayoffSvg(values) {
+      const width = 280;
+      const height = 120;
+      const padding = 12;
+      const points = buildPolyline(values, width, height, padding);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = Math.max(1, max - min);
+      const zeroY = height - padding - ((0 - min) / range) * (height - padding * 2);
+      return `
+        <line class="payoff-axis" x1="${padding}" y1="${zeroY.toFixed(2)}" x2="${width - padding}" y2="${zeroY.toFixed(2)}"></line>
+        <path class="payoff-fill" d="${pointsToArea(points, width, height, padding)}"></path>
+        <path class="payoff-line" d="${pointsToPath(points)}"></path>
+      `;
+    }
+
+    function renderSavedTheses() {
+      savedThesisList.innerHTML = "";
+      savedTheses.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = `saved-thesis-item${item.symbol === activeSymbol ? " active" : ""}`;
+        card.innerHTML = `
+          <div class="saved-thesis-head">
+            <div class="saved-thesis-symbol">${item.symbol}</div>
+            <div class="saved-thesis-state">${item.state}</div>
+          </div>
+          <div class="saved-thesis-meta">Saved at IV Rank ${item.savedIvRank}; now ${item.nowIvRank}</div>
+          <div class="saved-thesis-meta">${item.note}</div>
+        `;
+        savedThesisList.appendChild(card);
+      });
+    }
+
+    function renderOpportunities() {
+      listEl.innerHTML = "";
+      ideas.forEach((idea) => {
+        const card = document.createElement("button");
+        card.className = "opportunity" + (idea.symbol === activeSymbol ? " active" : "");
+        card.type = "button";
+        card.innerHTML = `
+          <div class="opp-top">
+            <div class="symbol">${idea.symbol}</div>
+            <div class="score">Edge ${idea.score}</div>
+          </div>
+          <div class="opp-subtitle">${idea.blurb}</div>
+          <div class="metrics">
+            <div class="metric"><label>View</label><strong>${idea.view}</strong></div>
+            <div class="metric"><label>Catalyst</label><strong>${idea.catalyst}</strong></div>
+            <div class="metric"><label>Bias</label><strong>${idea.headline.slice(0, 28)}...</strong></div>
+          </div>
+        `;
+        card.addEventListener("click", () => {
+          activeSymbol = idea.symbol;
+          renderAll();
+        });
+        listEl.appendChild(card);
+      });
+    }
+
+    function renderDetail() {
+      const idea = currentIdea();
+      detailScore.textContent = `Edge ${idea.score}`;
+      detailView.textContent = idea.view;
+      detailCatalyst.textContent = idea.catalyst;
+      detailSymbol.textContent = idea.symbol;
+      detailTitle.textContent = idea.headline;
+      thesisSummary.textContent = idea.thesis;
+
+      thesisRisks.innerHTML = "";
+      idea.risks.forEach((risk) => {
+        const li = document.createElement("li");
+        li.textContent = risk;
+        thesisRisks.appendChild(li);
+      });
+
+      narrativeList.innerHTML = "";
+      idea.narrative.forEach((item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        narrativeList.appendChild(li);
+      });
+
+      factorGrid.innerHTML = "";
+      idea.factors.forEach(([label, value]) => {
+        const card = document.createElement("div");
+        card.className = "mini-pill";
+        card.innerHTML = `<strong>${label}</strong><br />${value}`;
+        factorGrid.appendChild(card);
+      });
+
+      volSummary.textContent = idea.volSummary;
+      volGrid.innerHTML = "";
+      idea.volGrid.forEach(([label, value]) => {
+        const card = document.createElement("div");
+        card.className = "mini-pill";
+        card.innerHTML = `<strong>${label}</strong><br />${value}`;
+        volGrid.appendChild(card);
+      });
+      renderVolOverlay(idea);
+
+      termBars.innerHTML = "";
+      idea.term.forEach(([label, value]) => {
+        const col = document.createElement("div");
+        col.className = "bar-col";
+        col.innerHTML = `<div class="bar" style="height:${Math.max(24, value * 1.8)}px"></div><span>${label}<br />${value}</span>`;
+        termBars.appendChild(col);
+      });
+
+      timeline.innerHTML = "";
+      idea.catalysts.forEach(([when, title, body]) => {
+        const row = document.createElement("div");
+        row.className = "timeline-row";
+        row.innerHTML = `<strong>${when}</strong><div class="body"><div>${title}</div><span>${body}</span></div>`;
+        timeline.appendChild(row);
+      });
+      renderCatalystDensity(idea);
+
+      structureStack.innerHTML = "";
+      idea.structures.forEach((structure) => {
+        const wrap = document.createElement("div");
+        wrap.className = "structure";
+        wrap.innerHTML = `
+          <div class="structure-top">
+            <div class="structure-name">${structure.name}</div>
+            <div class="fit">${structure.fit}</div>
+          </div>
+          <div class="structure-copy">${structure.copy}</div>
+          <div class="structure-grid">
+            ${structure.metrics.map(([label, value]) => `<div><label>${label}</label><strong>${value}</strong></div>`).join("")}
+          </div>
+          <div class="payoff-wrap">
+            <svg class="payoff-svg" viewBox="0 0 280 120" preserveAspectRatio="none">${renderPayoffSvg(structure.payoff)}</svg>
+            <div class="payoff-caption">Simplified P&amp;L shape at target exit</div>
+          </div>
+        `;
+        structureStack.appendChild(wrap);
+      });
+
+      riskKillers.innerHTML = "";
+      idea.killers.forEach((item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        riskKillers.appendChild(li);
+      });
+
+      memoCopy.textContent = idea.memo;
+      regimePill.textContent = `Regime - ${idea.regime}`;
+      regimeNote.textContent = idea.regimeNote;
+      memoThemes.innerHTML = "";
+      idea.themes.forEach((item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        memoThemes.appendChild(li);
+      });
+      renderSavedTheses();
+    }
+
+    function renderTabs() {
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.tab === activeTab);
+      });
+      document.querySelectorAll(".detail-tab").forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.panel === activeTab);
+      });
+    }
+
+    function renderAll() {
+      renderOpportunities();
+      renderDetail();
+      renderTabs();
+    }
+
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeTab = btn.dataset.tab;
+        renderTabs();
+      });
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>
