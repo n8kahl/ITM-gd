@@ -221,6 +221,25 @@ export async function trackEvent(eventType: string, eventValue?: string) {
   }
 }
 
+type MemberNavLifecycleStage = 'start' | 'success' | 'stall' | 'retry'
+
+type MemberNavLifecyclePayload = {
+  from?: string
+  to?: string
+  target?: string
+  label?: string
+  durationMs?: number
+}
+
+function serializeMemberNavLifecyclePayload(payload: MemberNavLifecyclePayload): string {
+  const normalizedPayload = {
+    ...payload,
+    durationMs: typeof payload.durationMs === 'number' ? Math.round(payload.durationMs) : undefined,
+  }
+
+  return JSON.stringify(normalizedPayload)
+}
+
 // ============================================
 // CONVENIENCE TRACKING FUNCTIONS
 // ============================================
@@ -239,6 +258,13 @@ export const Analytics = {
       void trackButtonClick('nav_item', label)
     } catch (error) {
       console.error('Failed to track member nav item:', error)
+    }
+  },
+  trackMemberNavLifecycle: (stage: MemberNavLifecycleStage, payload: MemberNavLifecyclePayload) => {
+    try {
+      void trackEvent(`member_nav_${stage}`, serializeMemberNavLifecyclePayload(payload))
+    } catch (error) {
+      console.error('Failed to track member nav lifecycle event:', error)
     }
   },
   trackJournalAction: (label: string) => trackButtonClick('journal_action', label),
