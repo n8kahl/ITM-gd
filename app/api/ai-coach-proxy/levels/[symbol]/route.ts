@@ -13,10 +13,9 @@ export async function GET(
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
   }
 
-  const search = new URL(request.url).search
   return proxyAICoachGet(
     request,
-    `/api/levels/${encodeURIComponent(symbol)}${search}`,
+    `/api/levels/${encodeURIComponent(symbol)}`,
     'Failed to fetch key levels.',
   )
 }

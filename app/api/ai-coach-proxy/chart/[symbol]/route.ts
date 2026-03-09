@@ -13,10 +13,9 @@ export async function GET(
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
   }
 
-  const search = new URL(request.url).search
   return proxyAICoachGet(
     request,
-    `/api/chart/${encodeURIComponent(symbol)}${search}`,
+    `/api/chart/${encodeURIComponent(symbol)}`,
     'Failed to fetch chart data.',
   )
 }

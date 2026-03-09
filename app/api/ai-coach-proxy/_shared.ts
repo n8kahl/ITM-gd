@@ -134,6 +134,15 @@ function normalizeUpstreamPath(upstreamPath: string | string[]): string {
   return normalized.startsWith('/api/') ? normalized : `/api${normalized}`
 }
 
+function buildUpstreamUrl(candidate: string, normalizedPath: string, request: Request): string {
+  // Guard against accidental double-query appending when callers include search
+  // in upstreamPath and the current request also has search params.
+  if (normalizedPath.includes('?')) {
+    return `${candidate}${normalizedPath}`
+  }
+  return `${candidate}${normalizedPath}${new URL(request.url).search}`
+}
+
 function buildForwardHeaders(request: Request, authHeader?: string): Headers {
   const headers = new Headers()
   const contentType = request.headers.get('content-type')
@@ -232,7 +241,7 @@ export async function proxyAICoachRequest(
   let lastResponse: Response | null = null
 
   for (const candidate of candidates) {
-    const upstream = `${candidate}${normalizedPath}${new URL(request.url).search}`
+    const upstream = buildUpstreamUrl(candidate, normalizedPath, request)
     try {
       const response = await fetchCandidate(request, upstream, authHeaders, requestBody, timeoutMs)
       lastResponse = response
