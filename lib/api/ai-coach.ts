@@ -43,6 +43,8 @@ if (typeof window !== 'undefined') {
   console.log('[AI Coach] API_BASE:', API_BASE)
 }
 
+const BROWSER_PROXY_BASE = '/api/ai-coach-proxy'
+
 // ============================================
 // TYPES
 // ============================================
@@ -631,6 +633,70 @@ async function fetchWithAuth(
   return response
 }
 
+function isBrowserAbortError(error: unknown): boolean {
+  if (!error) return false
+  if (error instanceof DOMException && error.name === 'AbortError') return true
+  return (
+    typeof error === 'object'
+    && error !== null
+    && 'name' in error
+    && (error as { name?: string }).name === 'AbortError'
+  )
+}
+
+function isMobileOrStandaloneBrowser(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+
+  const userAgent = navigator.userAgent.toLowerCase()
+  const isMobileUa = /iphone|ipad|ipod|android/.test(userAgent)
+  const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches
+    || (navigator as Navigator & { standalone?: boolean }).standalone === true
+
+  return isMobileUa || isStandalone
+}
+
+function shouldRetryViaAlternateTransport(error: unknown): boolean {
+  if (isBrowserAbortError(error)) return false
+  if (error instanceof AICoachAPIError) {
+    return error.status === 401 || error.status === 403 || error.status >= 500
+  }
+  return true
+}
+
+function shouldRetryStatusViaAlternateTransport(status: number): boolean {
+  return status === 401 || status === 403 || status === 404 || status >= 500
+}
+
+async function fetchWithTransportFallback(
+  directUrl: string,
+  proxyUrl: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const canUseProxy = typeof window !== 'undefined'
+  if (!canUseProxy) {
+    return fetchWithAuth(directUrl, { headers: {} }, token, signal)
+  }
+
+  const preferProxy = isMobileOrStandaloneBrowser()
+  const primaryUrl = preferProxy ? proxyUrl : directUrl
+  const secondaryUrl = preferProxy ? directUrl : proxyUrl
+
+  try {
+    const response = await fetchWithAuth(primaryUrl, { headers: {} }, token, signal)
+    if (response.ok || !shouldRetryStatusViaAlternateTransport(response.status)) {
+      return response
+    }
+
+    return fetchWithAuth(secondaryUrl, { headers: {} }, token, signal)
+  } catch (error) {
+    if (!shouldRetryViaAlternateTransport(error)) {
+      throw error
+    }
+    return fetchWithAuth(secondaryUrl, { headers: {} }, token, signal)
+  }
+}
+
 // ============================================
 // API FUNCTIONS
 // ============================================
@@ -802,11 +868,12 @@ export async function getChartData(
     params.set('includeIndicators', 'true')
   }
 
-  const response = await fetchWithAuth(
-    `${API_BASE}/api/chart/${symbol}?${params.toString()}`,
-    { headers: {} },
+  const encodedSymbol = encodeURIComponent(symbol)
+  const response = await fetchWithTransportFallback(
+    `${API_BASE}/api/chart/${encodedSymbol}?${params.toString()}`,
+    `${BROWSER_PROXY_BASE}/chart/${encodedSymbol}?${params.toString()}`,
     token,
-    signal
+    signal,
   )
 
   if (!response.ok) {
@@ -830,9 +897,10 @@ export async function getKeyLevels(
   signal?: AbortSignal,
 ): Promise<KeyLevelsResponse> {
   const params = new URLSearchParams({ timeframe })
-  const response = await fetchWithAuth(
-    `${API_BASE}/api/levels/${symbol}?${params.toString()}`,
-    { headers: {} },
+  const encodedSymbol = encodeURIComponent(symbol)
+  const response = await fetchWithTransportFallback(
+    `${API_BASE}/api/levels/${encodedSymbol}?${params.toString()}`,
+    `${BROWSER_PROXY_BASE}/levels/${encodedSymbol}?${params.toString()}`,
     token,
     signal,
   )
