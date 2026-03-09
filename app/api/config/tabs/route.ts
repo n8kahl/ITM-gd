@@ -24,15 +24,32 @@ type TabConfigRecord = {
   [key: string]: unknown
 }
 
+const SWING_SNIPER_LEAD_ROLE_ID = '1465515598640447662'
+
 // Default fallback if database is unavailable
 const DEFAULT_TABS: TabConfigRecord[] = [
   { tab_id: 'dashboard', label: 'Command Center', icon: 'LayoutDashboard', path: '/members', required_tier: 'core', sort_order: 0, is_required: true, mobile_visible: true, is_active: true },
   { tab_id: 'journal', label: 'Trade Journal', icon: 'BookOpen', path: '/members/journal', required_tier: 'core', sort_order: 1, is_required: false, mobile_visible: true, is_active: true },
   { tab_id: 'spx-command-center', label: 'SPX Command Center', icon: 'Target', path: '/members/spx-command-center', required_tier: 'pro', sort_order: 3, is_required: false, mobile_visible: true, is_active: true, badge_text: 'LIVE', badge_variant: 'emerald' },
   { tab_id: 'ai-coach', label: 'AI Coach', icon: 'Bot', path: '/members/ai-coach', required_tier: 'pro', sort_order: 4, is_required: false, mobile_visible: true, is_active: true, badge_text: 'Beta', badge_variant: 'emerald' },
-  { tab_id: 'library', label: 'Academy', icon: 'GraduationCap', path: '/members/academy', required_tier: 'core', sort_order: 5, is_required: false, mobile_visible: false, is_active: true },
-  { tab_id: 'social', label: 'Social', icon: 'Users', path: '/members/social', required_tier: 'core', sort_order: 6, is_required: false, mobile_visible: true, is_active: true },
-  { tab_id: 'studio', label: 'Trade Studio', icon: 'Palette', path: '/members/studio', required_tier: 'executive', sort_order: 7, is_required: false, mobile_visible: false, is_active: true },
+  {
+    tab_id: 'swing-sniper',
+    label: 'Swing Sniper',
+    icon: 'Radar',
+    path: '/members/swing-sniper',
+    required_tier: 'core',
+    required_discord_role_ids: [SWING_SNIPER_LEAD_ROLE_ID],
+    sort_order: 5,
+    is_required: false,
+    mobile_visible: true,
+    is_active: true,
+    badge_text: 'New',
+    badge_variant: 'champagne',
+    description: 'Options research workspace for catalysts, contracts, and thesis monitoring',
+  },
+  { tab_id: 'library', label: 'Academy', icon: 'GraduationCap', path: '/members/academy', required_tier: 'core', sort_order: 6, is_required: false, mobile_visible: false, is_active: true },
+  { tab_id: 'social', label: 'Social', icon: 'Users', path: '/members/social', required_tier: 'core', sort_order: 7, is_required: false, mobile_visible: true, is_active: true },
+  { tab_id: 'studio', label: 'Trade Studio', icon: 'Palette', path: '/members/studio', required_tier: 'executive', sort_order: 8, is_required: false, mobile_visible: false, is_active: true },
   { tab_id: 'profile', label: 'Profile', icon: 'UserCircle', path: '/members/profile', required_tier: 'core', sort_order: 99, is_required: true, mobile_visible: true, is_active: true },
 ]
 

@@ -30,6 +30,7 @@ import academyActivitiesRouter from './routes/academy-activities';
 import academyAnalyticsRouter from './routes/academy-analytics';
 import academyAdminRouter from './routes/academy-admin';
 import tradeDayReplayRouter from './routes/trade-day-replay';
+import swingSniperRouter from './routes/swing-sniper';
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
 import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers/positionTrackerWorker';
 import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/sessionCleanupWorker';
@@ -95,8 +96,10 @@ app.use((req: Request, res: Response, next: any) => {
     ? 60000
     : req.path.startsWith('/api/trade-day-replay')
       ? 90000
-    : req.path.startsWith('/api/spx/snapshot')
-      ? 75000
+      : req.path.startsWith('/api/swing-sniper')
+        ? 30000
+      : req.path.startsWith('/api/spx/snapshot')
+        ? 75000
       : req.path.startsWith('/api/spx/contract-select')
         ? 60000
         : req.path.startsWith('/api/spx')
@@ -148,6 +151,7 @@ app.use('/api/academy/activities', academyActivitiesRouter);
 app.use('/api/academy/analytics', academyAnalyticsRouter);
 app.use('/api/academy/admin', academyAdminRouter);
 app.use('/api/trade-day-replay', tradeDayReplayRouter);
+app.use('/api/swing-sniper', swingSniperRouter);
 // Backward-compatible auth-gated endpoint retained for legacy clients and E2E checks.
 app.get('/api/journal/trades', authenticateToken, (_req: Request, res: Response) => {
   res.status(410).json({
@@ -173,6 +177,7 @@ app.get('/', (_req: Request, res: Response) => {
       chart: '/api/chart/:symbol', screenshotAnalyze: '/api/screenshot/analyze',
       macroContext: '/api/macro', macroImpact: '/api/macro/impact/:symbol', briefToday: '/api/brief/today', spx: '/api/spx/*',
       symbolSearch: '/api/symbols/search', chatStream: '/api/chat/stream', wsPrices: '/ws/prices',
+      swingSniperHealth: '/api/swing-sniper/health',
       fibonacci: '/api/fibonacci',
     }
   });
