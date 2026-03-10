@@ -2,17 +2,45 @@ import { supabase } from '../../config/database';
 import { logger } from '../../lib/logger';
 import { sanitizeSymbols } from '../../lib/symbols';
 import type {
+  SwingSniperRiskMode,
   SwingSniperSavedThesisRecord,
   SwingSniperSignalSnapshotInput,
   SwingSniperSignalSnapshotRecord,
+  SwingSniperStructureStrategy,
   SwingSniperWatchlistFilters,
   SwingSniperWatchlistState,
   SwingSniperWatchlistUpdateInput,
 } from './types';
 
+const DEFAULT_DEFINED_RISK_SETUPS: SwingSniperStructureStrategy[] = [
+  'call_debit_spread',
+  'put_debit_spread',
+  'call_calendar',
+  'put_calendar',
+  'call_diagonal',
+  'put_diagonal',
+  'call_butterfly',
+  'put_butterfly',
+];
+
+const ADVANCED_NAKED_SETUPS = new Set<SwingSniperStructureStrategy>([
+  'long_call',
+  'long_put',
+  'long_straddle',
+  'long_strangle',
+]);
+
+const ALL_STRUCTURE_SETUPS = new Set<SwingSniperStructureStrategy>([
+  ...DEFAULT_DEFINED_RISK_SETUPS,
+  ...Array.from(ADVANCED_NAKED_SETUPS),
+]);
+
 const DEFAULT_FILTERS: SwingSniperWatchlistFilters = {
   preset: 'all',
   minScore: 0,
+  riskMode: 'defined_risk_only',
+  swingWindow: 'seven_to_fourteen',
+  preferredSetups: [...DEFAULT_DEFINED_RISK_SETUPS],
 };
 
 const SNAPSHOT_RETENTION_DAYS = 90;
@@ -66,9 +94,29 @@ interface SwingSniperSignalSnapshotRow {
 }
 
 function normalizeFilters(value: Partial<SwingSniperWatchlistFilters> | null | undefined): SwingSniperWatchlistFilters {
+  const riskMode: SwingSniperRiskMode = value?.riskMode === 'naked_allowed'
+    ? 'naked_allowed'
+    : DEFAULT_FILTERS.riskMode;
+
+  const preferredSetups = Array.isArray(value?.preferredSetups)
+    ? value?.preferredSetups.filter((strategy): strategy is SwingSniperStructureStrategy => ALL_STRUCTURE_SETUPS.has(strategy))
+    : [];
+
+  const dedupedSetups = Array.from(new Set(preferredSetups));
+  const riskScopedSetups = riskMode === 'defined_risk_only'
+    ? dedupedSetups.filter((strategy) => !ADVANCED_NAKED_SETUPS.has(strategy))
+    : dedupedSetups;
+
+  const normalizedSetups = riskScopedSetups.length > 0
+    ? riskScopedSetups
+    : [...DEFAULT_DEFINED_RISK_SETUPS];
+
   return {
     preset: value?.preset ?? DEFAULT_FILTERS.preset,
     minScore: Number.isFinite(value?.minScore) ? Math.max(0, Math.round(value?.minScore as number)) : DEFAULT_FILTERS.minScore,
+    riskMode,
+    swingWindow: value?.swingWindow ?? DEFAULT_FILTERS.swingWindow,
+    preferredSetups: normalizedSetups,
   };
 }
 
@@ -137,7 +185,10 @@ function emptyWatchlistState(): SwingSniperWatchlistState {
   return {
     symbols: [],
     selectedSymbol: null,
-    filters: DEFAULT_FILTERS,
+    filters: {
+      ...DEFAULT_FILTERS,
+      preferredSetups: [...DEFAULT_FILTERS.preferredSetups],
+    },
     savedTheses: [],
   };
 }

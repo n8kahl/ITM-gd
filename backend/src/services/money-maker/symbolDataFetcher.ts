@@ -1,4 +1,3 @@
-import { CandleBar } from '../../../../lib/money-maker/types'
 import { massiveClient } from '../../config/massive'
 
 export interface SymbolDataFetcherOptions {
@@ -7,17 +6,11 @@ export interface SymbolDataFetcherOptions {
     limit?: number
 }
 
-// Map local timeframe to Massive API timeframe format if needed
-function mapTimeframe(tf: string): string {
-    // Massive often uses pure minute numbers or specific strings.
-    // We'll assume the spec's formats (1m, 5m, etc.) for now but adjust later if needed.
-    return tf
-}
 /**
  * Fetches historical/intraday bars for a given symbol from Massive.com.
  * This function integrates with the data provider defined in `config/massive.ts`.
  */
-export async function fetchSymbolBars(options: SymbolDataFetcherOptions): Promise<CandleBar[]> {
+export async function fetchSymbolBars(options: SymbolDataFetcherOptions): Promise<any[]> {
     const { symbol, timeframe, limit = 500 } = options
 
     try {
@@ -86,7 +79,7 @@ export async function fetchAllSymbolData(symbols: string[]) {
     // We need 5-min, 10-min, 1-hour, and 1-day (for previous day range) for the strategy engine.
     const timeframes: SymbolDataFetcherOptions['timeframe'][] = ['5Min', '10Min', '1H', '1D']
 
-    const results: Record<string, Record<string, CandleBar[]>> = {}
+    const results: Record<string, Record<string, any[]>> = {}
 
     for (const symbol of symbols) {
         results[symbol] = {}

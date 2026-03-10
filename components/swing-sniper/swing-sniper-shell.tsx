@@ -14,6 +14,7 @@ import type {
   SwingSniperDossierPayload,
   SwingSniperMemoPayload,
   SwingSniperMonitoringPayload,
+  SwingSniperStructureStrategy,
   SwingSniperWatchlistPayload,
   SwingSniperWatchlistSavePayload,
 } from '@/lib/swing-sniper/types'
@@ -24,6 +25,24 @@ interface SaveWatchlistResponse {
   success: boolean
   data: SwingSniperWatchlistPayload
 }
+
+const DEFAULT_PREFERRED_SETUPS: SwingSniperStructureStrategy[] = [
+  'call_debit_spread',
+  'put_debit_spread',
+  'call_calendar',
+  'put_calendar',
+  'call_diagonal',
+  'put_diagonal',
+  'call_butterfly',
+  'put_butterfly',
+]
+
+const ADVANCED_SETUPS = new Set<SwingSniperStructureStrategy>([
+  'long_call',
+  'long_put',
+  'long_straddle',
+  'long_strangle',
+])
 
 async function loadJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
@@ -72,9 +91,13 @@ export function SwingSniperShell() {
   const [dossierError, setDossierError] = useState(false)
 
   const [savePending, setSavePending] = useState(false)
+  const [preferencesPending, setPreferencesPending] = useState(false)
   const [filters, setFilters] = useState<SwingSniperWatchlistPayload['filters']>({
     preset: 'all',
     minScore: 0,
+    riskMode: 'defined_risk_only',
+    swingWindow: 'seven_to_fourteen',
+    preferredSetups: [...DEFAULT_PREFERRED_SETUPS],
   })
 
   const loadBoard = useCallback(async (refresh: boolean = false) => {
@@ -237,10 +260,41 @@ export function SwingSniperShell() {
         loadMemo(),
         loadMonitoring(),
       ])
+    } catch {
+      // Keep the current dossier in place if persistence fails.
     } finally {
       setSavePending(false)
     }
   }, [dossier, filters, loadMemo, loadMonitoring, watchlist])
+
+  const handleSavePreferences = useCallback(async () => {
+    setPreferencesPending(true)
+
+    try {
+      const response = await fetch('/api/members/swing-sniper/watchlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filters,
+          selectedSymbol: activeSymbol,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('save_preferences_failed')
+      }
+
+      const saved = await response.json() as SaveWatchlistResponse
+      setWatchlist(saved.data)
+      setFilters(saved.data.filters)
+    } catch {
+      // Preserve local preference edits for retry when save fails.
+    } finally {
+      setPreferencesPending(false)
+    }
+  }, [activeSymbol, filters])
 
   const stale = useMemo(() => staleLabel(board?.generated_at ?? null), [board])
 
@@ -295,8 +349,38 @@ export function SwingSniperShell() {
           ideas={board?.ideas || []}
           loading={boardLoading}
           activeSymbol={activeSymbol}
-          preset={filters.preset}
-          onFilterChange={(preset) => setFilters((current) => ({ ...current, preset }))}
+          filters={filters}
+          savingPreferences={preferencesPending}
+          onPresetChange={(preset) => setFilters((current) => ({ ...current, preset }))}
+          onRiskModeChange={(riskMode) => {
+            setFilters((current) => {
+              const nextSetups = riskMode === 'defined_risk_only'
+                ? current.preferredSetups.filter((setup) => !ADVANCED_SETUPS.has(setup))
+                : current.preferredSetups
+
+              return {
+                ...current,
+                riskMode,
+                preferredSetups: nextSetups.length > 0 ? nextSetups : [...DEFAULT_PREFERRED_SETUPS],
+              }
+            })
+          }}
+          onSwingWindowChange={(swingWindow) => setFilters((current) => ({ ...current, swingWindow }))}
+          onMinScoreChange={(minScore) => setFilters((current) => ({ ...current, minScore }))}
+          onToggleSetup={(setup) => {
+            setFilters((current) => {
+              const isSelected = current.preferredSetups.includes(setup)
+              const preferredSetups = isSelected
+                ? current.preferredSetups.filter((item) => item !== setup)
+                : [...current.preferredSetups, setup]
+
+              return {
+                ...current,
+                preferredSetups,
+              }
+            })
+          }}
+          onSavePreferences={() => void handleSavePreferences()}
           onSelect={handleSelectSymbol}
         />
 
