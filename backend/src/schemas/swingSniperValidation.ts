@@ -38,6 +38,7 @@ export const swingSniperUniverseQuerySchema = z.object({
 export const swingSniperWatchlistBodySchema = z.object({
   symbols: z.array(z.string().min(1).max(10)).max(50).optional(),
   selectedSymbol: z.string().min(1).max(10).nullable().optional(),
+  removeThesisSymbol: z.string().min(1).max(10).nullable().optional(),
   filters: z.object({
     preset: z.enum(['all', 'long_vol', 'short_vol', 'catalyst_dense', 'seven_day']).optional(),
     minScore: z.number().int().min(0).max(100).optional(),

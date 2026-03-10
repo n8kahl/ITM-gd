@@ -1,14 +1,16 @@
 'use client'
 
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react'
-import { Radar, RefreshCw } from 'lucide-react'
-import { PageHeader } from '@/components/members/page-header'
+import { BookmarkCheck, Radar, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { DossierPanel } from '@/components/swing-sniper/dossier-panel'
+import { MandateDrawer } from '@/components/swing-sniper/mandate-drawer'
 import { OpportunityBoard } from '@/components/swing-sniper/opportunity-board'
+import { SavedThesesDrawer } from '@/components/swing-sniper/saved-theses-drawer'
 import { SwingSniperMemoRail } from '@/components/swing-sniper/swing-sniper-memo-rail'
 import type {
+  SwingSniperBoardIdea,
   SwingSniperBoardPayload,
   SwingSniperDirection,
   SwingSniperDossierPayload,
@@ -25,6 +27,8 @@ interface SaveWatchlistResponse {
   success: boolean
   data: SwingSniperWatchlistPayload
 }
+
+type SavedThesisPayload = NonNullable<SwingSniperWatchlistSavePayload['thesis']>
 
 const DEFAULT_PREFERRED_SETUPS: SwingSniperStructureStrategy[] = [
   'call_debit_spread',
@@ -57,18 +61,47 @@ async function loadJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
-function toDirection(view: SwingSniperDossierPayload['view']): SwingSniperDirection {
+function toDirection(view: SwingSniperDossierPayload['view'] | SwingSniperBoardIdea['view']): SwingSniperDirection {
   if (view === 'Long vol') return 'long_vol'
   if (view === 'Short vol') return 'short_vol'
   return 'neutral'
 }
 
-function staleLabel(generatedAt: string | null): string | null {
+function updatedLabel(generatedAt: string | null): string | null {
   if (!generatedAt) return null
   const deltaMs = Date.now() - new Date(generatedAt).getTime()
-  if (!Number.isFinite(deltaMs) || deltaMs < 60_000) return null
+  if (!Number.isFinite(deltaMs) || deltaMs < 0) return null
   const minutes = Math.floor(deltaMs / 60_000)
+  if (minutes <= 0) return 'Updated just now'
   return `Updated ${minutes} min ago`
+}
+
+function buildDossierThesisPayload(dossier: SwingSniperDossierPayload): SavedThesisPayload {
+  return {
+    symbol: dossier.symbol,
+    score: dossier.orc_score,
+    setupLabel: `${dossier.view} · ${dossier.catalyst_label}`,
+    direction: toDirection(dossier.view),
+    thesis: dossier.headline,
+    ivRankAtSave: dossier.vol_map.iv_rank,
+    catalystLabel: dossier.catalyst_label,
+    catalystDate: dossier.catalysts[0]?.date || null,
+    monitorNote: dossier.risk.exit_framework,
+  }
+}
+
+function buildBoardThesisPayload(idea: SwingSniperBoardIdea): SavedThesisPayload {
+  return {
+    symbol: idea.symbol,
+    score: idea.orc_score,
+    setupLabel: `${idea.view} · ${idea.catalyst_label}`,
+    direction: toDirection(idea.view),
+    thesis: idea.blurb,
+    ivRankAtSave: null,
+    catalystLabel: idea.catalyst_label,
+    catalystDate: null,
+    monitorNote: 'Saved from the ranked board. Refresh the dossier to monitor thesis drift.',
+  }
 }
 
 export function SwingSniperShell() {
@@ -90,8 +123,11 @@ export function SwingSniperShell() {
   const [dossierLoading, setDossierLoading] = useState(false)
   const [dossierError, setDossierError] = useState(false)
 
-  const [savePending, setSavePending] = useState(false)
+  const [thesisPendingSymbol, setThesisPendingSymbol] = useState<string | null>(null)
+  const [watchlistPendingSymbol, setWatchlistPendingSymbol] = useState<string | null>(null)
   const [preferencesPending, setPreferencesPending] = useState(false)
+  const [mandateOpen, setMandateOpen] = useState(false)
+  const [savedDrawerOpen, setSavedDrawerOpen] = useState(false)
   const [filters, setFilters] = useState<SwingSniperWatchlistPayload['filters']>({
     preset: 'all',
     minScore: 0,
@@ -187,6 +223,41 @@ export function SwingSniperShell() {
     ])
   }, [loadBoard, loadMemo, loadMonitoring, loadWatchlist])
 
+  const persistWatchlistUpdate = useCallback(async (
+    payload: SwingSniperWatchlistSavePayload,
+    options?: {
+      reloadMemo?: boolean
+      reloadMonitoring?: boolean
+      reloadDossier?: boolean
+    },
+  ) => {
+    const response = await fetch('/api/members/swing-sniper/watchlist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) {
+      throw new Error('watchlist_update_failed')
+    }
+
+    const saved = await response.json() as SaveWatchlistResponse
+    setWatchlist(saved.data)
+    setFilters(saved.data.filters)
+
+    const nextTasks: Promise<unknown>[] = []
+    if (options?.reloadMemo) nextTasks.push(loadMemo())
+    if (options?.reloadMonitoring) nextTasks.push(loadMonitoring())
+    if (options?.reloadDossier && activeSymbol) nextTasks.push(loadDossier(activeSymbol))
+    if (nextTasks.length > 0) {
+      await Promise.all(nextTasks)
+    }
+
+    return saved.data
+  }, [activeSymbol, loadDossier, loadMemo, loadMonitoring])
+
   useEffect(() => {
     void refreshAll(false)
   }, [refreshAll])
@@ -214,89 +285,95 @@ export function SwingSniperShell() {
 
   const handleSelectSymbol = (symbol: string) => {
     setActiveTab('Thesis')
+    setWatchlist((current) => current ? { ...current, selectedSymbol: symbol } : current)
     startTransition(() => {
       setActiveSymbol(symbol)
     })
   }
 
-  const handleSaveThesis = useCallback(async () => {
-    if (!dossier) return
-
-    setSavePending(true)
-
-    const payload: SwingSniperWatchlistSavePayload = {
-      selectedSymbol: dossier.symbol,
-      symbols: watchlist?.symbols || [],
-      filters,
-      thesis: {
-        symbol: dossier.symbol,
-        score: dossier.orc_score,
-        setupLabel: `${dossier.view} · ${dossier.catalyst_label}`,
-        direction: toDirection(dossier.view),
-        thesis: dossier.headline,
-        ivRankAtSave: dossier.vol_map.iv_rank,
-        catalystLabel: dossier.catalyst_label,
-        catalystDate: dossier.catalysts[0]?.date || null,
-        monitorNote: dossier.risk.exit_framework,
-      },
-    }
+  const handleSaveThesis = useCallback(async (thesisPayload: SavedThesisPayload) => {
+    setThesisPendingSymbol(thesisPayload.symbol)
 
     try {
-      const response = await fetch('/api/members/swing-sniper/watchlist', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      await persistWatchlistUpdate({
+        selectedSymbol: thesisPayload.symbol,
+        symbols: watchlist?.symbols || [],
+        filters,
+        thesis: thesisPayload,
+      }, {
+        reloadMemo: true,
+        reloadMonitoring: true,
       })
-
-      if (!response.ok) {
-        throw new Error('save_failed')
-      }
-
-      const saved = await response.json() as SaveWatchlistResponse
-      setWatchlist(saved.data)
-      await Promise.all([
-        loadMemo(),
-        loadMonitoring(),
-      ])
     } catch {
       // Keep the current dossier in place if persistence fails.
     } finally {
-      setSavePending(false)
+      setThesisPendingSymbol(null)
     }
-  }, [dossier, filters, loadMemo, loadMonitoring, watchlist])
+  }, [filters, persistWatchlistUpdate, watchlist])
+
+  const handleRemoveThesis = useCallback(async (symbol: string) => {
+    setThesisPendingSymbol(symbol)
+
+    try {
+      await persistWatchlistUpdate({
+        selectedSymbol: activeSymbol,
+        removeThesisSymbol: symbol,
+      }, {
+        reloadMemo: true,
+        reloadMonitoring: true,
+      })
+    } catch {
+      // Preserve current state so the user can retry without losing context.
+    } finally {
+      setThesisPendingSymbol(null)
+    }
+  }, [activeSymbol, persistWatchlistUpdate])
+
+  const handleAddToWatchlist = useCallback(async () => {
+    if (!dossier) return
+
+    setWatchlistPendingSymbol(dossier.symbol)
+
+    try {
+      await persistWatchlistUpdate({
+        selectedSymbol: dossier.symbol,
+        symbols: Array.from(new Set([...(watchlist?.symbols || []), dossier.symbol])),
+      })
+    } catch {
+      // Watchlist add should fail quietly and keep dossier visible.
+    } finally {
+      setWatchlistPendingSymbol(null)
+    }
+  }, [dossier, persistWatchlistUpdate, watchlist])
 
   const handleSavePreferences = useCallback(async () => {
     setPreferencesPending(true)
 
     try {
-      const response = await fetch('/api/members/swing-sniper/watchlist', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filters,
-          selectedSymbol: activeSymbol,
-        }),
+      await persistWatchlistUpdate({
+        filters,
+        selectedSymbol: activeSymbol,
+      }, {
+        reloadDossier: true,
       })
-
-      if (!response.ok) {
-        throw new Error('save_preferences_failed')
-      }
-
-      const saved = await response.json() as SaveWatchlistResponse
-      setWatchlist(saved.data)
-      setFilters(saved.data.filters)
+      setMandateOpen(false)
     } catch {
       // Preserve local preference edits for retry when save fails.
     } finally {
       setPreferencesPending(false)
     }
-  }, [activeSymbol, filters])
+  }, [activeSymbol, filters, persistWatchlistUpdate])
 
-  const stale = useMemo(() => staleLabel(board?.generated_at ?? null), [board])
+  const savedSymbols = useMemo(
+    () => watchlist?.savedTheses.map((item) => item.symbol) || [],
+    [watchlist],
+  )
+
+  const activeIsSaved = dossier ? savedSymbols.includes(dossier.symbol) : false
+  const stale = useMemo(
+    () => updatedLabel(board?.generated_at ?? memo?.generated_at ?? monitoring?.generatedAt ?? null),
+    [board, memo, monitoring],
+  )
 
   if (!board && (boardLoading || boardFailureCount < 3)) {
     return (
@@ -321,12 +398,38 @@ export function SwingSniperShell() {
 
   return (
     <div data-testid="swing-sniper-shell" className="space-y-5">
-      <PageHeader
-        title="Swing Sniper"
-        subtitle=""
-        icon={<Radar className="h-5 w-5 text-emerald-300" strokeWidth={1.5} />}
-        actions={(
-          <div className="flex items-center gap-2">
+      <section className="glass-card-heavy rounded-[28px] border border-white/10 p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full border border-emerald-500/35 bg-emerald-500/12 p-2">
+                <Radar className="h-5 w-5 text-emerald-200" strokeWidth={1.6} />
+              </div>
+              <div>
+                <h1 className="font-[family-name:var(--font-playfair)] text-4xl tracking-[-0.04em] text-white">
+                  Swing Sniper
+                </h1>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Action-first swing ideas filtered to your mandate.
+                </p>
+              </div>
+            </div>
+
+            {board?.regime ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-champagne/35 bg-champagne/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-champagne">
+                  Regime: {board.regime.label} · {board.regime.market_posture}
+                </span>
+                {board.regime.bias ? (
+                  <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs uppercase tracking-[0.16em] text-white/65">
+                    {board.regime.bias}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             {stale ? (
               <span className="text-xs text-muted-foreground">{stale}</span>
             ) : null}
@@ -334,53 +437,50 @@ export function SwingSniperShell() {
               type="button"
               variant="outline"
               size="sm"
+              onClick={() => setMandateOpen(true)}
+              className="rounded-full border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+            >
+              <SlidersHorizontal className="mr-2 h-4 w-4" />
+              Mandate
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSavedDrawerOpen(true)}
+              className="rounded-full border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+            >
+              <BookmarkCheck className="mr-2 h-4 w-4" />
+              Saved
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => void refreshAll(true)}
-              className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+              className="rounded-full border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
             >
               <RefreshCw className={cn('mr-2 h-4 w-4', boardLoading && 'animate-spin')} />
               Refresh
             </Button>
           </div>
-        )}
-      />
+        </div>
+      </section>
 
-      <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+      <div className="grid items-start gap-5 lg:grid-cols-[312px_minmax(0,1fr)] xl:grid-cols-[312px_minmax(0,1fr)_304px]">
         <OpportunityBoard
           ideas={board?.ideas || []}
           loading={boardLoading}
           activeSymbol={activeSymbol}
           filters={filters}
-          savingPreferences={preferencesPending}
+          savedSymbols={savedSymbols}
+          savingSymbol={thesisPendingSymbol}
           onPresetChange={(preset) => setFilters((current) => ({ ...current, preset }))}
-          onRiskModeChange={(riskMode) => {
-            setFilters((current) => {
-              const nextSetups = riskMode === 'defined_risk_only'
-                ? current.preferredSetups.filter((setup) => !ADVANCED_SETUPS.has(setup))
-                : current.preferredSetups
-
-              return {
-                ...current,
-                riskMode,
-                preferredSetups: nextSetups.length > 0 ? nextSetups : [...DEFAULT_PREFERRED_SETUPS],
-              }
-            })
+          onOpenMandate={() => setMandateOpen(true)}
+          onQuickSave={(idea) => {
+            if (savedSymbols.includes(idea.symbol)) return
+            void handleSaveThesis(buildBoardThesisPayload(idea))
           }}
-          onSwingWindowChange={(swingWindow) => setFilters((current) => ({ ...current, swingWindow }))}
-          onMinScoreChange={(minScore) => setFilters((current) => ({ ...current, minScore }))}
-          onToggleSetup={(setup) => {
-            setFilters((current) => {
-              const isSelected = current.preferredSetups.includes(setup)
-              const preferredSetups = isSelected
-                ? current.preferredSetups.filter((item) => item !== setup)
-                : [...current.preferredSetups, setup]
-
-              return {
-                ...current,
-                preferredSetups,
-              }
-            })
-          }}
-          onSavePreferences={() => void handleSavePreferences()}
           onSelect={handleSelectSymbol}
         />
 
@@ -390,20 +490,89 @@ export function SwingSniperShell() {
           loading={dossierLoading}
           error={dossierError}
           activeTab={activeTab}
+          isSaved={activeIsSaved}
+          thesisPending={Boolean(dossier?.symbol && thesisPendingSymbol === dossier.symbol)}
+          watchlistPending={Boolean(dossier?.symbol && watchlistPendingSymbol === dossier.symbol)}
           onTabChange={setActiveTab}
-          onSaveThesis={() => void handleSaveThesis()}
-          onAddToWatchlist={() => void handleSaveThesis()}
-          savePending={savePending}
+          onSaveThesis={() => {
+            if (!dossier) return
+            void handleSaveThesis(buildDossierThesisPayload(dossier))
+          }}
+          onRemoveThesis={() => {
+            if (!dossier) return
+            void handleRemoveThesis(dossier.symbol)
+          }}
+          onAddToWatchlist={() => void handleAddToWatchlist()}
         />
 
         <div className="lg:col-span-2 xl:col-span-1">
           <SwingSniperMemoRail
             memo={memo}
-            memoLoading={memoLoading}
+            memoLoading={memoLoading || monitoringLoading}
             monitoring={monitoring}
+            savedTheses={watchlist?.savedTheses || []}
+            activeSymbol={activeSymbol}
+            onOpenSavedTheses={() => setSavedDrawerOpen(true)}
+            onOpenSymbol={(symbol) => handleSelectSymbol(symbol)}
           />
         </div>
       </div>
+
+      <MandateDrawer
+        open={mandateOpen}
+        onOpenChange={setMandateOpen}
+        filters={filters}
+        saving={preferencesPending}
+        onRiskModeChange={(riskMode) => {
+          setFilters((current) => {
+            const nextSetups = riskMode === 'defined_risk_only'
+              ? current.preferredSetups.filter((setup) => !ADVANCED_SETUPS.has(setup))
+              : current.preferredSetups
+
+            return {
+              ...current,
+              riskMode,
+              preferredSetups: nextSetups.length > 0 ? nextSetups : [...DEFAULT_PREFERRED_SETUPS],
+            }
+          })
+        }}
+        onSwingWindowChange={(swingWindow) => setFilters((current) => ({ ...current, swingWindow }))}
+        onMinScoreChange={(minScore) => setFilters((current) => ({ ...current, minScore }))}
+        onToggleSetup={(setup) => {
+          setFilters((current) => {
+            const isSelected = current.preferredSetups.includes(setup)
+            const preferredSetups = isSelected
+              ? current.preferredSetups.filter((item) => item !== setup)
+              : [...current.preferredSetups, setup]
+
+            return {
+              ...current,
+              preferredSetups,
+            }
+          })
+        }}
+        onSave={() => void handleSavePreferences()}
+      />
+
+      <SavedThesesDrawer
+        open={savedDrawerOpen}
+        onOpenChange={setSavedDrawerOpen}
+        savedTheses={watchlist?.savedTheses || []}
+        monitoring={monitoring}
+        activeSymbol={activeSymbol}
+        pendingSymbol={thesisPendingSymbol}
+        onOpenSymbol={(symbol) => {
+          handleSelectSymbol(symbol)
+          setSavedDrawerOpen(false)
+        }}
+        onRemoveSymbol={(symbol) => void handleRemoveThesis(symbol)}
+      />
+
+      {watchlistPendingSymbol ? (
+        <div className="sr-only" aria-live="polite">
+          Added {watchlistPendingSymbol} to the watchlist.
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -568,6 +568,36 @@ describe('Swing Sniper Route', () => {
     }));
   });
 
+  it('removes a saved thesis for an authenticated member', async () => {
+    mockSaveWatchlistState.mockResolvedValue({
+      symbols: ['NVDA'],
+      selectedSymbol: 'NVDA',
+      filters: {
+        preset: 'all',
+        minScore: 0,
+        riskMode: 'defined_risk_only',
+        swingWindow: 'seven_to_fourteen',
+        preferredSetups: ['call_debit_spread'],
+      },
+      savedTheses: [],
+    });
+
+    const res = await request(app)
+      .post('/api/swing-sniper/watchlist')
+      .set('Authorization', 'Bearer test-token')
+      .send({
+        selectedSymbol: 'NVDA',
+        removeThesisSymbol: 'NVDA',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockSaveWatchlistState).toHaveBeenCalledWith('member-1', expect.objectContaining({
+      selectedSymbol: 'NVDA',
+      removeThesisSymbol: 'NVDA',
+    }));
+  });
+
   it('returns structure recommendations for a symbol', async () => {
     mockBuildSwingSniperDossier.mockResolvedValue({
       symbol: 'NVDA',

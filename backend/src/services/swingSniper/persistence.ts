@@ -240,6 +240,10 @@ export async function saveSwingSniperWatchlistState(
   input: SwingSniperWatchlistUpdateInput,
 ): Promise<SwingSniperWatchlistState> {
   const existing = await getSwingSniperWatchlistState(userId);
+  const removedThesisSymbol = sanitizeSymbols(
+    input.removeThesisSymbol ? [input.removeThesisSymbol] : [],
+    1,
+  )[0] || null;
 
   const mergedSymbols = sanitizeSymbols([
     ...(input.symbols || existing.symbols),
@@ -268,6 +272,18 @@ export async function saveSwingSniperWatchlistState(
 
   if (watchlistError) {
     throw new Error(`Failed to save Swing Sniper watchlist: ${watchlistError.message}`);
+  }
+
+  if (removedThesisSymbol) {
+    const { error: removeThesisError } = await supabase
+      .from('swing_sniper_saved_theses')
+      .delete()
+      .eq('user_id', userId)
+      .eq('symbol', removedThesisSymbol);
+
+    if (removeThesisError) {
+      throw new Error(`Failed to remove Swing Sniper thesis: ${removeThesisError.message}`);
+    }
   }
 
   if (input.thesis) {

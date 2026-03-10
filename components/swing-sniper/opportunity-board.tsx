@@ -1,11 +1,10 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { SlidersHorizontal } from 'lucide-react'
+import { BookmarkPlus, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type {
   SwingSniperBoardIdea,
-  SwingSniperStructureStrategy,
   SwingSniperWatchlistPayload,
 } from '@/lib/swing-sniper/types'
 
@@ -14,39 +13,26 @@ interface OpportunityBoardProps {
   loading: boolean
   activeSymbol: string | null
   filters: SwingSniperWatchlistPayload['filters']
-  savingPreferences: boolean
+  savedSymbols: string[]
+  savingSymbol: string | null
   onPresetChange: (preset: SwingSniperWatchlistPayload['filters']['preset']) => void
-  onRiskModeChange: (riskMode: SwingSniperWatchlistPayload['filters']['riskMode']) => void
-  onSwingWindowChange: (swingWindow: SwingSniperWatchlistPayload['filters']['swingWindow']) => void
-  onMinScoreChange: (minScore: number) => void
-  onToggleSetup: (setup: SwingSniperStructureStrategy) => void
-  onSavePreferences: () => void
+  onOpenMandate: () => void
+  onQuickSave: (idea: SwingSniperBoardIdea) => void
   onSelect: (symbol: string) => void
 }
 
-const SETUP_OPTIONS: Array<{
-  value: SwingSniperStructureStrategy
-  label: string
-  tier: 'defined' | 'advanced'
-}> = [
-  { value: 'long_call', label: 'Long Call', tier: 'advanced' },
-  { value: 'long_put', label: 'Long Put', tier: 'advanced' },
-  { value: 'long_straddle', label: 'Long Straddle', tier: 'advanced' },
-  { value: 'long_strangle', label: 'Long Strangle', tier: 'advanced' },
-  { value: 'call_debit_spread', label: 'Call Debit Spread', tier: 'defined' },
-  { value: 'put_debit_spread', label: 'Put Debit Spread', tier: 'defined' },
-  { value: 'call_calendar', label: 'Call Calendar', tier: 'defined' },
-  { value: 'put_calendar', label: 'Put Calendar', tier: 'defined' },
-  { value: 'call_diagonal', label: 'Call Diagonal', tier: 'defined' },
-  { value: 'put_diagonal', label: 'Put Diagonal', tier: 'defined' },
-  { value: 'call_butterfly', label: 'Call Butterfly', tier: 'defined' },
-  { value: 'put_butterfly', label: 'Put Butterfly', tier: 'defined' },
-]
+type BoardSort = 'best_now' | 'nearest_catalyst' | 'highest_liquidity'
 
 function orcTone(score: number): string {
   if (score >= 80) return 'border-emerald-400/45 bg-emerald-500/15 text-emerald-100'
   if (score >= 60) return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200/90'
   return 'border-white/10 bg-white/[0.04] text-white/75'
+}
+
+function viewTone(view: SwingSniperBoardIdea['view']): string {
+  if (view === 'Long vol') return 'bg-emerald-400'
+  if (view === 'Short vol') return 'bg-champagne'
+  return 'bg-white/45'
 }
 
 function filterIdeas(
@@ -64,49 +50,67 @@ function filterIdeas(
   })
 }
 
+function sortIdeas(ideas: SwingSniperBoardIdea[], sortMode: BoardSort): SwingSniperBoardIdea[] {
+  const sorted = [...ideas]
+
+  if (sortMode === 'nearest_catalyst') {
+    return sorted.sort((left, right) => {
+      const leftWindow = left.window_days ?? Number.MAX_SAFE_INTEGER
+      const rightWindow = right.window_days ?? Number.MAX_SAFE_INTEGER
+      if (leftWindow !== rightWindow) return leftWindow - rightWindow
+      return right.orc_score - left.orc_score
+    })
+  }
+
+  if (sortMode === 'highest_liquidity') {
+    return sorted.sort((left, right) => {
+      if (right.factors.liquidity !== left.factors.liquidity) {
+        return right.factors.liquidity - left.factors.liquidity
+      }
+      return right.orc_score - left.orc_score
+    })
+  }
+
+  return sorted.sort((left, right) => right.orc_score - left.orc_score)
+}
+
 export function OpportunityBoard({
   ideas,
   loading,
   activeSymbol,
   filters,
-  savingPreferences,
+  savedSymbols,
+  savingSymbol,
   onPresetChange,
-  onRiskModeChange,
-  onSwingWindowChange,
-  onMinScoreChange,
-  onToggleSetup,
-  onSavePreferences,
+  onOpenMandate,
+  onQuickSave,
   onSelect,
 }: OpportunityBoardProps) {
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [sortMode, setSortMode] = useState<BoardSort>('best_now')
 
-  const filteredIdeas = useMemo(() => filterIdeas(ideas, filters), [ideas, filters])
+  const filteredIdeas = useMemo(() => {
+    return sortIdeas(filterIdeas(ideas, filters), sortMode)
+  }, [filters, ideas, sortMode])
 
   return (
-    <section className="glass-card-heavy rounded-2xl border border-white/10 p-5">
+    <section className="glass-card-heavy rounded-[28px] border border-white/10 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-champagne">Signal Board</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Ranked by vol mispricing + catalyst density + liquidity
-          </p>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-champagne">Top Opportunities</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">Ranked for your mandate across mispricing, catalyst timing, and liquidity.</p>
         </div>
+
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setSettingsOpen((open) => !open)}
-            className={cn(
-              'inline-flex items-center rounded-full border px-3 py-1 text-xs uppercase tracking-[0.14em] transition-colors',
-              settingsOpen
-                ? 'border-emerald-500/35 bg-emerald-500/12 text-emerald-100'
-                : 'border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.08]',
-            )}
+            onClick={onOpenMandate}
+            className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs uppercase tracking-[0.14em] text-white/70 transition-colors hover:bg-white/[0.08]"
           >
             <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
-            Risk settings
+            Mandate
           </button>
           <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70">
-            {ideas.length} live
+            {filteredIdeas.length} shown
           </div>
         </div>
       </div>
@@ -116,7 +120,7 @@ export function OpportunityBoard({
           ['all', 'ALL'],
           ['long_vol', 'LONG VOL'],
           ['short_vol', 'SHORT VOL'],
-          ['catalyst_dense', 'CATALYST DENSE'],
+          ['catalyst_dense', 'CATALYST'],
           ['seven_day', '7-DAY'],
         ].map(([value, label]) => (
           <button
@@ -135,175 +139,101 @@ export function OpportunityBoard({
         ))}
       </div>
 
-      {settingsOpen ? (
-        <div className="mt-4 space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Risk mode</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => onRiskModeChange('defined_risk_only')}
-                className={cn(
-                  'rounded-full border px-3 py-1 text-xs uppercase tracking-[0.14em] transition-colors',
-                  filters.riskMode === 'defined_risk_only'
-                    ? 'border-emerald-500/35 bg-emerald-500/12 text-emerald-100'
-                    : 'border-white/10 text-white/70 hover:bg-white/[0.06]',
-                )}
-              >
-                Defined risk only
-              </button>
-              <button
-                type="button"
-                onClick={() => onRiskModeChange('naked_allowed')}
-                className={cn(
-                  'rounded-full border px-3 py-1 text-xs uppercase tracking-[0.14em] transition-colors',
-                  filters.riskMode === 'naked_allowed'
-                    ? 'border-emerald-500/35 bg-emerald-500/12 text-emerald-100'
-                    : 'border-white/10 text-white/70 hover:bg-white/[0.06]',
-                )}
-              >
-                Include naked / single-leg
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Swing window</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {[
-                ['seven_to_fourteen', '7-14D'],
-                ['fourteen_to_thirty', '14-30D'],
-                ['all', 'All expiries'],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => onSwingWindowChange(value as SwingSniperWatchlistPayload['filters']['swingWindow'])}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs uppercase tracking-[0.14em] transition-colors',
-                    filters.swingWindow === value
-                      ? 'border-emerald-500/35 bg-emerald-500/12 text-emerald-100'
-                      : 'border-white/10 text-white/70 hover:bg-white/[0.06]',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Minimum ORC score</p>
-              <p className="font-mono text-xs text-white/80">{filters.minScore}</p>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={filters.minScore}
-              onChange={(event) => onMinScoreChange(Number(event.currentTarget.value))}
-              className="mt-2 w-full accent-emerald-500"
-            />
-          </div>
-
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Setup types (multi-select)</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {SETUP_OPTIONS.map((option) => {
-                const checked = filters.preferredSetups.includes(option.value)
-                const disabled = filters.riskMode === 'defined_risk_only' && option.tier === 'advanced'
-
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => !disabled && onToggleSetup(option.value)}
-                    disabled={disabled}
-                    className={cn(
-                      'rounded-full border px-3 py-1 text-xs transition-colors',
-                      checked
-                        ? 'border-emerald-500/35 bg-emerald-500/12 text-emerald-100'
-                        : 'border-white/10 text-white/75 hover:bg-white/[0.06]',
-                      disabled && 'cursor-not-allowed border-white/5 text-white/35 hover:bg-transparent',
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">Sort</p>
+        {[
+          ['best_now', 'Best now'],
+          ['nearest_catalyst', 'Nearest catalyst'],
+          ['highest_liquidity', 'Highest liquidity'],
+        ].map(([value, label]) => (
           <button
+            key={value}
             type="button"
-            onClick={onSavePreferences}
-            disabled={savingPreferences}
-            className="rounded-full border border-emerald-500/35 bg-emerald-500/12 px-4 py-1.5 text-xs uppercase tracking-[0.14em] text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+            onClick={() => setSortMode(value as BoardSort)}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs transition-colors',
+              sortMode === value
+                ? 'border-white/15 bg-white/[0.08] text-white'
+                : 'border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06]',
+            )}
           >
-            {savingPreferences ? 'Saving…' : 'Save preferences'}
+            {label}
           </button>
-        </div>
-      ) : null}
+        ))}
+      </div>
 
-      <div className="mt-4 max-h-[72vh] space-y-3 overflow-y-auto pr-1">
+      <div className="mt-5 max-h-[74vh] space-y-3 overflow-y-auto pr-1">
         {loading
-          ? Array.from({ length: 6 }, (_, index) => (
-            <div key={index} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <div className="h-6 w-24 animate-pulse rounded bg-white/10" />
-              <div className="mt-3 h-4 w-5/6 animate-pulse rounded bg-white/5" />
-              <div className="mt-2 h-4 w-2/3 animate-pulse rounded bg-white/5" />
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                <div className="h-14 animate-pulse rounded-xl border border-white/10 bg-white/[0.03]" />
-                <div className="h-14 animate-pulse rounded-xl border border-white/10 bg-white/[0.03]" />
-                <div className="h-14 animate-pulse rounded-xl border border-white/10 bg-white/[0.03]" />
-              </div>
+          ? Array.from({ length: 7 }, (_, index) => (
+            <div key={index} className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+              <div className="h-5 w-16 animate-pulse rounded bg-white/10" />
+              <div className="mt-3 h-4 w-2/3 animate-pulse rounded bg-white/5" />
+              <div className="mt-2 h-4 w-5/6 animate-pulse rounded bg-white/5" />
+              <div className="mt-4 h-8 w-full animate-pulse rounded-2xl bg-white/5" />
             </div>
           ))
-          : filteredIdeas.map((idea) => (
-            <button
-              key={idea.symbol}
-              type="button"
-              onClick={() => onSelect(idea.symbol)}
-              className={cn(
-                'w-full rounded-2xl border bg-white/[0.03] p-4 text-left transition-all duration-150',
-                activeSymbol === idea.symbol
-                  ? 'border-emerald-500/35 bg-emerald-500/[0.08] shadow-[0_0_0_1px_rgba(16,185,129,0.18)]'
-                  : 'border-white/10 hover:-translate-y-[2px] hover:border-emerald-500/25 hover:shadow-[0_12px_28px_rgba(16,185,129,0.16)]',
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-2xl font-semibold tracking-tight text-white">{idea.symbol}</h3>
-                <span className={cn('rounded-full border px-2.5 py-1 font-mono text-xs', orcTone(idea.orc_score))}>
-                  ORC {idea.orc_score}
-                </span>
-              </div>
+          : filteredIdeas.map((idea) => {
+            const isSaved = savedSymbols.includes(idea.symbol)
+            const isActive = activeSymbol === idea.symbol
 
-              <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{idea.blurb}</p>
+            return (
+              <article
+                key={idea.symbol}
+                className={cn(
+                  'rounded-[24px] border bg-white/[0.03] p-4 transition-all duration-150',
+                  isActive
+                    ? 'border-emerald-500/35 bg-emerald-500/[0.08] shadow-[0_0_0_1px_rgba(16,185,129,0.18)]'
+                    : 'border-white/10 hover:border-emerald-500/25 hover:bg-white/[0.05]',
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <button type="button" onClick={() => onSelect(idea.symbol)} className="min-w-0 flex-1 text-left">
+                    <div className="flex items-center gap-2">
+                      <span className={cn('h-2.5 w-2.5 rounded-full', viewTone(idea.view))} />
+                      <h3 className="text-xl font-semibold tracking-tight text-white">{idea.symbol}</h3>
+                      <span className={cn('rounded-full border px-2.5 py-0.5 font-mono text-[11px]', orcTone(idea.orc_score))}>
+                        ORC {idea.orc_score}
+                      </span>
+                    </div>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-xl border border-white/10 bg-[#050505] p-3">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">View</p>
-                  <p className="mt-1 text-sm font-medium text-white">{idea.view}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.14em] text-white/50">
+                      <span>{idea.view}</span>
+                      <span>{idea.catalyst_label}</span>
+                      <span>{idea.window_days == null ? 'Flexible' : `${idea.window_days}D`}</span>
+                    </div>
+
+                    <p className="mt-3 line-clamp-2 text-sm leading-6 text-white/80">{idea.blurb}</p>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/55">
+                      <span>Vol {idea.factors.volatility}</span>
+                      <span>Catalyst {idea.factors.catalyst}</span>
+                      <span>Liquidity {idea.factors.liquidity}</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onQuickSave(idea)}
+                    disabled={isSaved || savingSymbol === idea.symbol}
+                    className={cn(
+                      'inline-flex shrink-0 items-center rounded-full border px-3 py-1 text-xs uppercase tracking-[0.14em] transition-colors',
+                      isSaved
+                        ? 'cursor-default border-emerald-500/30 bg-emerald-500/12 text-emerald-100'
+                        : 'border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.08]',
+                      savingSymbol === idea.symbol && 'cursor-not-allowed opacity-70',
+                    )}
+                  >
+                    <BookmarkPlus className="mr-1.5 h-3.5 w-3.5" />
+                    {isSaved ? 'Saved' : savingSymbol === idea.symbol ? 'Saving…' : 'Save'}
+                  </button>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-[#050505] p-3">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Catalyst</p>
-                  <p className="mt-1 text-sm font-medium text-white">{idea.catalyst_label}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-[#050505] p-3">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Window</p>
-                  <p className="mt-1 text-sm font-medium text-white">
-                    {idea.window_days == null ? '--' : `${idea.window_days}D`}
-                  </p>
-                </div>
-              </div>
-            </button>
-          ))}
+              </article>
+            )
+          })}
 
         {!loading && filteredIdeas.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-muted-foreground">
-            No ideas match this filter yet.
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 text-sm text-muted-foreground">
+            No ideas match the current mandate and board filter.
           </div>
         ) : null}
       </div>

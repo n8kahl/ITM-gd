@@ -249,6 +249,7 @@ export interface SwingSniperWatchlistSavePayload {
   selectedSymbol?: string | null
   symbols?: string[]
   filters?: Partial<SwingSniperWatchlistPayload['filters']>
+  removeThesisSymbol?: string | null
   thesis?: {
     symbol: string
     score: number | null
