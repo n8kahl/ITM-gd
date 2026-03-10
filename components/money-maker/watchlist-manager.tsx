@@ -4,6 +4,9 @@ import { Plus, X, Search, Settings2 } from 'lucide-react'
 import { useMoneyMaker } from './money-maker-provider'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
+const WATCHLIST_ENDPOINT = '/api/members/money-maker/watchlist'
+const SYMBOL_REGEX = /^[A-Z0-9._:-]{1,10}$/
+
 export function WatchlistManager() {
     const { session } = useMemberAuth()
     const { state, setSymbols } = useMoneyMaker()
@@ -12,13 +15,13 @@ export function WatchlistManager() {
     const [newSymbol, setNewSymbol] = useState('')
 
     const handleSave = async (updatedSymbols: string[]) => {
-        // Optimistic UI
+        const previousSymbols = symbols
         setSymbols(updatedSymbols)
 
-        // Server Sync
         if (!session?.access_token) return
+
         try {
-            await fetch('/api/money-maker/watchlist', {
+            const response = await fetch(WATCHLIST_ENDPOINT, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -26,7 +29,12 @@ export function WatchlistManager() {
                 },
                 body: JSON.stringify({ symbols: updatedSymbols })
             })
+
+            if (!response.ok) {
+                throw new Error('Failed to save watchlist')
+            }
         } catch (err) {
+            setSymbols(previousSymbols)
             console.error('Failed to save watchlist:', err)
         }
     }
@@ -36,6 +44,10 @@ export function WatchlistManager() {
         if (!clean) return
         if (symbols.length >= 5) {
             alert('Maximum 5 symbols allowed')
+            return
+        }
+        if (!SYMBOL_REGEX.test(clean)) {
+            alert('Enter a valid ticker symbol')
             return
         }
         if (symbols.includes(clean)) {
