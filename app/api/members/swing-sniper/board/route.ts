@@ -4,18 +4,13 @@ import { authorizeSwingSniperMemberRequest } from '@/app/api/members/swing-snipe
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ symbol: string }> },
-) {
+export async function GET(request: Request) {
   const denied = await authorizeSwingSniperMemberRequest()
   if (denied) return denied
 
-  const { symbol } = await params
-
   return proxyAICoachGet(
     request,
-    `/api/swing-sniper/dossier/${encodeURIComponent(symbol)}`,
+    '/api/swing-sniper/board',
     'Market data is temporarily unavailable.',
   )
 }

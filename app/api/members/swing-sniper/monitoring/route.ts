@@ -11,6 +11,6 @@ export async function GET(request: Request) {
   return proxyAICoachGet(
     request,
     '/api/swing-sniper/monitoring',
-    'Unable to reach the Swing Sniper monitoring endpoint.',
+    'Market data is temporarily unavailable.',
   )
 }

@@ -355,12 +355,8 @@ function normalizeLegs(legs: OptionLegPlan[]): SwingSniperStructureLeg[] {
 
 function classifyDirectionFit(direction: SwingSniperDirection, strategy: SwingSniperStructureStrategy): number {
   const longVolStrategies = new Set<SwingSniperStructureStrategy>([
-    'long_call',
-    'long_put',
     'call_debit_spread',
     'put_debit_spread',
-    'long_straddle',
-    'long_strangle',
     'call_calendar',
     'put_calendar',
     'call_diagonal',
@@ -370,10 +366,10 @@ function classifyDirectionFit(direction: SwingSniperDirection, strategy: SwingSn
   ]);
 
   const shortVolStrategies = new Set<SwingSniperStructureStrategy>([
-    'call_credit_spread',
-    'put_credit_spread',
     'call_butterfly',
     'put_butterfly',
+    'call_debit_spread',
+    'put_debit_spread',
   ]);
 
   if (direction === 'long_vol') {
@@ -471,54 +467,6 @@ function finalizePlan(
   return recommendation;
 }
 
-function buildLongCallPlan(context: StrategyContext): StructurePlan | null {
-  const buyCall = pickClosestContract(context.nearCalls, context.spotPrice * 1.02);
-  if (!buyCall) return null;
-
-  return {
-    id: `long-call-${buyCall.expiry}-${buyCall.strike}`,
-    strategy: 'long_call',
-    strategyLabel: 'Long Call',
-    rankingBoost: context.direction === 'long_vol' ? 10 : 2,
-    entryWindow: context.catalystDaysUntil != null && context.catalystDaysUntil <= 14
-      ? 'Scale in 5-10 trading days before the catalyst while IV remains below the 20D RV benchmark.'
-      : 'Enter on pullbacks while front-vol remains discounted versus realized movement.',
-    invalidation: 'Cut size if IV reprices sharply before price momentum confirms, or if the underlying breaks key support with no vol follow-through.',
-    whyThisStructure: [
-      'Direct convex upside participation while keeping risk fully predefined to premium paid.',
-      'Works best when volatility is cheap and catalyst timing can trigger repricing.',
-    ],
-    risks: [
-      'Theta decay accelerates if the catalyst drifts or the tape stalls.',
-      'A pre-event IV spike can reduce edge quality before entry.',
-    ],
-    legs: [{ label: 'Long call', side: 'buy', quantity: 1, contract: buyCall }],
-  };
-}
-
-function buildLongPutPlan(context: StrategyContext): StructurePlan | null {
-  const buyPut = pickClosestContract(context.nearPuts, context.spotPrice * 0.98);
-  if (!buyPut) return null;
-
-  return {
-    id: `long-put-${buyPut.expiry}-${buyPut.strike}`,
-    strategy: 'long_put',
-    strategyLabel: 'Long Put',
-    rankingBoost: context.skewDirection === 'put_heavy' ? 8 : 3,
-    entryWindow: 'Enter when downside momentum confirms and vol is not yet overpaying for crash protection.',
-    invalidation: 'Avoid if downside skew becomes too expensive before entry or if macro catalysts resolve benignly.',
-    whyThisStructure: [
-      'Provides directional downside convexity with fixed premium risk.',
-      'Useful when skew and catalyst stack signal asymmetric downside movement.',
-    ],
-    risks: [
-      'Can underperform if the move is slow and theta dominates.',
-      'Put skew crowding can degrade reward-to-risk if entered late.',
-    ],
-    legs: [{ label: 'Long put', side: 'buy', quantity: 1, contract: buyPut }],
-  };
-}
-
 function buildCallDebitSpreadPlan(context: StrategyContext): StructurePlan | null {
   const buyCall = pickClosestContract(context.nearCalls, context.spotPrice * 1.0);
   if (!buyCall) return null;
@@ -577,126 +525,6 @@ function buildPutDebitSpreadPlan(context: StrategyContext): StructurePlan | null
     legs: [
       { label: 'Buy put', side: 'buy', quantity: 1, contract: buyPut },
       { label: 'Sell put', side: 'sell', quantity: 1, contract: sellPut },
-    ],
-  };
-}
-
-function buildCallCreditSpreadPlan(context: StrategyContext): StructurePlan | null {
-  const sellCall = pickClosestContract(context.nearCalls, context.spotPrice * 1.05, {
-    minStrike: context.spotPrice,
-  });
-  if (!sellCall) return null;
-
-  const buyCall = pickClosestContract(context.nearCalls, sellCall.strike + Math.max(1, context.spotPrice * 0.03), {
-    minStrike: sellCall.strike + Math.max(1, context.spotPrice * 0.01),
-  });
-  if (!buyCall) return null;
-
-  return {
-    id: `call-credit-${sellCall.expiry}-${sellCall.strike}-${buyCall.strike}`,
-    strategy: 'call_credit_spread',
-    strategyLabel: 'Call Credit Spread',
-    rankingBoost: context.direction === 'short_vol' ? 11 : 3,
-    entryWindow: 'Best staged after event vol inflation when upside breakouts are fading and premium is rich.',
-    invalidation: 'Exit if underlying reclaims trend highs with expanding realized volatility.',
-    whyThisStructure: [
-      'Collects premium with defined upside risk.',
-      'Fits elevated-IV regimes where realized follow-through is likely to mean-revert.',
-    ],
-    risks: [
-      'Upside surprise moves can challenge the short strike quickly.',
-      'Pin risk increases near expiration.',
-    ],
-    legs: [
-      { label: 'Sell call', side: 'sell', quantity: 1, contract: sellCall },
-      { label: 'Buy call', side: 'buy', quantity: 1, contract: buyCall },
-    ],
-  };
-}
-
-function buildPutCreditSpreadPlan(context: StrategyContext): StructurePlan | null {
-  const sellPut = pickClosestContract(context.nearPuts, context.spotPrice * 0.95, {
-    maxStrike: context.spotPrice,
-  });
-  if (!sellPut) return null;
-
-  const buyPut = pickClosestContract(context.nearPuts, sellPut.strike - Math.max(1, context.spotPrice * 0.03), {
-    maxStrike: sellPut.strike - Math.max(1, context.spotPrice * 0.01),
-  });
-  if (!buyPut) return null;
-
-  return {
-    id: `put-credit-${sellPut.expiry}-${sellPut.strike}-${buyPut.strike}`,
-    strategy: 'put_credit_spread',
-    strategyLabel: 'Put Credit Spread',
-    rankingBoost: context.direction === 'short_vol' ? 9 : 3,
-    entryWindow: 'Deploy into elevated vol when downside washout risk appears over-priced relative to realized drift.',
-    invalidation: 'Cut exposure if downside momentum accelerates with expanding breadth deterioration.',
-    whyThisStructure: [
-      'Harvests elevated premium while capping downside tail risk.',
-      'Suitable in sideways-to-up regimes after vol spikes.',
-    ],
-    risks: [
-      'Gap-down moves can approach max-loss quickly.',
-      'Assignment risk rises as short strike nears the money.',
-    ],
-    legs: [
-      { label: 'Sell put', side: 'sell', quantity: 1, contract: sellPut },
-      { label: 'Buy put', side: 'buy', quantity: 1, contract: buyPut },
-    ],
-  };
-}
-
-function buildLongStraddlePlan(context: StrategyContext): StructurePlan | null {
-  const atmCall = pickClosestContract(context.nearCalls, context.spotPrice);
-  const atmPut = pickClosestContract(context.nearPuts, context.spotPrice);
-  if (!atmCall || !atmPut) return null;
-
-  return {
-    id: `long-straddle-${atmCall.expiry}-${atmCall.strike}`,
-    strategy: 'long_straddle',
-    strategyLabel: 'Long Straddle',
-    rankingBoost: context.direction === 'long_vol' ? 12 : 3,
-    entryWindow: 'Enter only when IV remains below realized movement and catalyst compression is obvious.',
-    invalidation: 'Avoid if IV ramps sharply before event without corresponding expected move expansion.',
-    whyThisStructure: [
-      'Pure long-volatility expression that benefits from large moves in either direction.',
-      'Keeps directional bias secondary when catalyst uncertainty is high.',
-    ],
-    risks: [
-      'Highest premium burn if realized move underdelivers.',
-      'Requires meaningful move to overcome two-leg debit.',
-    ],
-    legs: [
-      { label: 'Buy call', side: 'buy', quantity: 1, contract: atmCall },
-      { label: 'Buy put', side: 'buy', quantity: 1, contract: atmPut },
-    ],
-  };
-}
-
-function buildLongStranglePlan(context: StrategyContext): StructurePlan | null {
-  const call = pickClosestContract(context.nearCalls, context.spotPrice * 1.05, { minStrike: context.spotPrice });
-  const put = pickClosestContract(context.nearPuts, context.spotPrice * 0.95, { maxStrike: context.spotPrice });
-  if (!call || !put) return null;
-
-  return {
-    id: `long-strangle-${call.expiry}-${put.strike}-${call.strike}`,
-    strategy: 'long_strangle',
-    strategyLabel: 'Long Strangle',
-    rankingBoost: context.direction === 'long_vol' ? 11 : 2,
-    entryWindow: 'Prefer when implied move is still below realized catalyst history and you want cheaper convexity than a straddle.',
-    invalidation: 'Skip if IV already prices a move larger than recent realized event ranges.',
-    whyThisStructure: [
-      'Cheaper long-vol alternative to a straddle with wider break-even zone.',
-      'Captures outsized directional breakouts without forcing a directional bet upfront.',
-    ],
-    risks: [
-      'Needs larger move than a straddle to finish profitable.',
-      'Can lose quickly in compressed post-event tape.',
-    ],
-    legs: [
-      { label: 'Buy call', side: 'buy', quantity: 1, contract: call },
-      { label: 'Buy put', side: 'buy', quantity: 1, contract: put },
     ],
   };
 }
@@ -899,14 +727,8 @@ function buildPutButterflyPlan(context: StrategyContext): StructurePlan | null {
 
 function buildStructurePlans(context: StrategyContext): StructurePlan[] {
   return [
-    buildLongCallPlan(context),
-    buildLongPutPlan(context),
     buildCallDebitSpreadPlan(context),
     buildPutDebitSpreadPlan(context),
-    buildCallCreditSpreadPlan(context),
-    buildPutCreditSpreadPlan(context),
-    buildLongStraddlePlan(context),
-    buildLongStranglePlan(context),
     buildCallCalendarPlan(context),
     buildPutCalendarPlan(context),
     buildCallDiagonalPlan(context),
@@ -971,7 +793,7 @@ export async function buildSwingSniperStructureLab(
       .slice(0, clamp(input.maxRecommendations ?? 4, 2, 8));
 
     const notes: string[] = [
-      `Evaluated ${plans.length} structure candidates across long premium, spread, calendar/diagonal, and butterfly classes.`,
+      `Evaluated ${plans.length} defined-risk candidates across debit spread, calendar, diagonal, and butterfly classes.`,
       'Contract picks are filtered by strike fit, spread quality, and open-interest/volume liquidity scoring.',
       'Scenario and payoff outputs are deterministic approximations for decision support, not execution guarantees.',
     ];

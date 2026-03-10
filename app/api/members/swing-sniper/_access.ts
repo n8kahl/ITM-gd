@@ -63,7 +63,6 @@ export async function authorizeSwingSniperMemberRequest(): Promise<NextResponse 
     {
       success: false,
       error: 'Forbidden',
-      message: 'Swing Sniper is restricted to Lead and Admin accounts.',
     },
     403,
   )

@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   return proxyAICoachGet(
     request,
     '/api/swing-sniper/watchlist',
-    'Unable to reach the Swing Sniper watchlist endpoint.',
+    'Market data is temporarily unavailable.',
   )
 }
 
@@ -22,6 +22,6 @@ export async function POST(request: Request) {
   return proxyAICoachRequest(
     request,
     '/api/swing-sniper/watchlist',
-    'Unable to save Swing Sniper watchlist state.',
+    'Unable to save your watchlist right now.',
   )
 }

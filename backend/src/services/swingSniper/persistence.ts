@@ -14,8 +14,8 @@ const DEFAULT_FILTERS: SwingSniperWatchlistFilters = {
   minScore: 0,
 };
 
-const SNAPSHOT_RETENTION_DAYS = 210;
-const SNAPSHOT_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const SNAPSHOT_RETENTION_DAYS = 90;
+const SNAPSHOT_PRUNE_INTERVAL_MS = 2 * 60 * 60 * 1000;
 const snapshotPruneLastRunByUser = new Map<string, number>();
 
 interface SaveSignalSnapshotsOptions {

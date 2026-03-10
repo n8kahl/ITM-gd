@@ -16,6 +16,6 @@ export async function GET(
   return proxyAICoachGet(
     request,
     `/api/swing-sniper/backtest/${encodeURIComponent(symbol)}`,
-    'Unable to reach the Swing Sniper backtest endpoint.',
+    'Market data is temporarily unavailable.',
   )
 }

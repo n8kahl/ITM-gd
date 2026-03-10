@@ -124,7 +124,6 @@ describe('authorizeSwingSniperMemberRequest', () => {
     expect(await denied?.json()).toEqual({
       success: false,
       error: 'Forbidden',
-      message: 'Swing Sniper is restricted to Lead and Admin accounts.',
     })
     expect(denied?.headers.get('cache-control')).toBe('no-store')
   })

@@ -181,10 +181,17 @@ function buildRiskBlock(input: {
     'Structure Lab now proposes exact contract sets with deterministic scenario and payoff context.',
   ];
 
+  const exitFramework = input.direction === 'long_vol'
+    ? 'If IV reprices materially higher before realized movement confirms, trim or close because edge transfer has already happened.'
+    : input.direction === 'short_vol'
+      ? 'If realized volatility expands through your expected range and front premium stays bid, reduce risk instead of waiting for decay.'
+      : 'Hold neutral until IV-vs-RV divergence becomes directional, then size only defined-risk structures with clear invalidation.';
+
   return {
     invalidation,
     watchItems,
     notes,
+    exitFramework,
   };
 }
 
@@ -333,6 +340,11 @@ export async function buildSwingSniperDossier(
     companyName: tickerDetails?.name || null,
     currentPrice: ivProfile.currentPrice,
     score: orc.total,
+    factors: {
+      volatility: orc.volMispricing,
+      catalyst: orc.catalystDensity,
+      liquidity: orc.liquidity,
+    },
     direction,
     setupLabel,
     expressionPreview: buildSwingSniperExpressionPreview(direction, ivProfile.skew.skewDirection),

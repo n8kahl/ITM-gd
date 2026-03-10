@@ -11,6 +11,6 @@ export async function POST(request: Request) {
   return proxyAICoachRequest(
     request,
     '/api/swing-sniper/structure/recommend',
-    'Unable to build Swing Sniper structure recommendations.',
+    'Unable to refresh structure recommendations right now.',
   )
 }

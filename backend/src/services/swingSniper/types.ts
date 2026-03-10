@@ -90,14 +90,8 @@ export interface SwingSniperCatalystDensityPoint {
 }
 
 export type SwingSniperStructureStrategy =
-  | 'long_call'
-  | 'long_put'
   | 'call_debit_spread'
   | 'put_debit_spread'
-  | 'call_credit_spread'
-  | 'put_credit_spread'
-  | 'long_straddle'
-  | 'long_strangle'
   | 'call_calendar'
   | 'put_calendar'
   | 'call_diagonal'
@@ -247,6 +241,11 @@ export interface SwingSniperDossierResponse {
   companyName: string | null;
   currentPrice: number | null;
   score: number | null;
+  factors: {
+    volatility: number;
+    catalyst: number;
+    liquidity: number;
+  };
   direction: SwingSniperDirection;
   setupLabel: string;
   expressionPreview: string;
@@ -283,6 +282,7 @@ export interface SwingSniperDossierResponse {
     invalidation: string[];
     watchItems: string[];
     notes: string[];
+    exitFramework: string;
   };
   news: Array<{
     id: string;
@@ -335,7 +335,7 @@ export interface SwingSniperBriefResponse {
 }
 
 export interface SwingSniperWatchlistFilters {
-  preset: 'all' | 'long_vol' | 'short_vol' | 'catalyst_dense';
+  preset: 'all' | 'long_vol' | 'short_vol' | 'catalyst_dense' | 'seven_day';
   minScore: number;
 }
 

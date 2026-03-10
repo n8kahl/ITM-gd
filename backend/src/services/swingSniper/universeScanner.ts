@@ -236,10 +236,10 @@ export function buildSwingSniperExpressionPreview(
   skewDirection: SwingSniperOpportunity['skewDirection'],
 ): string {
   if (direction === 'long_vol') {
-    return skewDirection === 'call_heavy' ? 'Call diagonal / call spread compare' : 'Calendar / strangle compare';
+    return skewDirection === 'call_heavy' ? 'Call diagonal / call debit spread compare' : 'Calendar / butterfly compare';
   }
   if (direction === 'short_vol') {
-    return 'Defined-risk premium sale after event';
+    return 'Defined-risk butterflies after event premium expansion';
   }
   return 'Wait for cleaner vol edge';
 }
