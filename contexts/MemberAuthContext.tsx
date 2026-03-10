@@ -759,31 +759,88 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const response = await fetchWithTimeout(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${sessionRef.current.access_token}`,
-            'Content-Type': 'application/json',
-          },
+      let accessToken = sessionRef.current.access_token
+      const expiresAtMs = (sessionRef.current.expires_at ?? 0) * 1000
+      const tokenNearExpiry = expiresAtMs > 0 && (expiresAtMs - Date.now()) < 60_000
+
+      if (!accessToken || tokenNearExpiry) {
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+        if (refreshError || !refreshedSession?.access_token) {
+          console.warn('Discord sync skipped: unable to refresh session token', refreshError?.message)
+          setState(prev => ({
+            ...prev,
+            error: 'Session expired. Please refresh and sign in again.',
+            errorCode: SYNC_ERROR_CODES.INVALID_SESSION,
+          }))
+          return null
         }
-      )
 
-      const result = await response.json()
-
-      if (!result.success) {
-        console.error('Discord sync failed:', result.error, 'Code:', result.code)
+        accessToken = refreshedSession.access_token
         setState(prev => ({
           ...prev,
-          error: result.error,
-          errorCode: result.code || null,
+          session: refreshedSession,
+          user: refreshedSession.user ?? prev.user,
+          isAuthenticated: true,
+        }))
+      }
+
+      const syncUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`
+      const executeSync = async (token: string) => {
+        const response = await fetchWithTimeout(
+          syncUrl,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        )
+        const result = await response.json().catch(() => ({}))
+        return { response, result }
+      }
+
+      let { response, result } = await executeSync(accessToken)
+
+      // One retry after forced refresh if token was invalidated between calls.
+      if (response.status === 401) {
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+        if (!refreshError && refreshedSession?.access_token) {
+          accessToken = refreshedSession.access_token
+          setState(prev => ({
+            ...prev,
+            session: refreshedSession,
+            user: refreshedSession.user ?? prev.user,
+            isAuthenticated: true,
+          }))
+          ;({ response, result } = await executeSync(accessToken))
+        }
+      }
+
+      if (!response.ok || !result?.success) {
+        const errorMessage = typeof result?.error === 'string'
+          ? result.error
+          : (response.status === 401
+            ? 'Session expired while syncing Discord roles. Please sign in again.'
+            : `Discord sync failed (${response.status})`)
+        const errorCode = (
+          typeof result?.code === 'string'
+            ? result.code
+            : (response.status === 401 ? SYNC_ERROR_CODES.INVALID_SESSION : SYNC_ERROR_CODES.SYNC_FAILED)
+        ) as SyncErrorCode
+
+        console.warn('Discord sync failed:', errorMessage, 'Code:', errorCode, 'Status:', response.status)
+        setState(prev => ({
+          ...prev,
+          error: errorMessage,
+          errorCode,
         }))
         return null
       }
 
       // Extract role IDs for tier determination (not names)
-      const roleIds = result.roles.map((r: { id: string; name: string | null }) => r.id)
+      const roles = Array.isArray(result.roles) ? result.roles : []
+      const roleIds = roles.map((r: { id: string; name: string | null }) => r.id)
       const roleTitleMap = buildRoleTitleMapFromSyncResult(result)
       const isAdmin = isAdminRef.current
 
@@ -800,7 +857,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         role: isAdmin ? 'admin' : null,
       }
 
-      const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
+      const permissions: MemberPermission[] = (Array.isArray(result.permissions) ? result.permissions : []).map((p: any) => ({
         id: p.id,
         name: p.name,
         description: p.description,
@@ -1038,23 +1095,42 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
         try {
           const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`
+          let accessToken = session.access_token
+          const executeSync = async (token: string) => {
+            const response = await fetchWithTimeout(
+              edgeFunctionUrl,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            )
 
-          const response = await fetchWithTimeout(
-            edgeFunctionUrl,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-                'Content-Type': 'application/json',
-              },
+            const result = await response.json().catch(() => ({}))
+            return { response, result }
+          }
+
+          let { response, result } = await executeSync(accessToken)
+
+          if (response.status === 401) {
+            const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+            if (!refreshError && refreshedSession?.access_token) {
+              accessToken = refreshedSession.access_token
+              setState(prev => ({
+                ...prev,
+                session: refreshedSession,
+                user: refreshedSession.user ?? prev.user,
+                isAuthenticated: true,
+              }))
+              ;({ response, result } = await executeSync(accessToken))
             }
-          )
+          }
 
-          const result = await response.json()
-
-          if (result.success) {
+          if (response.ok && result?.success) {
             // Use role IDs for tier determination
-            const roleIds = result.roles.map((r: { id: string; name: string | null }) => r.id)
+            const roleIds = (Array.isArray(result.roles) ? result.roles : []).map((r: { id: string; name: string | null }) => r.id)
             const roleTitleMap = buildRoleTitleMapFromSyncResult(result)
 
             const profile: MemberProfile = {
@@ -1105,8 +1181,16 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
               ...prev,
               profile,
               isLoading: false,
-              error: result.error || 'Failed to sync Discord roles',
-              errorCode: result.code || null,
+              error: typeof result?.error === 'string'
+                ? result.error
+                : (response.status === 401
+                  ? 'Session expired while syncing Discord roles. Please sign in again.'
+                  : 'Failed to sync Discord roles'),
+              errorCode: (
+                typeof result?.code === 'string'
+                  ? result.code
+                  : (response.status === 401 ? SYNC_ERROR_CODES.INVALID_SESSION : SYNC_ERROR_CODES.SYNC_FAILED)
+              ) as SyncErrorCode,
             }))
           }
         } catch (syncError) {

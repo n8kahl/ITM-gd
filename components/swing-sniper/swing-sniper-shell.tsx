@@ -1,6 +1,6 @@
 'use client'
 
-import { startTransition, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookmarkCheck, Radar, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -135,6 +135,9 @@ export function SwingSniperShell() {
     swingWindow: 'seven_to_fourteen',
     preferredSetups: [...DEFAULT_PREFERRED_SETUPS],
   })
+  const dossierCacheRef = useRef(new Map<string, SwingSniperDossierPayload>())
+  const activeSymbolRef = useRef<string | null>(null)
+  const dossierRequestIdRef = useRef(0)
 
   const loadBoard = useCallback(async (refresh: boolean = false) => {
     if (!board) setBoardLoading(true)
@@ -190,9 +193,30 @@ export function SwingSniperShell() {
     }
   }, [])
 
-  const loadDossier = useCallback(async (symbol: string) => {
-    setDossierLoading(true)
-    setDossierError(false)
+  const loadDossier = useCallback(async (
+    symbol: string,
+    options?: {
+      force?: boolean
+      prefetch?: boolean
+    },
+  ) => {
+    const cached = dossierCacheRef.current.get(symbol)
+
+    if (cached && !options?.force) {
+      if (!options?.prefetch) {
+        setDossier(cached)
+        setDossierError(false)
+        setDossierLoading(false)
+      }
+      return cached
+    }
+
+    const requestId = options?.prefetch ? dossierRequestIdRef.current : dossierRequestIdRef.current + 1
+    if (!options?.prefetch) {
+      dossierRequestIdRef.current = requestId
+      setDossierLoading(true)
+      setDossierError(false)
+    }
 
     try {
       const response = await fetch(`/api/members/swing-sniper/dossier/${encodeURIComponent(symbol)}`, {
@@ -205,23 +229,42 @@ export function SwingSniperShell() {
       }
 
       const payload = await response.json() as SwingSniperDossierPayload
-      setDossier(payload)
+      dossierCacheRef.current.set(symbol, payload)
+
+      if (!options?.prefetch && requestId === dossierRequestIdRef.current && activeSymbolRef.current === symbol) {
+        setDossier(payload)
+      }
+
+      return payload
     } catch {
-      setDossier(null)
-      setDossierError(true)
+      if (!options?.prefetch && requestId === dossierRequestIdRef.current && activeSymbolRef.current === symbol) {
+        if (!cached) {
+          setDossier(null)
+        }
+        setDossierError(true)
+      }
+
+      return null
     } finally {
-      setDossierLoading(false)
+      if (!options?.prefetch && requestId === dossierRequestIdRef.current && activeSymbolRef.current === symbol) {
+        setDossierLoading(false)
+      }
     }
   }, [])
 
   const refreshAll = useCallback(async (refreshBoard: boolean = false) => {
+    if (refreshBoard) {
+      dossierCacheRef.current.clear()
+    }
+
     await Promise.all([
       loadBoard(refreshBoard),
       loadMemo(),
       loadMonitoring(),
       loadWatchlist(),
+      activeSymbol ? loadDossier(activeSymbol, { force: refreshBoard }) : Promise.resolve(null),
     ])
-  }, [loadBoard, loadMemo, loadMonitoring, loadWatchlist])
+  }, [activeSymbol, loadBoard, loadDossier, loadMemo, loadMonitoring, loadWatchlist])
 
   const persistWatchlistUpdate = useCallback(async (
     payload: SwingSniperWatchlistSavePayload,
@@ -250,7 +293,7 @@ export function SwingSniperShell() {
     const nextTasks: Promise<unknown>[] = []
     if (options?.reloadMemo) nextTasks.push(loadMemo())
     if (options?.reloadMonitoring) nextTasks.push(loadMonitoring())
-    if (options?.reloadDossier && activeSymbol) nextTasks.push(loadDossier(activeSymbol))
+    if (options?.reloadDossier && activeSymbol) nextTasks.push(loadDossier(activeSymbol, { force: true }))
     if (nextTasks.length > 0) {
       await Promise.all(nextTasks)
     }
@@ -279,16 +322,32 @@ export function SwingSniperShell() {
   }, [activeSymbol, board, watchlist])
 
   useEffect(() => {
+    activeSymbolRef.current = activeSymbol
+  }, [activeSymbol])
+
+  useEffect(() => {
     if (!activeSymbol) return
     void loadDossier(activeSymbol)
   }, [activeSymbol, loadDossier])
 
+  useEffect(() => {
+    if (!board?.ideas.length) return
+
+    const symbolsToPrefetch = board.ideas
+      .slice(0, 5)
+      .map((idea) => idea.symbol)
+      .filter((symbol) => symbol !== activeSymbol && !dossierCacheRef.current.has(symbol))
+
+    symbolsToPrefetch.forEach((symbol) => {
+      void loadDossier(symbol, { prefetch: true })
+    })
+  }, [activeSymbol, board, loadDossier])
+
   const handleSelectSymbol = (symbol: string) => {
+    if (symbol === activeSymbol) return
     setActiveTab('Thesis')
     setWatchlist((current) => current ? { ...current, selectedSymbol: symbol } : current)
-    startTransition(() => {
-      setActiveSymbol(symbol)
-    })
+    setActiveSymbol(symbol)
   }
 
   const handleSaveThesis = useCallback(async (thesisPayload: SavedThesisPayload) => {
@@ -486,6 +545,7 @@ export function SwingSniperShell() {
 
         <DossierPanel
           dossier={dossier}
+          selectedSymbol={activeSymbol}
           monitoring={monitoring}
           loading={dossierLoading}
           error={dossierError}

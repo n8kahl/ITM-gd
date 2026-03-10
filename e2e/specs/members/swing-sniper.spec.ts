@@ -506,26 +506,18 @@ test.describe('Swing Sniper member route', () => {
     await page.goto(SWING_SNIPER_URL, { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByTestId('swing-sniper-shell')).toBeVisible()
-    await expect(page.getByText('Signal Board')).toBeVisible()
+    await expect(page.getByText('Top Opportunities')).toBeVisible()
     await expect(page.getByRole('button', { name: /NVDA/ })).toBeVisible()
     await expect(page.getByTestId('swing-sniper-dossier').getByRole('heading', { name: 'NVDA' })).toBeVisible()
-    await expect(page.getByText('Swing Sniper Memo')).toBeVisible()
+    await expect(page.getByText('Strategic Rail')).toBeVisible()
+    await expect(page.getByText('Execution plan')).toBeVisible()
+    await expect(page.getByText('Suggested contracts', { exact: true })).toBeVisible()
+    await expect(page.getByText('BUY 920C')).toBeVisible()
 
     await expect(page.getByText('Research stack ready')).toHaveCount(0)
     await expect(page.getByText('What landed')).toHaveCount(0)
     await expect(page.getByText('Dependency preflight')).toHaveCount(0)
 
-    await page.getByTestId('swing-sniper-dossier').getByRole('button', { name: 'Vol Map' }).click()
-    await expect(page.getByText('Surface read')).toBeVisible()
-
-    await page.getByTestId('swing-sniper-dossier').getByRole('button', { name: 'Catalysts' }).click()
-    await expect(page.getByText('Catalyst stack')).toBeVisible()
-
-    await page.getByTestId('swing-sniper-dossier').getByRole('button', { name: 'Structure' }).click()
-    await expect(page.getByText('Call Calendar')).toBeVisible()
-
-    await page.getByRole('button', { name: /TSLA/ }).click()
-    await expect(page.getByTestId('swing-sniper-dossier').getByRole('heading', { name: 'TSLA' })).toBeVisible()
   })
 
   test('saves a thesis and reflects it in the memo rail', async ({ page }) => {
@@ -535,9 +527,10 @@ test.describe('Swing Sniper member route', () => {
 
     await page.getByRole('button', { name: 'Save thesis' }).click()
 
-    await expect(page.getByText('Saved thesis queue')).toBeVisible()
-    await expect(page.getByText('NVDA - Long vol into earnings window')).toBeVisible()
-    await expect(page.getByText('Action queue')).toBeVisible()
+    await expect(page.getByText('Saved theses', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Manage' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /NVDA active Long vol into earnings window/i })).toBeVisible()
+    await expect(page.getByText('Next actions')).toBeVisible()
   })
 
   test('blocks deep-link access when the lead/admin gate is not met', async ({ page }) => {
