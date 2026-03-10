@@ -14,6 +14,15 @@ const DEFAULT_FILTERS: SwingSniperWatchlistFilters = {
   minScore: 0,
 };
 
+const SNAPSHOT_RETENTION_DAYS = 210;
+const SNAPSHOT_PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const snapshotPruneLastRunByUser = new Map<string, number>();
+
+interface SaveSignalSnapshotsOptions {
+  ignoreDuplicates?: boolean;
+  prune?: boolean;
+}
+
 interface SwingSniperWatchlistRow {
   user_id: string;
   symbols: string[] | null;
@@ -90,6 +99,14 @@ function toDateOnly(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 10);
   return parsed.toISOString().slice(0, 10);
+}
+
+function shouldPruneSnapshotsForUser(userId: string): boolean {
+  const now = Date.now();
+  const previousRun = snapshotPruneLastRunByUser.get(userId) || 0;
+  if (now - previousRun < SNAPSHOT_PRUNE_INTERVAL_MS) return false;
+  snapshotPruneLastRunByUser.set(userId, now);
+  return true;
 }
 
 function toSignalSnapshotRecord(row: SwingSniperSignalSnapshotRow): SwingSniperSignalSnapshotRecord {
@@ -213,6 +230,7 @@ export async function saveSwingSniperWatchlistState(
 export async function saveSwingSniperSignalSnapshots(
   userId: string,
   snapshots: SwingSniperSignalSnapshotInput[],
+  options?: SaveSignalSnapshotsOptions,
 ): Promise<void> {
   if (snapshots.length === 0) return;
 
@@ -255,10 +273,22 @@ export async function saveSwingSniperSignalSnapshots(
     .from('swing_sniper_signal_snapshots')
     .upsert(rows, {
       onConflict: 'user_id,symbol,as_of_date',
+      ignoreDuplicates: options?.ignoreDuplicates ?? false,
     });
 
   if (error) {
     throw new Error(`Failed to persist Swing Sniper signal snapshots: ${error.message}`);
+  }
+
+  if (options?.prune && shouldPruneSnapshotsForUser(userId)) {
+    const cutoffDate = new Date(Date.now() - (SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000))
+      .toISOString()
+      .slice(0, 10);
+    await supabase
+      .from('swing_sniper_signal_snapshots')
+      .delete()
+      .eq('user_id', userId)
+      .lt('as_of_date', cutoffDate);
   }
 }
 
@@ -281,6 +311,33 @@ export async function listSwingSniperSignalSnapshots(
 
   if (error) {
     throw new Error(`Failed to load Swing Sniper signal snapshots: ${error.message}`);
+  }
+
+  return ((data || []) as SwingSniperSignalSnapshotRow[]).map(toSignalSnapshotRecord);
+}
+
+export async function listSwingSniperRecentUniverseSnapshots(
+  userId: string,
+  lookbackDays: number = 14,
+  limit: number = 320,
+): Promise<SwingSniperSignalSnapshotRecord[]> {
+  const safeLookback = Math.max(3, Math.min(30, Math.floor(lookbackDays)));
+  const safeLimit = Math.max(20, Math.min(500, Math.floor(limit)));
+  const cutoffDate = new Date(Date.now() - (safeLookback * 24 * 60 * 60 * 1000))
+    .toISOString()
+    .slice(0, 10);
+
+  const { data, error } = await supabase
+    .from('swing_sniper_signal_snapshots')
+    .select('symbol, as_of, as_of_date, captured_from, score, direction, setup_label, thesis, current_price, current_iv, realized_vol20, iv_rank, iv_percentile, iv_vs_rv_gap, catalyst_date, catalyst_days_until, snapshot, created_at')
+    .eq('user_id', userId)
+    .eq('captured_from', 'universe')
+    .gte('as_of_date', cutoffDate)
+    .order('as_of', { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    throw new Error(`Failed to load recent Swing Sniper universe snapshots: ${error.message}`);
   }
 
   return ((data || []) as SwingSniperSignalSnapshotRow[]).map(toSignalSnapshotRecord);

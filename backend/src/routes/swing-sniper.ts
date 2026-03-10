@@ -1,5 +1,7 @@
 import axios from 'axios';
+import { createHash } from 'crypto';
 import { Router, type Request, type Response } from 'express';
+import { cacheDelete, cacheGet, cacheSet } from '../config/redis';
 import { massiveClient } from '../config/massive';
 import { sanitizeSymbols } from '../lib/symbols';
 import { logger } from '../lib/logger';
@@ -30,6 +32,9 @@ import type { SwingSniperWatchlistUpdateInput } from '../services/swingSniper/ty
 const router = Router();
 const SWING_SNIPER_HEALTH_TIMEOUT_MS = 4500;
 const SWING_SNIPER_LAUNCH_UNIVERSE_TARGET = 150;
+const SWING_SNIPER_UNIVERSE_CACHE_TTL_SECONDS = 8 * 60;
+const SWING_SNIPER_BRIEF_CACHE_TTL_SECONDS = 5 * 60;
+const SWING_SNIPER_MONITORING_CACHE_TTL_SECONDS = 4 * 60;
 
 type DependencyStatus = 'ready' | 'degraded' | 'blocked' | 'optional';
 
@@ -84,6 +89,14 @@ function getAxiosMessage(error: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+function toCacheKey(key: string, suffix: string): string {
+  return `swing-sniper:${key}:${suffix}`;
+}
+
+function hashSymbols(symbols: string[]): string {
+  return createHash('sha1').update(symbols.join(',')).digest('hex').slice(0, 12);
 }
 
 async function probeMarketStatus(): Promise<HealthDependency> {
@@ -294,7 +307,16 @@ router.get('/health', authenticateToken, async (_req: Request, res: Response) =>
 
 router.get('/brief', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const payload = await buildSwingSniperBrief(req.user!.id);
+    const userId = req.user!.id;
+    const cacheKey = toCacheKey('brief', userId);
+    const cached = await cacheGet<Awaited<ReturnType<typeof buildSwingSniperBrief>>>(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
+    const payload = await buildSwingSniperBrief(userId);
+    await cacheSet(cacheKey, payload, SWING_SNIPER_BRIEF_CACHE_TTL_SECONDS);
     res.json(payload);
   } catch (error) {
     logger.error('Failed to build Swing Sniper brief', {
@@ -314,25 +336,47 @@ router.get(
   validateQuery(swingSniperUniverseQuerySchema),
   async (req: Request, res: Response) => {
     try {
-      const validated = (req as unknown as { validatedQuery: { symbols: string[] } }).validatedQuery;
-      const watchlistState = await getSwingSniperWatchlistState(req.user!.id);
-      const requestedSymbols = sanitizeSymbols(validated.symbols || [], 30);
+      const userId = req.user!.id;
+      const validated = (req as unknown as {
+        validatedQuery: {
+          symbols: string[];
+          limit: number;
+          refresh: boolean;
+        };
+      }).validatedQuery;
+
+      const watchlistState = await getSwingSniperWatchlistState(userId);
+      const scanLimit = Math.max(25, Math.min(SWING_SNIPER_LAUNCH_UNIVERSE_TARGET, validated.limit || SWING_SNIPER_LAUNCH_UNIVERSE_TARGET));
+      const requestedSymbols = sanitizeSymbols(validated.symbols || [], scanLimit);
       const universeSymbols = requestedSymbols.length > 0
         ? requestedSymbols
         : sanitizeSymbols([
           ...SWING_SNIPER_CORE_SCAN_SYMBOLS,
           ...watchlistState.symbols,
           ...watchlistState.savedTheses.map((item) => item.symbol),
-        ], 40);
+        ], scanLimit);
+
+      const symbolHash = hashSymbols(universeSymbols);
+      const cacheKey = toCacheKey('universe', `${userId}:${scanLimit}:${symbolHash}`);
+      if (!validated.refresh) {
+        const cached = await cacheGet<Awaited<ReturnType<typeof scanSwingSniperUniverse>>>(cacheKey);
+        if (cached) {
+          res.json(cached);
+          return;
+        }
+      }
 
       const payload = await scanSwingSniperUniverse(
         universeSymbols,
         watchlistState.savedTheses.map((item) => item.symbol),
+        scanLimit,
       );
+
+      await cacheSet(cacheKey, payload, SWING_SNIPER_UNIVERSE_CACHE_TTL_SECONDS);
 
       try {
         await saveSwingSniperSignalSnapshots(
-          req.user!.id,
+          userId,
           payload.opportunities.slice(0, 12).map((opportunity) => ({
             symbol: opportunity.symbol,
             asOf: opportunity.asOf,
@@ -355,12 +399,19 @@ router.get(
               expressionPreview: opportunity.expressionPreview,
               skewDirection: opportunity.skewDirection,
               termStructureShape: opportunity.termStructureShape,
+              liquidityScore: opportunity.liquidityScore,
+              liquidityTier: opportunity.liquidityTier,
+              orc: opportunity.orc,
             },
           })),
+          {
+            ignoreDuplicates: true,
+            prune: true,
+          },
         );
       } catch (snapshotError) {
         logger.warn('Failed to archive Swing Sniper universe signal snapshot', {
-          userId: req.user?.id,
+          userId,
           error: snapshotError instanceof Error ? snapshotError.message : String(snapshotError),
         });
       }
@@ -426,7 +477,16 @@ router.post(
 
 router.get('/monitoring', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const payload = await buildSwingSniperRiskSentinel(req.user!.id);
+    const userId = req.user!.id;
+    const cacheKey = toCacheKey('monitoring', userId);
+    const cached = await cacheGet<Awaited<ReturnType<typeof buildSwingSniperRiskSentinel>>>(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
+    const payload = await buildSwingSniperRiskSentinel(userId);
+    await cacheSet(cacheKey, payload, SWING_SNIPER_MONITORING_CACHE_TTL_SECONDS);
     res.json(payload);
   } catch (error) {
     logger.error('Failed to build Swing Sniper monitoring payload', {
@@ -549,8 +609,9 @@ router.post(
   validateBody(swingSniperWatchlistBodySchema),
   async (req: Request, res: Response) => {
     try {
+      const userId = req.user!.id;
       const payload = (req as unknown as { validatedBody: SwingSniperWatchlistUpdateInput }).validatedBody;
-      const saved = await saveSwingSniperWatchlistState(req.user!.id, {
+      const saved = await saveSwingSniperWatchlistState(userId, {
         ...payload,
         symbols: payload.symbols ? sanitizeSymbols(payload.symbols, 50) : undefined,
         selectedSymbol: payload.selectedSymbol ? sanitizeSymbols([payload.selectedSymbol], 1)[0] || null : payload.selectedSymbol,
@@ -561,6 +622,11 @@ router.post(
           }
           : undefined,
       });
+
+      await Promise.all([
+        cacheDelete(toCacheKey('brief', userId)),
+        cacheDelete(toCacheKey('monitoring', userId)),
+      ]);
 
       res.json({
         success: true,

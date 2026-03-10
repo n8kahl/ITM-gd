@@ -17,6 +17,8 @@ import type {
 } from './types';
 import { buildEdgeState, clamp, round } from './utils';
 
+const RISK_SENTINEL_REFRESH_INTERVAL_MINUTES = 4;
+
 function toMonitoringStatus(edgeState: SwingSniperEdgeState, healthScore: number): SwingSniperMonitoringStatus {
   if (edgeState === 'invalidated' || healthScore <= 30) return 'invalidated';
   if (edgeState === 'narrowing' || healthScore <= 55) return 'degrading';
@@ -263,8 +265,15 @@ export async function buildSwingSniperRiskSentinel(userId: string): Promise<Swin
 
   if (positions.length === 0) {
     const alerts = mergeAlerts(savedThesisSnapshots, []);
+    const generatedAt = new Date().toISOString();
+    const nextEvaluationAt = new Date(Date.now() + (RISK_SENTINEL_REFRESH_INTERVAL_MINUTES * 60 * 1000)).toISOString();
     return {
-      generatedAt: new Date().toISOString(),
+      generatedAt,
+      cadence: {
+        mode: 'on_demand_cached',
+        refreshIntervalMinutes: RISK_SENTINEL_REFRESH_INTERVAL_MINUTES,
+        nextEvaluationAt,
+      },
       savedTheses: savedThesisSnapshots,
       portfolio: buildPortfolioExposureSummaryFromEmpty(),
       positionAdvice: [],
@@ -384,9 +393,16 @@ export async function buildSwingSniperRiskSentinel(userId: string): Promise<Swin
   }
 
   const alerts = mergeAlerts(savedThesisSnapshots, positionAdvice);
+  const generatedAt = new Date().toISOString();
+  const nextEvaluationAt = new Date(Date.now() + (RISK_SENTINEL_REFRESH_INTERVAL_MINUTES * 60 * 1000)).toISOString();
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt,
+    cadence: {
+      mode: 'on_demand_cached',
+      refreshIntervalMinutes: RISK_SENTINEL_REFRESH_INTERVAL_MINUTES,
+      nextEvaluationAt,
+    },
     savedTheses: savedThesisSnapshots,
     portfolio,
     positionAdvice,

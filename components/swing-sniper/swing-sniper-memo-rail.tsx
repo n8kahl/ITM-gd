@@ -85,9 +85,31 @@ export function SwingSniperMemoRail({
               </div>
               <p className="mt-3 text-sm font-medium text-white">{brief?.regime.description || 'Market memo unavailable.'}</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{brief?.memo || briefError || 'Brief data has not loaded yet.'}</p>
+              {brief?.outlook ? (
+                <div className="mt-3 rounded-xl border border-white/10 bg-[#050505] px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.14em] text-white/60">7-14d outlook</p>
+                  <p className="mt-1 text-sm text-white">{brief.outlook.summary}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Bias: {brief.outlook.bias.replace('_', ' ')} · Confidence {brief.outlook.confidence.toFixed(1)}
+                  </p>
+                </div>
+              ) : null}
             </>
           )}
         </div>
+
+        {brief?.boardThemes?.length ? (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-sm font-medium text-white">Board themes</p>
+            <div className="mt-3 space-y-2">
+              {brief.boardThemes.map((theme) => (
+                <div key={theme.key} className="rounded-xl border border-white/10 bg-[#050505] px-3 py-2 text-sm text-muted-foreground">
+                  {theme.label}: {theme.count} names · avg {theme.avgScore.toFixed(1)}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <div className="flex items-center gap-2">
@@ -151,6 +173,12 @@ export function SwingSniperMemoRail({
                   <span className="text-muted-foreground">Risk level</span>
                   <span className="font-medium text-white">{monitoring.portfolio.riskLevel}</span>
                 </div>
+                {monitoring.cadence ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Cadence</span>
+                    <span className="font-medium text-white">~{monitoring.cadence.refreshIntervalMinutes}m</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-2">

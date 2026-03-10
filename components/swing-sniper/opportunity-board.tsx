@@ -109,12 +109,12 @@ export function OpportunityBoard({
               </div>
               <div className="text-right">
                 <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs text-emerald-200">
-                  {opportunity.score}
+                  ORC {opportunity.score}
                 </span>
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <div className="mt-4 grid gap-2 sm:grid-cols-4">
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                 <div className="flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
                   <Gauge className="h-3.5 w-3.5" />
@@ -137,6 +137,17 @@ export function OpportunityBoard({
                   Expression
                 </div>
                 <p className="mt-1 font-medium text-white">{opportunity.expressionPreview}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                  <Gauge className="h-3.5 w-3.5" />
+                  Liquidity
+                </div>
+                <p className="mt-1 font-medium text-white">
+                  {opportunity.liquidityScore != null
+                    ? `${opportunity.liquidityTier || 'unknown'} (${opportunity.liquidityScore.toFixed(0)})`
+                    : 'unknown'}
+                </p>
               </div>
             </div>
 

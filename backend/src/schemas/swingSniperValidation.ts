@@ -9,10 +9,30 @@ const symbolListSchema = z.preprocess((value) => {
       .filter(Boolean);
   }
   return [];
-}, z.array(z.string().min(1).max(10)).max(50).default([]));
+}, z.array(z.string().min(1).max(10)).max(150).default([]));
+
+const scanLimitSchema = z.preprocess((value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 150;
+}, z.number().int().min(25).max(150).default(150));
+
+const refreshSchema = z.preprocess((value) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+  }
+  return false;
+}, z.boolean().default(false));
 
 export const swingSniperUniverseQuerySchema = z.object({
   symbols: symbolListSchema,
+  limit: scanLimitSchema,
+  refresh: refreshSchema,
 });
 
 export const swingSniperWatchlistBodySchema = z.object({

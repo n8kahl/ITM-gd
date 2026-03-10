@@ -38,6 +38,12 @@ export type SwingSniperExitBias = 'hold' | 'trim' | 'take_profit' | 'close' | 'r
 export interface SwingSniperOpportunity {
   symbol: string
   score: number
+  orc?: {
+    volMispricing: number
+    catalystDensity: number
+    liquidity: number
+    total: number
+  }
   direction: SwingSniperDirection
   setupLabel: string
   thesis: string
@@ -53,6 +59,8 @@ export interface SwingSniperOpportunity {
   catalystDate: string | null
   catalystDaysUntil: number | null
   catalystDensity: number
+  liquidityScore?: number | null
+  liquidityTier?: 'unknown' | 'thin' | 'adequate' | 'deep'
   narrativeMomentum: SwingSniperNarrativeMomentum
   expressionPreview: string
   reasons: string[]
@@ -63,8 +71,15 @@ export interface SwingSniperOpportunity {
 export interface SwingSniperUniversePayload {
   generatedAt: string
   universeSize: number
+  scanLimit?: number
   symbolsScanned: number
   opportunities: SwingSniperOpportunity[]
+  boardThemes?: Array<{
+    key: string
+    label: string
+    count: number
+    avgScore: number
+  }>
   notes: string[]
 }
 
@@ -249,6 +264,20 @@ export interface SwingSniperBriefPayload {
     signals: string[]
   }
   memo: string
+  boardThemes?: Array<{
+    key: string
+    label: string
+    count: number
+    avgScore: number
+  }>
+  outlook?: {
+    window: '7-14d'
+    bias: 'vol_expansion' | 'vol_compression' | 'balanced'
+    confidence: number
+    summary: string
+    catalysts: string[]
+    riskFlags: string[]
+  }
   actionQueue: string[]
   savedTheses: SwingSniperSavedThesisSnapshot[]
 }
@@ -268,6 +297,11 @@ export interface SwingSniperSavedThesisMonitoringSnapshot extends SwingSniperSav
 
 export interface SwingSniperMonitoringPayload {
   generatedAt: string
+  cadence?: {
+    mode: 'on_demand_cached'
+    refreshIntervalMinutes: number
+    nextEvaluationAt: string
+  }
   savedTheses: SwingSniperSavedThesisMonitoringSnapshot[]
   portfolio: {
     openPositions: number

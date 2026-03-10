@@ -247,13 +247,14 @@ export async function buildSwingSniperDossier(
     return delta >= 0 && delta <= 10;
   }).length;
   const catalystDensity = macroDensity + (earningsDaysUntil != null && earningsDaysUntil <= 14 ? 1 : 0);
-  const score = scoreSwingSniperOpportunity({
+  const orc = scoreSwingSniperOpportunity({
     ivVsRvGap,
     ivRank: ivProfile.ivRank.ivRank,
     termStructureShape: ivProfile.termStructure.shape,
     skewDirection: ivProfile.skew.skewDirection,
     catalystDensity,
     earningsDaysUntil,
+    liquidityScore: volBenchmark.liquidityScore,
   });
   const setupLabel = buildSwingSniperSetupLabel(
     direction,
@@ -331,7 +332,7 @@ export async function buildSwingSniperDossier(
     symbol: normalizedSymbol,
     companyName: tickerDetails?.name || null,
     currentPrice: ivProfile.currentPrice,
-    score,
+    score: orc.total,
     direction,
     setupLabel,
     expressionPreview: buildSwingSniperExpressionPreview(direction, ivProfile.skew.skewDirection),

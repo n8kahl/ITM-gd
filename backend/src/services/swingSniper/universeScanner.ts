@@ -17,34 +17,162 @@ import {
   round,
 } from './utils';
 
-const SWING_SNIPER_SCAN_CONCURRENCY = 3;
+const SWING_SNIPER_SCAN_CONCURRENCY = 5;
+const DEFAULT_SWING_SNIPER_SCAN_LIMIT = 150;
 
-export const SWING_SNIPER_CORE_SCAN_SYMBOLS = [
+const SWING_SNIPER_LAUNCH_UNIVERSE = [
   'SPY',
   'QQQ',
   'IWM',
+  'DIA',
+  'TLT',
+  'GLD',
+  'SLV',
+  'USO',
+  'XLB',
+  'XLC',
+  'XLE',
+  'XLF',
+  'XLI',
+  'XLK',
+  'XLP',
+  'XLRE',
+  'XLU',
+  'XRT',
+  'KRE',
+  'ARKK',
+  'SMH',
+  'SOXX',
   'NVDA',
   'AAPL',
-  'TSLA',
   'MSFT',
   'AMZN',
   'META',
   'GOOGL',
+  'TSLA',
+  'MU',
+  'QCOM',
+  'INTC',
   'AMD',
   'AVGO',
+  'ASML',
+  'AMAT',
+  'LRCX',
+  'KLAC',
+  'ARM',
+  'MRVL',
+  'SMCI',
+  'TSM',
+  'ADBE',
+  'ORCL',
+  'NOW',
+  'SNOW',
   'PLTR',
   'NFLX',
-  'SMH',
-  'XLF',
-  'XLE',
-  'XBI',
+  'CRM',
+  'SHOP',
+  'SQ',
+  'PYPL',
+  'UBER',
+  'ABNB',
+  'ROKU',
+  'RBLX',
+  'NET',
+  'DDOG',
+  'MDB',
+  'TEAM',
+  'SPOT',
+  'DIS',
+  'CMCSA',
+  'TMUS',
+  'VZ',
+  'T',
+  'JPM',
+  'BAC',
+  'WFC',
+  'C',
+  'GS',
+  'MS',
+  'BLK',
+  'SCHW',
+  'AXP',
+  'V',
+  'MA',
   'COIN',
   'MSTR',
-  'JPM',
-  'GS',
-  'UBER',
-  'CRM',
+  'HOOD',
+  'XOM',
+  'CVX',
+  'COP',
+  'OXY',
+  'SLB',
+  'HAL',
+  'MPC',
+  'PSX',
+  'EOG',
+  'APA',
+  'FCX',
+  'NEM',
+  'UNH',
+  'LLY',
+  'JNJ',
+  'MRK',
+  'PFE',
+  'ABBV',
+  'TMO',
+  'ISRG',
+  'VRTX',
+  'REGN',
+  'AMGN',
+  'GILD',
+  'BIIB',
+  'XBI',
+  'XLV',
+  'KO',
+  'PEP',
+  'PM',
+  'MO',
+  'COST',
+  'WMT',
+  'TGT',
+  'HD',
+  'LOW',
+  'NKE',
+  'SBUX',
+  'MCD',
+  'CMG',
+  'DG',
+  'DLTR',
+  'BA',
+  'CAT',
+  'DE',
+  'GE',
+  'HON',
+  'LMT',
+  'NOC',
+  'RTX',
+  'ETN',
+  'MMM',
+  'AAL',
+  'DAL',
+  'UAL',
+  'F',
+  'GM',
+  'RIVN',
+  'LCID',
+  'BABA',
+  'PDD',
+  'NIO',
+  'RCL',
+  'CCL',
+  'MAR',
+  'BKNG',
+  'EXPE',
+  'GME',
+  'AMC',
 ] as const;
+
+export const SWING_SNIPER_CORE_SCAN_SYMBOLS = Array.from(new Set(SWING_SNIPER_LAUNCH_UNIVERSE)).slice(0, DEFAULT_SWING_SNIPER_SCAN_LIMIT);
 
 function pickNearestMacroEvent(events: EconomicEvent[]): EconomicEvent | null {
   const today = new Date().toISOString().slice(0, 10);
@@ -163,18 +291,33 @@ export function scoreSwingSniperOpportunity(input: {
   skewDirection: SwingSniperOpportunity['skewDirection'];
   catalystDensity: number;
   earningsDaysUntil: number | null;
-}): number {
-  const gapScore = input.ivVsRvGap == null ? 8 : Math.min(24, Math.abs(input.ivVsRvGap) * 2.4);
-  const rankScore = input.ivRank == null ? 10 : Math.min(18, Math.abs(input.ivRank - 50) * 0.45);
-  const catalystScore = Math.min(18, input.catalystDensity * 4) + (
-    input.earningsDaysUntil != null && input.earningsDaysUntil <= 10 ? 8 : 0
-  );
-  const surfaceScore = (
-    (input.termStructureShape === 'backwardation' ? 10 : input.termStructureShape === 'contango' ? 6 : 3)
-    + (input.skewDirection === 'balanced' ? 2 : 5)
-  );
+  liquidityScore: number | null;
+}): SwingSniperOpportunity['orc'] {
+  const gapIntensity = input.ivVsRvGap == null ? 36 : Math.abs(input.ivVsRvGap) * 6.4;
+  const rankIntensity = input.ivRank == null ? 10 : Math.abs(input.ivRank - 50) * 0.72;
+  const termShapeBonus = input.termStructureShape === 'backwardation'
+    ? 8
+    : input.termStructureShape === 'contango'
+      ? 4
+      : 2;
+  const skewBonus = input.skewDirection === 'balanced' ? 3 : 6;
+  const volMispricing = round(clamp(gapIntensity + rankIntensity + termShapeBonus + skewBonus, 0, 100), 1);
 
-  return Math.round(clamp(32 + gapScore + rankScore + catalystScore + surfaceScore, 35, 98));
+  const catalystDensity = round(clamp(
+    (input.catalystDensity * 16)
+    + (input.earningsDaysUntil != null && input.earningsDaysUntil <= 10 ? 20 : 0),
+    0,
+    100,
+  ), 1);
+  const liquidity = round(clamp(input.liquidityScore ?? 42, 0, 100), 1);
+  const total = round(clamp((volMispricing * 0.45) + (catalystDensity * 0.30) + (liquidity * 0.25), 1, 99), 0);
+
+  return {
+    volMispricing,
+    catalystDensity,
+    liquidity,
+    total,
+  };
 }
 
 function toCatalystLabel(
@@ -237,14 +380,16 @@ async function scanSymbol(
       ? round(currentIV - realizedVol20, 1)
       : null;
     const direction = resolveSwingSniperDirection(ivVsRvGap, ivProfile.ivRank.ivRank, earningsDaysUntil);
-    const score = scoreSwingSniperOpportunity({
+    const orc = scoreSwingSniperOpportunity({
       ivVsRvGap,
       ivRank: ivProfile.ivRank.ivRank,
       termStructureShape: ivProfile.termStructure.shape,
       skewDirection: ivProfile.skew.skewDirection,
       catalystDensity: catalyst.density,
       earningsDaysUntil,
+      liquidityScore: volBenchmark.liquidityScore,
     });
+    const score = orc.total;
     const setupLabel = buildSwingSniperSetupLabel(
       direction,
       earningsDaysUntil,
@@ -255,6 +400,7 @@ async function scanSymbol(
     return {
       symbol,
       score,
+      orc,
       direction,
       setupLabel,
       thesis: buildSwingSniperThesis(direction, catalyst.label),
@@ -270,6 +416,8 @@ async function scanSymbol(
       catalystDate: catalyst.date,
       catalystDaysUntil: catalyst.daysUntil,
       catalystDensity: catalyst.density,
+      liquidityScore: volBenchmark.liquidityScore,
+      liquidityTier: volBenchmark.liquidityTier,
       narrativeMomentum: catalyst.density >= 3 ? 'mixed' : 'quiet',
       expressionPreview: buildSwingSniperExpressionPreview(direction, ivProfile.skew.skewDirection),
       reasons: buildReasons(
@@ -292,15 +440,73 @@ async function scanSymbol(
   }
 }
 
+function buildBoardThemes(opportunities: SwingSniperOpportunity[]): SwingSniperUniverseResponse['boardThemes'] {
+  const themes = [
+    {
+      key: 'long-vol-cluster',
+      label: 'Long-vol dislocations',
+      match: (item: SwingSniperOpportunity) => item.direction === 'long_vol',
+    },
+    {
+      key: 'short-vol-cluster',
+      label: 'Short-vol premium sales',
+      match: (item: SwingSniperOpportunity) => item.direction === 'short_vol',
+    },
+    {
+      key: 'catalyst-dense',
+      label: 'Catalyst-dense window',
+      match: (item: SwingSniperOpportunity) => item.catalystDaysUntil != null && item.catalystDaysUntil <= 10,
+    },
+    {
+      key: 'deep-liquidity',
+      label: 'Deep-liquidity candidates',
+      match: (item: SwingSniperOpportunity) => item.liquidityScore != null && item.liquidityScore >= 72,
+    },
+    {
+      key: 'put-skew',
+      label: 'Put-skew pressure',
+      match: (item: SwingSniperOpportunity) => item.skewDirection === 'put_heavy',
+    },
+    {
+      key: 'term-kink',
+      label: 'Backwardation pockets',
+      match: (item: SwingSniperOpportunity) => item.termStructureShape === 'backwardation',
+    },
+  ];
+
+  return themes
+    .map((theme) => {
+      const members = opportunities.filter(theme.match);
+      const avgScore = members.length > 0
+        ? round(members.reduce((sum, member) => sum + member.score, 0) / members.length, 1)
+        : 0;
+      return {
+        key: theme.key,
+        label: theme.label,
+        count: members.length,
+        avgScore,
+      };
+    })
+    .filter((theme) => theme.count > 0)
+    .sort((left, right) => {
+      if (right.count !== left.count) return right.count - left.count;
+      return right.avgScore - left.avgScore;
+    })
+    .slice(0, 5);
+}
+
 export async function scanSwingSniperUniverse(
   symbols: string[],
   savedSymbols: string[] = [],
+  scanLimit: number = DEFAULT_SWING_SNIPER_SCAN_LIMIT,
 ): Promise<SwingSniperUniverseResponse> {
   const dedupedSymbols = Array.from(new Set(symbols.map((symbol) => symbol.trim().toUpperCase()))).filter(Boolean);
+  const boundedScanLimit = Math.max(25, Math.min(DEFAULT_SWING_SNIPER_SCAN_LIMIT, Math.floor(scanLimit)));
+  const activeUniverse = dedupedSymbols.slice(0, boundedScanLimit);
   const savedSymbolSet = new Set(savedSymbols.map((symbol) => symbol.trim().toUpperCase()));
 
   const [earningsEvents, macroEvents] = await Promise.all([
-    getEarningsCalendar(dedupedSymbols, 21).catch(() => [] as EarningsCalendarEvent[]),
+    getEarningsCalendar(activeUniverse, 21).catch(() => [] as EarningsCalendarEvent[]),
     getEconomicCalendar(14, 'HIGH').catch(() => [] as EconomicEvent[]),
   ]);
 
@@ -312,7 +518,7 @@ export async function scanSwingSniperUniverse(
   }
 
   const results = await mapConcurrent(
-    dedupedSymbols,
+    activeUniverse,
     SWING_SNIPER_SCAN_CONCURRENCY,
     async (symbol) => scanSymbol(symbol, earningsMap, macroEvents, savedSymbolSet),
   );
@@ -320,15 +526,18 @@ export async function scanSwingSniperUniverse(
   const opportunities = results
     .filter((item): item is SwingSniperOpportunity => item != null)
     .sort((left, right) => right.score - left.score);
+  const boardThemes = buildBoardThemes(opportunities);
 
   return {
     generatedAt: new Date().toISOString(),
     universeSize: dedupedSymbols.length,
+    scanLimit: boundedScanLimit,
     symbolsScanned: opportunities.length,
     opportunities,
+    boardThemes,
     notes: [
-      'Phase 1 ranks a focused liquid universe and saved symbols while the broader batched sweep is still pending.',
-      'Current IV is compared against trailing realized volatility to make the mispricing story visual and fast to parse.',
+      'ORC score blends volatility mispricing, catalyst density, and liquidity into a ranked board.',
+      `Scan budget is capped at ${boundedScanLimit} symbols per refresh to control upstream usage and latency.`,
     ],
   };
 }
