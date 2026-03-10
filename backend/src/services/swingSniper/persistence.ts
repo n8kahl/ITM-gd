@@ -1,4 +1,5 @@
 import { supabase } from '../../config/database';
+import { logger } from '../../lib/logger';
 import { sanitizeSymbols } from '../../lib/symbols';
 import type {
   SwingSniperSavedThesisRecord,
@@ -132,6 +133,15 @@ function toSignalSnapshotRecord(row: SwingSniperSignalSnapshotRow): SwingSniperS
   };
 }
 
+function emptyWatchlistState(): SwingSniperWatchlistState {
+  return {
+    symbols: [],
+    selectedSymbol: null,
+    filters: DEFAULT_FILTERS,
+    savedTheses: [],
+  };
+}
+
 export async function getSwingSniperWatchlistState(userId: string): Promise<SwingSniperWatchlistState> {
   const [{ data: watchlistRow, error: watchlistError }, { data: thesisRows, error: thesisError }] = await Promise.all([
     supabase
@@ -148,11 +158,19 @@ export async function getSwingSniperWatchlistState(userId: string): Promise<Swin
   ]);
 
   if (watchlistError) {
-    throw new Error(`Failed to load Swing Sniper watchlist: ${watchlistError.message}`);
+    logger.warn('Swing Sniper watchlist query degraded; defaulting to in-memory empty state', {
+      userId,
+      error: watchlistError.message,
+    });
+    return emptyWatchlistState();
   }
 
   if (thesisError) {
-    throw new Error(`Failed to load saved theses: ${thesisError.message}`);
+    logger.warn('Swing Sniper saved-thesis query degraded; defaulting to in-memory empty state', {
+      userId,
+      error: thesisError.message,
+    });
+    return emptyWatchlistState();
   }
 
   const row = watchlistRow as SwingSniperWatchlistRow | null;
