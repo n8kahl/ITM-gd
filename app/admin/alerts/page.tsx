@@ -1,35 +1,14 @@
-import Link from 'next/link'
-import { ArrowRight } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { AlertConsole } from '@/components/admin/alerts/alert-console'
 
 export default function AdminAlertsPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-white">Alert Console</h1>
-        <p className="text-sm text-white/60">
-          Execute Discord trade alerts through a stateful admin workflow.
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="font-['Playfair_Display'] text-3xl text-emerald-300">Alert Console</h1>
+        <p className="font-mono text-xs uppercase tracking-[0.14em] text-white/55">
+          Desktop + Mobile execution workflow aligned to Emerald Standard.
         </p>
       </div>
-
-      <Card className="border-white/10 bg-white/5">
-        <CardHeader>
-          <CardTitle className="text-white">Discord Runtime Configuration</CardTitle>
-          <CardDescription className="text-white/60">
-            Configure bot token, guild/channel, delivery method, and connection status.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <Link href="/admin/alerts/settings">
-              Open Settings
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
 
       <AlertConsole />
     </div>
