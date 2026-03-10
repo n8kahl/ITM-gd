@@ -118,8 +118,6 @@ export function buildSwingSniperExpressionPreview(
 
 export function buildSwingSniperThesis(
   direction: SwingSniperDirection,
-  currentIV: number | null,
-  realizedVol20: number | null,
   catalystLabel: string,
 ): string {
   if (direction === 'long_vol') {
@@ -259,7 +257,7 @@ async function scanSymbol(
       score,
       direction,
       setupLabel,
-      thesis: buildSwingSniperThesis(direction, currentIV, realizedVol20, catalyst.label),
+      thesis: buildSwingSniperThesis(direction, catalyst.label),
       currentPrice: ivProfile.currentPrice,
       currentIV,
       realizedVol20,

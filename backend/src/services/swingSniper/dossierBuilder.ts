@@ -15,7 +15,6 @@ import type {
 } from './types';
 import { buildSwingSniperStructureLab } from './structureLab';
 import {
-  clamp,
   daysUntil,
   describeDaysUntilLabel,
   getSwingSniperVolBenchmark,
@@ -267,7 +266,7 @@ export async function buildSwingSniperDossier(
     : economicEvents[0]
       ? `${economicEvents[0].event} ${describeDaysUntilLabel(daysUntil(economicEvents[0].date))}`
       : 'No near-dated catalyst';
-  const thesis = buildSwingSniperThesis(direction, currentIV, rv20, catalystLabel);
+  const thesis = buildSwingSniperThesis(direction, catalystLabel);
   const narrative = summarizeNewsNarrative(newsArticles);
   const savedSymbols = new Set(watchlistState.savedTheses.map((item) => item.symbol));
 
