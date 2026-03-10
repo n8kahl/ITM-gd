@@ -119,4 +119,31 @@ describe('buildSwingSniperStructureLab', () => {
     expect(result.recommendations).toHaveLength(0);
     expect(result.notes[0]).toContain('No viable expiration windows');
   });
+
+  it('allows advanced swing styles when naked mode is enabled', async () => {
+    const result = await buildSwingSniperStructureLab({
+      symbol: 'NVDA',
+      direction: 'long_vol',
+      currentPrice: 100,
+      currentIV: 34,
+      ivRank: 39,
+      skewDirection: 'balanced',
+      catalystDaysUntil: 8,
+      termStructureShape: 'backwardation',
+      riskMode: 'naked_allowed',
+      swingWindow: 'seven_to_fourteen',
+      preferredSetups: ['long_call', 'long_put', 'long_straddle', 'long_strangle'],
+      maxRecommendations: 4,
+    });
+
+    expect(result.recommendations.length).toBeGreaterThan(0);
+    expect(
+      result.recommendations.every((recommendation) => (
+        recommendation.strategy === 'long_call'
+        || recommendation.strategy === 'long_put'
+        || recommendation.strategy === 'long_straddle'
+        || recommendation.strategy === 'long_strangle'
+      )),
+    ).toBe(true);
+  });
 });
