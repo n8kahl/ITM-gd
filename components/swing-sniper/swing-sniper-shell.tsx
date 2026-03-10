@@ -76,6 +76,22 @@ function updatedLabel(generatedAt: string | null): string | null {
   return `Updated ${minutes} min ago`
 }
 
+function parseRetryAfterMs(value: string | null): number {
+  if (!value) return 30_000
+
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.max(1_000, Math.round(seconds * 1_000))
+  }
+
+  const retryAt = Date.parse(value)
+  if (Number.isFinite(retryAt)) {
+    return Math.max(1_000, retryAt - Date.now())
+  }
+
+  return 30_000
+}
+
 function buildDossierThesisPayload(dossier: SwingSniperDossierPayload): SavedThesisPayload {
   return {
     symbol: dossier.symbol,
@@ -136,11 +152,14 @@ export function SwingSniperShell() {
     preferredSetups: [...DEFAULT_PREFERRED_SETUPS],
   })
   const dossierCacheRef = useRef(new Map<string, SwingSniperDossierPayload>())
+  const dossierInflightRef = useRef(new Map<string, Promise<SwingSniperDossierPayload | null>>())
+  const dossierRateLimitRef = useRef(new Map<string, number>())
+  const boardRef = useRef<SwingSniperBoardPayload | null>(null)
   const activeSymbolRef = useRef<string | null>(null)
   const dossierRequestIdRef = useRef(0)
 
   const loadBoard = useCallback(async (refresh: boolean = false) => {
-    if (!board) setBoardLoading(true)
+    if (!boardRef.current) setBoardLoading(true)
 
     try {
       const query = refresh ? '?refresh=1' : ''
@@ -148,13 +167,13 @@ export function SwingSniperShell() {
       setBoard(payload)
       setBoardFailureCount(0)
     } catch {
-      if (!board) {
+      if (!boardRef.current) {
         setBoardFailureCount((current) => current + 1)
       }
     } finally {
       setBoardLoading(false)
     }
-  }, [board])
+  }, [])
 
   const loadMemo = useCallback(async () => {
     setMemoLoading(true)
@@ -201,6 +220,20 @@ export function SwingSniperShell() {
     },
   ) => {
     const cached = dossierCacheRef.current.get(symbol)
+    const inFlight = dossierInflightRef.current.get(symbol)
+    if (inFlight) return inFlight
+
+    if (!options?.force) {
+      const retryAt = dossierRateLimitRef.current.get(symbol)
+      if (retryAt && retryAt > Date.now()) {
+        if (!options?.prefetch && cached) {
+          setDossier(cached)
+          setDossierError(false)
+          setDossierLoading(false)
+        }
+        return cached ?? null
+      }
+    }
 
     if (cached && !options?.force) {
       if (!options?.prefetch) {
@@ -218,43 +251,57 @@ export function SwingSniperShell() {
       setDossierError(false)
     }
 
-    try {
-      const response = await fetch(`/api/members/swing-sniper/dossier/${encodeURIComponent(symbol)}`, {
-        method: 'GET',
-        cache: 'no-store',
-      })
+    const requestPromise = (async () => {
+      try {
+        const response = await fetch(`/api/members/swing-sniper/dossier/${encodeURIComponent(symbol)}`, {
+          method: 'GET',
+          cache: 'no-store',
+        })
 
-      if (!response.ok) {
-        throw new Error('dossier_failed')
-      }
-
-      const payload = await response.json() as SwingSniperDossierPayload
-      dossierCacheRef.current.set(symbol, payload)
-
-      if (!options?.prefetch && requestId === dossierRequestIdRef.current && activeSymbolRef.current === symbol) {
-        setDossier(payload)
-      }
-
-      return payload
-    } catch {
-      if (!options?.prefetch && requestId === dossierRequestIdRef.current && activeSymbolRef.current === symbol) {
-        if (!cached) {
-          setDossier(null)
+        if (response.status === 429) {
+          dossierRateLimitRef.current.set(symbol, Date.now() + parseRetryAfterMs(response.headers.get('retry-after')))
+          throw new Error('dossier_rate_limited')
         }
-        setDossierError(true)
-      }
 
-      return null
-    } finally {
-      if (!options?.prefetch && requestId === dossierRequestIdRef.current && activeSymbolRef.current === symbol) {
-        setDossierLoading(false)
+        if (!response.ok) {
+          throw new Error('dossier_failed')
+        }
+
+        dossierRateLimitRef.current.delete(symbol)
+
+        const payload = await response.json() as SwingSniperDossierPayload
+        dossierCacheRef.current.set(symbol, payload)
+
+        if (!options?.prefetch && requestId === dossierRequestIdRef.current && activeSymbolRef.current === symbol) {
+          setDossier(payload)
+        }
+
+        return payload
+      } catch {
+        if (!options?.prefetch && requestId === dossierRequestIdRef.current && activeSymbolRef.current === symbol) {
+          if (!cached) {
+            setDossier(null)
+          }
+          setDossierError(true)
+        }
+
+        return null
+      } finally {
+        dossierInflightRef.current.delete(symbol)
+        if (!options?.prefetch && requestId === dossierRequestIdRef.current && activeSymbolRef.current === symbol) {
+          setDossierLoading(false)
+        }
       }
-    }
+    })()
+
+    dossierInflightRef.current.set(symbol, requestPromise)
+    return requestPromise
   }, [])
 
   const refreshAll = useCallback(async (refreshBoard: boolean = false) => {
     if (refreshBoard) {
       dossierCacheRef.current.clear()
+      dossierRateLimitRef.current.clear()
     }
 
     await Promise.all([
@@ -262,9 +309,9 @@ export function SwingSniperShell() {
       loadMemo(),
       loadMonitoring(),
       loadWatchlist(),
-      activeSymbol ? loadDossier(activeSymbol, { force: refreshBoard }) : Promise.resolve(null),
+      activeSymbolRef.current ? loadDossier(activeSymbolRef.current, { force: refreshBoard }) : Promise.resolve(null),
     ])
-  }, [activeSymbol, loadBoard, loadDossier, loadMemo, loadMonitoring, loadWatchlist])
+  }, [loadBoard, loadDossier, loadMemo, loadMonitoring, loadWatchlist])
 
   const persistWatchlistUpdate = useCallback(async (
     payload: SwingSniperWatchlistSavePayload,
@@ -324,6 +371,10 @@ export function SwingSniperShell() {
   useEffect(() => {
     activeSymbolRef.current = activeSymbol
   }, [activeSymbol])
+
+  useEffect(() => {
+    boardRef.current = board
+  }, [board])
 
   useEffect(() => {
     if (!activeSymbol) return
