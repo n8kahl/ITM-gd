@@ -84,7 +84,13 @@ describe('Swing Sniper Route', () => {
     mockGetWatchlistState.mockResolvedValue({
       symbols: ['NVDA'],
       selectedSymbol: 'NVDA',
-      filters: { preset: 'all', minScore: 0 },
+      filters: {
+        preset: 'all',
+        minScore: 0,
+        riskMode: 'defined_risk_only',
+        swingWindow: 'seven_to_fourteen',
+        preferredSetups: ['call_debit_spread'],
+      },
       savedTheses: [],
     });
     mockScanUniverse.mockResolvedValue({
@@ -280,7 +286,13 @@ describe('Swing Sniper Route', () => {
     mockGetWatchlistState.mockResolvedValue({
       symbols: ['NVDA', 'AAPL'],
       selectedSymbol: 'NVDA',
-      filters: { preset: 'all', minScore: 0 },
+      filters: {
+        preset: 'all',
+        minScore: 0,
+        riskMode: 'defined_risk_only',
+        swingWindow: 'seven_to_fourteen',
+        preferredSetups: ['call_debit_spread'],
+      },
       savedTheses: [
         {
           symbol: 'NVDA',
@@ -498,7 +510,13 @@ describe('Swing Sniper Route', () => {
     mockSaveWatchlistState.mockResolvedValue({
       symbols: ['NVDA'],
       selectedSymbol: 'NVDA',
-      filters: { preset: 'all', minScore: 0 },
+      filters: {
+        preset: 'all',
+        minScore: 0,
+        riskMode: 'defined_risk_only',
+        swingWindow: 'seven_to_fourteen',
+        preferredSetups: ['call_debit_spread'],
+      },
       savedTheses: [
         {
           symbol: 'NVDA',
@@ -520,7 +538,13 @@ describe('Swing Sniper Route', () => {
       .set('Authorization', 'Bearer test-token')
       .send({
         selectedSymbol: 'NVDA',
-        filters: { preset: 'all', minScore: 0 },
+        filters: {
+          preset: 'all',
+          minScore: 0,
+          riskMode: 'defined_risk_only',
+          swingWindow: 'seven_to_fourteen',
+          preferredSetups: ['call_debit_spread'],
+        },
         thesis: {
           symbol: 'NVDA',
           score: 88,

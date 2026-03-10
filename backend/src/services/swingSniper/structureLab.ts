@@ -3,10 +3,12 @@ import { fetchExpirationDates, fetchOptionsChain } from '../options/optionsChain
 import type { OptionContract } from '../options/types';
 import type {
   SwingSniperDirection,
+  SwingSniperRiskMode,
   SwingSniperStructureLabResponse,
   SwingSniperStructureLeg,
   SwingSniperStructureRecommendation,
   SwingSniperStructureStrategy,
+  SwingSniperSwingWindow,
 } from './types';
 import { clamp, daysUntil, round } from './utils';
 
@@ -26,7 +28,28 @@ interface BuildSwingSniperStructureLabInput {
   catalystDaysUntil: number | null;
   termStructureShape: 'contango' | 'backwardation' | 'flat';
   maxRecommendations?: number;
+  riskMode?: SwingSniperRiskMode;
+  swingWindow?: SwingSniperSwingWindow;
+  preferredSetups?: SwingSniperStructureStrategy[];
 }
+
+const DEFAULT_DEFINED_RISK_STRATEGIES: SwingSniperStructureStrategy[] = [
+  'call_debit_spread',
+  'put_debit_spread',
+  'call_calendar',
+  'put_calendar',
+  'call_diagonal',
+  'put_diagonal',
+  'call_butterfly',
+  'put_butterfly',
+];
+
+const ADVANCED_NAKED_STRATEGIES = new Set<SwingSniperStructureStrategy>([
+  'long_call',
+  'long_put',
+  'long_straddle',
+  'long_strangle',
+]);
 
 interface OptionLegPlan {
   label: string;
@@ -205,16 +228,33 @@ function pickClosestContract(
   return sorted[0]?.contract ?? null;
 }
 
-function chooseNearExpiry(expirations: string[], catalystDaysUntil: number | null): string | null {
+function chooseNearExpiry(
+  expirations: string[],
+  catalystDaysUntil: number | null,
+  swingWindow: SwingSniperSwingWindow,
+): string | null {
+  const dteBounds = swingWindow === 'seven_to_fourteen'
+    ? { min: 7, max: 14, target: 10 }
+    : swingWindow === 'fourteen_to_thirty'
+      ? { min: 14, max: 30, target: 21 }
+      : null;
+
   const rows = expirations
     .map((expiry) => ({ expiry, dte: daysUntil(expiry) }))
-    .filter((row) => row.dte >= 7 && row.dte <= STRUCTURE_MAX_DAYS_AHEAD);
+    .filter((row) => {
+      if (dteBounds) {
+        return row.dte >= dteBounds.min && row.dte <= dteBounds.max;
+      }
+      return row.dte >= 7 && row.dte <= STRUCTURE_MAX_DAYS_AHEAD;
+    });
 
   if (rows.length === 0) return null;
 
-  const targetDte = catalystDaysUntil == null
-    ? 28
-    : clamp(catalystDaysUntil + 7, 14, 42);
+  const targetDte = dteBounds
+    ? dteBounds.target
+    : catalystDaysUntil == null
+      ? 28
+      : clamp(catalystDaysUntil + 7, 14, 42);
 
   rows.sort((left, right) => {
     const leftGap = Math.abs(left.dte - targetDte);
@@ -355,6 +395,10 @@ function normalizeLegs(legs: OptionLegPlan[]): SwingSniperStructureLeg[] {
 
 function classifyDirectionFit(direction: SwingSniperDirection, strategy: SwingSniperStructureStrategy): number {
   const longVolStrategies = new Set<SwingSniperStructureStrategy>([
+    'long_call',
+    'long_put',
+    'long_straddle',
+    'long_strangle',
     'call_debit_spread',
     'put_debit_spread',
     'call_calendar',
@@ -465,6 +509,118 @@ function finalizePlan(
   };
 
   return recommendation;
+}
+
+function buildLongCallPlan(context: StrategyContext): StructurePlan | null {
+  const call = pickClosestContract(context.nearCalls, context.spotPrice * 1.0);
+  if (!call) return null;
+
+  return {
+    id: `long-call-${call.expiry}-${call.strike}`,
+    strategy: 'long_call',
+    strategyLabel: 'Long Call',
+    rankingBoost: context.direction === 'long_vol' ? 11 : 5,
+    entryWindow: 'Use for directional upside when you want a simple 7-14 day swing expression.',
+    invalidation: 'Close if spot loses momentum and IV expansion no longer supports premium decay offset.',
+    whyThisStructure: [
+      'Single-leg upside convexity with clean directional expression.',
+      'Avoids spread caps when your thesis needs open-ended upside.',
+    ],
+    risks: [
+      'Premium can decay quickly when spot stalls.',
+      'Higher vega exposure can hurt if IV compresses before the move.',
+    ],
+    legs: [
+      { label: 'Buy call', side: 'buy', quantity: 1, contract: call },
+    ],
+  };
+}
+
+function buildLongPutPlan(context: StrategyContext): StructurePlan | null {
+  const put = pickClosestContract(context.nearPuts, context.spotPrice * 1.0);
+  if (!put) return null;
+
+  return {
+    id: `long-put-${put.expiry}-${put.strike}`,
+    strategy: 'long_put',
+    strategyLabel: 'Long Put',
+    rankingBoost: context.direction === 'long_vol' ? 11 : 5,
+    entryWindow: 'Use for directional downside when you want a simple 7-14 day swing expression.',
+    invalidation: 'Close if downside follow-through fails and IV repricing stalls.',
+    whyThisStructure: [
+      'Direct downside convexity without spread complexity.',
+      'Keeps max risk limited to premium paid.',
+    ],
+    risks: [
+      'Theta drag can be steep if downside timing slips.',
+      'Fast vol compression can reduce option value despite minor downside.',
+    ],
+    legs: [
+      { label: 'Buy put', side: 'buy', quantity: 1, contract: put },
+    ],
+  };
+}
+
+function buildLongStraddlePlan(context: StrategyContext): StructurePlan | null {
+  const call = pickClosestContract(context.nearCalls, context.spotPrice);
+  if (!call) return null;
+
+  const put = pickClosestContract(context.nearPuts, call.strike);
+  if (!put) return null;
+
+  return {
+    id: `long-straddle-${call.expiry}-${call.strike}`,
+    strategy: 'long_straddle',
+    strategyLabel: 'Long Straddle',
+    rankingBoost: context.direction === 'long_vol' ? 12 : 4,
+    entryWindow: 'Deploy when you expect a sizable move but direction is uncertain.',
+    invalidation: 'Exit if realized move fails to develop while theta burn accelerates into expiry.',
+    whyThisStructure: [
+      'Pure long-vol expression with symmetric upside/downside convexity.',
+      'Fits event windows where move magnitude matters more than direction.',
+    ],
+    risks: [
+      'Requires a sufficiently large move to overcome two premiums.',
+      'Time decay is high if spot remains range-bound.',
+    ],
+    legs: [
+      { label: 'Buy call', side: 'buy', quantity: 1, contract: call },
+      { label: 'Buy put', side: 'buy', quantity: 1, contract: put },
+    ],
+  };
+}
+
+function buildLongStranglePlan(context: StrategyContext): StructurePlan | null {
+  const call = pickClosestContract(context.nearCalls, context.spotPrice * 1.04, {
+    minStrike: context.spotPrice * 1.01,
+  });
+  if (!call) return null;
+
+  const put = pickClosestContract(context.nearPuts, context.spotPrice * 0.96, {
+    maxStrike: context.spotPrice * 0.99,
+  });
+  if (!put) return null;
+
+  return {
+    id: `long-strangle-${call.expiry}-${put.strike}-${call.strike}`,
+    strategy: 'long_strangle',
+    strategyLabel: 'Long Strangle',
+    rankingBoost: context.direction === 'long_vol' ? 10 : 4,
+    entryWindow: 'Use when you expect expansion but want lower debit than an at-the-money straddle.',
+    invalidation: 'Close if expected move compresses and spot stays pinned near strike midpoint.',
+    whyThisStructure: [
+      'Cheaper long-vol alternative with wider breakeven wings than a straddle.',
+      'Useful for 7-14 day windows with catalyst uncertainty and non-directional conviction.',
+    ],
+    risks: [
+      'Needs a larger move than a straddle to pay out.',
+      'Can decay quickly when realized volatility underperforms.',
+    ],
+    legs: [
+      { label: 'Buy call', side: 'buy', quantity: 1, contract: call },
+      { label: 'Buy put', side: 'buy', quantity: 1, contract: put },
+    ],
+  };
 }
 
 function buildCallDebitSpreadPlan(context: StrategyContext): StructurePlan | null {
@@ -725,23 +881,57 @@ function buildPutButterflyPlan(context: StrategyContext): StructurePlan | null {
   };
 }
 
-function buildStructurePlans(context: StrategyContext): StructurePlan[] {
-  return [
-    buildCallDebitSpreadPlan(context),
-    buildPutDebitSpreadPlan(context),
-    buildCallCalendarPlan(context),
-    buildPutCalendarPlan(context),
-    buildCallDiagonalPlan(context),
-    buildPutDiagonalPlan(context),
-    buildCallButterflyPlan(context),
-    buildPutButterflyPlan(context),
-  ].filter((plan): plan is StructurePlan => plan != null);
+function resolveAllowedStrategies(input: BuildSwingSniperStructureLabInput): Set<SwingSniperStructureStrategy> {
+  const requested = Array.isArray(input.preferredSetups)
+    ? input.preferredSetups
+    : [];
+  const base = requested.length > 0
+    ? requested
+    : [...DEFAULT_DEFINED_RISK_STRATEGIES];
+  const riskMode = input.riskMode ?? 'defined_risk_only';
+  const filtered = riskMode === 'defined_risk_only'
+    ? base.filter((strategy) => !ADVANCED_NAKED_STRATEGIES.has(strategy))
+    : base;
+  const fallback = filtered.length > 0
+    ? filtered
+    : [...DEFAULT_DEFINED_RISK_STRATEGIES];
+  return new Set(fallback);
+}
+
+function buildStructurePlans(
+  context: StrategyContext,
+  allowedStrategies: Set<SwingSniperStructureStrategy>,
+): StructurePlan[] {
+  const planners: Array<{
+    strategy: SwingSniperStructureStrategy;
+    build: (ctx: StrategyContext) => StructurePlan | null;
+  }> = [
+    { strategy: 'long_call', build: buildLongCallPlan },
+    { strategy: 'long_put', build: buildLongPutPlan },
+    { strategy: 'long_straddle', build: buildLongStraddlePlan },
+    { strategy: 'long_strangle', build: buildLongStranglePlan },
+    { strategy: 'call_debit_spread', build: buildCallDebitSpreadPlan },
+    { strategy: 'put_debit_spread', build: buildPutDebitSpreadPlan },
+    { strategy: 'call_calendar', build: buildCallCalendarPlan },
+    { strategy: 'put_calendar', build: buildPutCalendarPlan },
+    { strategy: 'call_diagonal', build: buildCallDiagonalPlan },
+    { strategy: 'put_diagonal', build: buildPutDiagonalPlan },
+    { strategy: 'call_butterfly', build: buildCallButterflyPlan },
+    { strategy: 'put_butterfly', build: buildPutButterflyPlan },
+  ];
+
+  return planners
+    .filter((planner) => allowedStrategies.has(planner.strategy))
+    .map((planner) => planner.build(context))
+    .filter((plan): plan is StructurePlan => plan != null);
 }
 
 export async function buildSwingSniperStructureLab(
   input: BuildSwingSniperStructureLabInput,
 ): Promise<SwingSniperStructureLabResponse> {
   const symbol = input.symbol.trim().toUpperCase();
+  const allowedStrategies = resolveAllowedStrategies(input);
+  const swingWindow = input.swingWindow ?? 'seven_to_fourteen';
 
   try {
     const expirations = await fetchExpirationDates(symbol, {
@@ -749,7 +939,7 @@ export async function buildSwingSniperStructureLab(
       maxPages: STRUCTURE_MAX_PAGES,
     });
 
-    const nearExpiry = chooseNearExpiry(expirations, input.catalystDaysUntil);
+    const nearExpiry = chooseNearExpiry(expirations, input.catalystDaysUntil, swingWindow);
     if (!nearExpiry) {
       return {
         generatedAt: new Date().toISOString(),
@@ -785,15 +975,17 @@ export async function buildSwingSniperStructureLab(
       nearDte: nearChain.daysToExpiry,
     };
 
-    const plans = buildStructurePlans(context);
+    const plans = buildStructurePlans(context, allowedStrategies);
     const recommendations = plans
       .map((plan) => finalizePlan(plan, context))
       .filter((recommendation): recommendation is SwingSniperStructureRecommendation => recommendation != null)
       .sort((left, right) => right.thesisFit - left.thesisFit)
       .slice(0, clamp(input.maxRecommendations ?? 4, 2, 8));
 
+    const strategyList = Array.from(allowedStrategies).join(', ');
     const notes: string[] = [
-      `Evaluated ${plans.length} defined-risk candidates across debit spread, calendar, diagonal, and butterfly classes.`,
+      `Evaluated ${plans.length} candidate structures from selected setup families (${strategyList}).`,
+      `Swing window preference is ${swingWindow === 'seven_to_fourteen' ? '7-14D' : swingWindow === 'fourteen_to_thirty' ? '14-30D' : 'All expiries'}.`,
       'Contract picks are filtered by strike fit, spread quality, and open-interest/volume liquidity scoring.',
       'Scenario and payoff outputs are deterministic approximations for decision support, not execution guarantees.',
     ];

@@ -360,6 +360,8 @@ function toTermLabel(termShape: SwingSniperDossierResponse['volMap']['termStruct
 }
 
 function toStyleLabel(strategy: string): string {
+  if (strategy === 'long_call' || strategy === 'long_put') return 'Single-leg';
+  if (strategy === 'long_straddle' || strategy === 'long_strangle') return 'Long premium';
   if (strategy.includes('calendar')) return 'Calendar';
   if (strategy.includes('diagonal')) return 'Diagonal';
   if (strategy.includes('butterfly')) return 'Butterfly';
@@ -826,7 +828,10 @@ router.post(
         };
       }).validatedBody;
 
-      const dossier = await buildSwingSniperDossier(req.user!.id, validatedBody.symbol);
+      const [dossier, watchlistState] = await Promise.all([
+        buildSwingSniperDossier(req.user!.id, validatedBody.symbol),
+        getSwingSniperWatchlistState(req.user!.id),
+      ]);
       const targetDirection = validatedBody.direction ?? dossier.direction;
 
       const payload = await buildSwingSniperStructureLab({
@@ -839,6 +844,9 @@ router.post(
         catalystDaysUntil: dossier.catalysts.events[0]?.daysUntil ?? null,
         termStructureShape: dossier.volMap.termStructureShape,
         maxRecommendations: validatedBody.maxRecommendations ?? 4,
+        riskMode: watchlistState.filters.riskMode,
+        swingWindow: watchlistState.filters.swingWindow,
+        preferredSetups: watchlistState.filters.preferredSetups,
       });
 
       res.json(payload);

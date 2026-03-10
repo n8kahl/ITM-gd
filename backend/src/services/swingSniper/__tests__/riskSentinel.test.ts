@@ -34,7 +34,13 @@ describe('buildSwingSniperRiskSentinel', () => {
     mockGetWatchlistState.mockResolvedValue({
       symbols: ['NVDA'],
       selectedSymbol: 'NVDA',
-      filters: { preset: 'all', minScore: 0 },
+      filters: {
+        preset: 'all',
+        minScore: 0,
+        riskMode: 'defined_risk_only',
+        swingWindow: 'seven_to_fourteen',
+        preferredSetups: ['call_debit_spread'],
+      },
       savedTheses: [
         {
           symbol: 'NVDA',

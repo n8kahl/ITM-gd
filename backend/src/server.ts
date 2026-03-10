@@ -154,6 +154,7 @@ app.use('/api/academy/analytics', academyAnalyticsRouter);
 app.use('/api/academy/admin', academyAdminRouter);
 app.use('/api/trade-day-replay', tradeDayReplayRouter);
 app.use('/api/swing-sniper', swingSniperRouter);
+app.use('/api/money-maker', moneyMakerRoutes);
 // Backward-compatible auth-gated endpoint retained for legacy clients and E2E checks.
 app.get('/api/journal/trades', authenticateToken, (_req: Request, res: Response) => {
   res.status(410).json({

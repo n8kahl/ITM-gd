@@ -6,6 +6,24 @@ export type SwingSniperMonitoringStatus = 'forming' | 'active' | 'degrading' | '
 
 export type SwingSniperExitBias = 'hold' | 'trim' | 'take_profit' | 'close' | 'roll'
 
+export type SwingSniperRiskMode = 'defined_risk_only' | 'naked_allowed'
+
+export type SwingSniperSwingWindow = 'seven_to_fourteen' | 'fourteen_to_thirty' | 'all'
+
+export type SwingSniperStructureStrategy =
+  | 'long_call'
+  | 'long_put'
+  | 'long_straddle'
+  | 'long_strangle'
+  | 'call_debit_spread'
+  | 'put_debit_spread'
+  | 'call_calendar'
+  | 'put_calendar'
+  | 'call_diagonal'
+  | 'put_diagonal'
+  | 'call_butterfly'
+  | 'put_butterfly'
+
 export interface SwingSniperBoardIdea {
   symbol: string
   orc_score: number
@@ -209,6 +227,9 @@ export interface SwingSniperWatchlistPayload {
   filters: {
     preset: 'all' | 'long_vol' | 'short_vol' | 'catalyst_dense' | 'seven_day'
     minScore: number
+    riskMode: SwingSniperRiskMode
+    swingWindow: SwingSniperSwingWindow
+    preferredSetups: SwingSniperStructureStrategy[]
   }
   savedTheses: Array<{
     symbol: string

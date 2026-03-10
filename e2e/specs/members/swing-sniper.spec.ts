@@ -397,7 +397,13 @@ async function setupSwingSniperMocks(page: Page): Promise<void> {
           data: {
             symbols: ['NVDA'],
             selectedSymbol: 'NVDA',
-            filters: { preset: 'all', minScore: 0 },
+            filters: {
+              preset: 'all',
+              minScore: 0,
+              riskMode: 'defined_risk_only',
+              swingWindow: 'seven_to_fourteen',
+              preferredSetups: ['call_debit_spread'],
+            },
             savedTheses: [
               {
                 symbol: 'NVDA',
@@ -424,7 +430,13 @@ async function setupSwingSniperMocks(page: Page): Promise<void> {
       body: JSON.stringify({
         symbols: state.saved ? ['NVDA'] : [],
         selectedSymbol: 'NVDA',
-        filters: { preset: 'all', minScore: 0 },
+        filters: {
+          preset: 'all',
+          minScore: 0,
+          riskMode: 'defined_risk_only',
+          swingWindow: 'seven_to_fourteen',
+          preferredSetups: ['call_debit_spread'],
+        },
         savedTheses: state.saved
           ? [
             {

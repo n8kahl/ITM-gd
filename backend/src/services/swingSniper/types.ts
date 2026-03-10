@@ -4,6 +4,10 @@ export type SwingSniperNarrativeMomentum = 'positive' | 'negative' | 'mixed' | '
 
 export type SwingSniperEdgeState = 'improving' | 'stable' | 'narrowing' | 'invalidated';
 
+export type SwingSniperRiskMode = 'defined_risk_only' | 'naked_allowed';
+
+export type SwingSniperSwingWindow = 'seven_to_fourteen' | 'fourteen_to_thirty' | 'all';
+
 export type SwingSniperMonitoringStatus = 'forming' | 'active' | 'degrading' | 'invalidated' | 'closed';
 
 export type SwingSniperExitBias = 'hold' | 'trim' | 'take_profit' | 'close' | 'roll';
@@ -90,6 +94,10 @@ export interface SwingSniperCatalystDensityPoint {
 }
 
 export type SwingSniperStructureStrategy =
+  | 'long_call'
+  | 'long_put'
+  | 'long_straddle'
+  | 'long_strangle'
   | 'call_debit_spread'
   | 'put_debit_spread'
   | 'call_calendar'
@@ -337,6 +345,9 @@ export interface SwingSniperBriefResponse {
 export interface SwingSniperWatchlistFilters {
   preset: 'all' | 'long_vol' | 'short_vol' | 'catalyst_dense' | 'seven_day';
   minScore: number;
+  riskMode: SwingSniperRiskMode;
+  swingWindow: SwingSniperSwingWindow;
+  preferredSetups: SwingSniperStructureStrategy[];
 }
 
 export interface SwingSniperSavedThesisRecord {

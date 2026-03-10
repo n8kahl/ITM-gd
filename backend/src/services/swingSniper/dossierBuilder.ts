@@ -333,6 +333,9 @@ export async function buildSwingSniperDossier(
     catalystDaysUntil: earningsDaysUntil ?? (economicEvents[0]?.date ? daysUntil(economicEvents[0].date) : null),
     termStructureShape: ivProfile.termStructure.shape,
     maxRecommendations: 4,
+    riskMode: watchlistState.filters.riskMode,
+    swingWindow: watchlistState.filters.swingWindow,
+    preferredSetups: watchlistState.filters.preferredSetups,
   });
 
   return {
