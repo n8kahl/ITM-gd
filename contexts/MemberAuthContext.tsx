@@ -689,7 +689,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
     // Fallback: hardcoded tabs if API not yet loaded
     if (!tier && isAdmin) {
-      return ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'swing-sniper', 'library', 'social', 'studio', 'profile', 'mentorship']
+      return ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'swing-sniper', 'money-maker', 'library', 'social', 'studio', 'profile', 'mentorship']
     }
     if (!tier) return ['dashboard', 'profile']
 
