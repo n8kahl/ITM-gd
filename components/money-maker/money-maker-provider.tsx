@@ -1,13 +1,14 @@
 'use client'
 
 import React, { createContext, useContext, ReactNode, useState, useCallback } from 'react'
-import { MoneyMakerSignal } from '@/lib/money-maker/types'
+import { MoneyMakerSignal, MoneyMakerSymbolSnapshot } from '@/lib/money-maker/types'
 
 const DEFAULT_SYMBOLS = ['SPY', 'TSLA', 'AAPL', 'NVDA', 'META']
 
 export interface MoneyMakerState {
     symbols: string[]
     signals: MoneyMakerSignal[]
+    symbolSnapshots: MoneyMakerSymbolSnapshot[]
     isLoading: boolean
     isRefreshing: boolean
     lastUpdated: number | null
@@ -18,6 +19,7 @@ export interface MoneyMakerContextType {
     state: MoneyMakerState
     setSymbols: (symbols: string[]) => void
     setSignals: (signals: MoneyMakerSignal[]) => void
+    setSymbolSnapshots: (snapshots: MoneyMakerSymbolSnapshot[]) => void
     setIsLoading: (loading: boolean) => void
     setIsRefreshing: (refreshing: boolean) => void
     setError: (error: string | null) => void
@@ -30,6 +32,7 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<MoneyMakerState>({
         symbols: DEFAULT_SYMBOLS,
         signals: [],
+        symbolSnapshots: [],
         isLoading: true,
         isRefreshing: false,
         lastUpdated: null,
@@ -42,6 +45,10 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
 
     const setSignals = useCallback((signals: MoneyMakerSignal[]) => {
         setState(prev => ({ ...prev, signals }))
+    }, [])
+
+    const setSymbolSnapshots = useCallback((symbolSnapshots: MoneyMakerSymbolSnapshot[]) => {
+        setState(prev => ({ ...prev, symbolSnapshots }))
     }, [])
 
     const setIsLoading = useCallback((isLoading: boolean) => {
@@ -66,6 +73,7 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
                 state,
                 setSymbols,
                 setSignals,
+                setSymbolSnapshots,
                 setIsLoading,
                 setIsRefreshing,
                 setError,

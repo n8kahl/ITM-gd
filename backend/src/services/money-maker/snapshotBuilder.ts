@@ -1,5 +1,5 @@
 import { fetchAllSymbolData } from './symbolDataFetcher'
-import { ConfluenceLevel, MoneyMakerSignal, DEFAULT_CONFIG } from '../../lib/money-maker/types'
+import { ConfluenceLevel, MoneyMakerSignal, MoneyMakerSnapshotResult, MoneyMakerSymbolSnapshot, DEFAULT_CONFIG } from '../../lib/money-maker/types'
 import { computeVWAP, computeEMA, computeSMA, computeFibonacciLevels } from '../../lib/money-maker/indicator-computer'
 import { determineRegime } from '../../lib/money-maker/orb-calculator'
 import { detectPatienceCandle } from '../../lib/money-maker/patience-candle-detector'
@@ -12,17 +12,13 @@ import { supabase } from '../../config/database'
 
 const SIGNAL_NAMESPACE = '1b671a64-40d5-491e-99b0-da01ff1f3341'
 
-export interface SnapshotResult {
-    timestamp: number
-    signals: MoneyMakerSignal[]
-}
-
 /**
  * Main engine loop (Slice 2.3)
  * Fetches required bars, computes indicators, detects setups, and ranks them.
  */
-export async function buildSnapshot(symbols: string[], userId?: string): Promise<SnapshotResult> {
+export async function buildSnapshot(symbols: string[], userId?: string): Promise<MoneyMakerSnapshotResult> {
     const signalCandidates: MoneyMakerSignal[] = []
+    const symbolSnapshots: MoneyMakerSymbolSnapshot[] = []
 
     // 1. Fetch raw data
     const symbolData = await fetchAllSymbolData(symbols)
@@ -34,6 +30,7 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
         const bars5m = data['5Min']
         const bars1D = data['1D'] || []
         const currentBar = bars5m[bars5m.length - 1]
+        const previousBar = bars5m.length >= 2 ? bars5m[bars5m.length - 2] : null
 
         // 2. Compute Indicators
         const vwap = computeVWAP(bars5m)
@@ -83,6 +80,33 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
 
         // Build zones
         const zones = buildConfluenceZones(rawLevels, currentBar.close, '5m')
+        const strongestConfluence = zones.length > 0
+            ? [...zones].sort((left, right) => {
+                if (right.score !== left.score) return right.score - left.score
+                return right.levels.length - left.levels.length
+            })[0]
+            : null
+        const priceChange = previousBar ? currentBar.close - previousBar.close : null
+        const priceChangePercent = previousBar && previousBar.close !== 0
+            ? ((currentBar.close - previousBar.close) / previousBar.close) * 100
+            : null
+
+        symbolSnapshots.push({
+            symbol,
+            price: currentBar.close,
+            priceChange,
+            priceChangePercent,
+            orbRegime: regime,
+            strongestConfluence,
+            indicators: {
+                vwap,
+                ema8,
+                ema21,
+                ema34,
+                sma200,
+            },
+            lastCandleAt: currentBar.timestamp,
+        })
 
         // For each zone, check both directions for patience candle
         for (const zone of zones) {
@@ -191,6 +215,7 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
 
     return {
         timestamp: Date.now(),
-        signals: rankedSignals
+        signals: rankedSignals,
+        symbolSnapshots,
     }
 }

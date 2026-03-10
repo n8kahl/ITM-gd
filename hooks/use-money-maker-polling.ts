@@ -29,6 +29,7 @@ export function useMoneyMakerPolling() {
     const {
         setSymbols,
         setSignals,
+        setSymbolSnapshots,
         setIsLoading,
         setIsRefreshing,
         setError,
@@ -86,11 +87,13 @@ export function useMoneyMakerPolling() {
 
             const data = await response.json()
             const signals = Array.isArray(data.signals) ? data.signals : []
-            const symbols = Array.isArray(data.symbols)
-                ? data.symbols.filter((symbol: unknown): symbol is string => typeof symbol === 'string' && symbol.length > 0)
-                : []
+            const symbolSnapshots = Array.isArray(data.symbolSnapshots) ? data.symbolSnapshots : []
+            const symbols = symbolSnapshots
+                .map((snapshot: { symbol?: unknown }) => snapshot?.symbol)
+                .filter((symbol: unknown): symbol is string => typeof symbol === 'string' && symbol.length > 0)
 
             setSignals(signals)
+            setSymbolSnapshots(symbolSnapshots)
             if (symbols.length > 0) {
                 setSymbols(symbols)
             }
@@ -103,13 +106,14 @@ export function useMoneyMakerPolling() {
             setIsLoading(false)
             setIsRefreshing(false)
         }
-    }, [session?.access_token, setError, setIsLoading, setIsRefreshing, setLastUpdated, setSignals, setSymbols])
+    }, [session?.access_token, setError, setIsLoading, setIsRefreshing, setLastUpdated, setSignals, setSymbolSnapshots, setSymbols])
 
     useEffect(() => {
         hasLoadedSnapshot.current = false
 
         if (!session?.access_token) {
             setSignals([])
+            setSymbolSnapshots([])
             setIsLoading(false)
             setIsRefreshing(false)
             return
@@ -134,7 +138,7 @@ export function useMoneyMakerPolling() {
             cancelled = true
             window.clearInterval(interval)
         }
-    }, [session?.access_token, fetchSnapshot, fetchWatchlist, setIsLoading, setIsRefreshing, setSignals])
+    }, [session?.access_token, fetchSnapshot, fetchWatchlist, setIsLoading, setIsRefreshing, setSignals, setSymbolSnapshots])
 
     return {
         refreshSnapshot: () => fetchSnapshot(hasLoadedSnapshot.current ? 'background' : 'initial'),
