@@ -205,6 +205,16 @@ function formatExpirationChipLabel(expirationDate: string): string {
   }).format(parsed)
 }
 
+function formatExpirationSplitLabel(expirationDate: string): { dow: string; label: string } {
+  const parsed = new Date(`${expirationDate}T00:00:00.000Z`)
+  if (Number.isNaN(parsed.getTime())) return { dow: '', label: expirationDate }
+
+  return {
+    dow: new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short' }).format(parsed),
+    label: new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }).format(parsed),
+  }
+}
+
 function formatExpirationForContractLabel(expirationDate: string): string {
   const match = expirationDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (!match) return expirationDate
@@ -831,10 +841,10 @@ export function AlertConsole() {
     )
   }
 
-  const fieldClass = 'h-11 border border-emerald-500/20 bg-black/40 font-mono text-sm text-white placeholder:text-white/35 focus-visible:ring-1 focus-visible:ring-emerald-300/60'
-  const actionButtonClass = 'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-[0.08em] text-emerald-100 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-45'
-  const ghostButtonClass = 'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-white/15 bg-black/35 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-[0.08em] text-white/80 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-45'
-  const chipClass = 'inline-flex min-h-[40px] items-center rounded-lg border border-emerald-500/20 bg-black/35 px-3 py-2 font-mono text-sm text-white/75 transition hover:border-emerald-400/45 hover:text-emerald-200'
+  const fieldClass = 'h-11 rounded-lg border border-emerald-500/20 bg-[#0b120f]/95 px-3 text-[15px] text-white placeholder:text-white/35 focus-visible:ring-1 focus-visible:ring-emerald-300/60'
+  const actionButtonClass = 'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-emerald-500/35 bg-emerald-500/14 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/24 disabled:cursor-not-allowed disabled:opacity-45'
+  const ghostButtonClass = 'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-white/15 bg-black/35 px-4 py-2 text-sm font-medium text-white/80 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-45'
+  const chipClass = 'inline-flex min-h-[40px] items-center rounded-lg border border-emerald-500/20 bg-black/35 px-4 py-2 font-mono text-[15px] text-white/75 transition hover:border-emerald-400/45 hover:text-emerald-200'
 
   return (
     <div className="space-y-4">
@@ -843,13 +853,13 @@ export function AlertConsole() {
 
         <div className="relative flex flex-wrap items-center justify-between gap-3 border-b border-emerald-500/15 px-4 py-3 md:px-5">
           <div>
-            <h2 className="font-['Playfair_Display'] text-xl text-white">Alert Console</h2>
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">
-              Emerald Standard Execution Surface
+            <h2 className="font-['Playfair_Display'] text-[28px] leading-none text-white">Alert Console</h2>
+            <p className="mt-1 text-[13px] text-white/55">
+              UX walkthrough mode, desktop + mobile.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.1em] ${resolvedConnectionTone}`}>
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${resolvedConnectionTone}`}>
               <CircleDot className="h-3 w-3" />
               {connectionStatus === 'connected' ? `Live · ${sessionLabel}` : connectionStatus}
             </div>
@@ -870,7 +880,7 @@ export function AlertConsole() {
           <ChevronRight className="h-3.5 w-3.5 text-white/35" />
           <span className="text-[#F3E5AB]">{selectedContractCode}</span>
           <ChevronRight className="h-3.5 w-3.5 text-white/35" />
-          <span className="uppercase">{selectedTradeState}</span>
+          <span>{selectedTradeState}</span>
         </div>
 
         <div className="relative space-y-4 p-4 md:p-5">
@@ -929,7 +939,7 @@ export function AlertConsole() {
           {trades.length > 0 ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-white/55">Trade Tabs</p>
+                <p className="font-mono text-[11px] text-white/55">Trade Tabs</p>
                 <p className="font-mono text-[11px] text-white/45">{trades.length} total</p>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1">
@@ -962,12 +972,18 @@ export function AlertConsole() {
           <section className="rounded-xl border border-emerald-500/20 bg-black/35 p-3 md:p-4">
             <div className="mb-3">
               <h3 className="font-['Playfair_Display'] text-xl text-white">Contract Setup</h3>
-              <p className="text-sm text-white/60">Step flow: ticker → expiration → strike → PREP.</p>
+              <p className="text-sm text-white/60">Step flow: ticker → expiration → strike → size → PREP.</p>
             </div>
 
             <div className="mb-3 rounded-lg border border-emerald-500/15 bg-black/30 p-3">
+              <Input
+                value={symbol}
+                onChange={(event) => setSymbol(event.target.value)}
+                placeholder="Search ticker..."
+                className={`${fieldClass} mb-3`}
+              />
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="font-mono text-xs uppercase tracking-[0.12em] text-white/55">Ticker Favorites</span>
+                <span className="text-sm text-white/70">Ticker Favorites</span>
                 <button
                   type="button"
                   className={ghostButtonClass}
@@ -988,7 +1004,7 @@ export function AlertConsole() {
                         type="button"
                         key={chipTicker}
                         onClick={() => selectTicker(chipTicker)}
-                        className={`${chipClass} ${normalizedSymbol === chipTicker ? 'border-emerald-400/55 bg-emerald-500/20 text-emerald-100' : ''}`}
+                        className={`${chipClass} ${!pinned ? 'border-dashed border-white/20' : ''} ${normalizedSymbol === chipTicker ? 'border-emerald-400/55 bg-emerald-500/20 text-emerald-100' : ''}`}
                       >
                         {pinned ? <span className="mr-1.5 text-[10px]">📌</span> : null}
                         {chipTicker}
@@ -999,13 +1015,7 @@ export function AlertConsole() {
               </div>
             </div>
 
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-              <Input
-                value={symbol}
-                onChange={(event) => setSymbol(event.target.value)}
-                placeholder="Ticker"
-                className={fieldClass}
-              />
+            <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-6">
               <select
                 value={String(strikesPerSide)}
                 onChange={(event) => setStrikesPerSide(Number(event.target.value))}
@@ -1063,19 +1073,21 @@ export function AlertConsole() {
                   expirationOptions.map((expirationDate) => {
                     const selected = expirationDate === expiration
                     const today = expirationDate === toTodayEtDateString()
+                    const split = formatExpirationSplitLabel(expirationDate)
                     return (
                       <button
                         key={expirationDate}
                         type="button"
                         onClick={() => setExpiration(expirationDate)}
-                        className={`min-h-[40px] shrink-0 rounded-lg border px-3 py-2 text-center font-mono text-xs transition ${
+                        className={`min-h-[44px] shrink-0 rounded-lg border px-3 py-1 text-center transition ${
                           selected
                             ? 'border-emerald-400/55 bg-emerald-500/18 text-emerald-100'
                             : 'border-white/15 bg-black/35 text-white/70 hover:border-emerald-500/35'
                         }`}
                       >
-                        {formatExpirationChipLabel(expirationDate)}
-                        {today ? <span className="ml-1 text-[10px] text-[#F3E5AB]">0DTE</span> : null}
+                        <span className="block text-[10px] uppercase tracking-[0.08em] text-white/45">{split.dow}</span>
+                        <span className="block font-mono text-xs">{split.label}</span>
+                        {today ? <span className="block text-[9px] text-[#F3E5AB]">0DTE</span> : null}
                       </button>
                     )
                   })
@@ -1517,7 +1529,7 @@ export function AlertConsole() {
           ) : null}
 
           <section className="rounded-xl border border-emerald-500/20 bg-black/30 p-3 md:p-4">
-            <h3 className="mb-2 font-mono text-xs uppercase tracking-[0.12em] text-white/55">Commentary & Session Closeout</h3>
+            <h3 className="mb-2 font-mono text-xs text-white/55">Commentary & Session Closeout</h3>
             <div className="mb-3 flex gap-2">
               <Textarea
                 value={commentaryText}
@@ -1554,7 +1566,7 @@ export function AlertConsole() {
           <section className="rounded-xl border border-emerald-500/20 bg-black/30">
             <button
               type="button"
-              className="flex w-full items-center justify-between px-4 py-3 font-mono text-xs uppercase tracking-[0.12em] text-white/65 transition hover:text-white"
+              className="flex w-full items-center justify-between px-4 py-3 font-mono text-xs text-white/65 transition hover:text-white"
               onClick={() => setShowSessionLog((current) => !current)}
             >
               <span>Session Log ({sessionMessages.length})</span>
