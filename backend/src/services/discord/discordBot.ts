@@ -1,5 +1,7 @@
 import { logger } from '../../lib/logger';
 
+const DISCORD_MAX_CONTENT_LENGTH = 2000;
+
 export interface DiscordBotMessagePayload {
   messageId: string;
   guildId: string;
@@ -26,6 +28,14 @@ interface DiscordMessageLike {
   editedTimestamp: number | null;
 }
 
+interface DiscordChannelLike {
+  send: (content: string | { content: string }) => Promise<unknown>;
+}
+
+interface DiscordChannelsManagerLike {
+  fetch: (channelId: string) => Promise<DiscordChannelLike | null>;
+}
+
 interface DiscordClientLike {
   on(event: 'ready', listener: () => void): unknown;
   on(event: 'error', listener: (error: unknown) => void): unknown;
@@ -35,6 +45,7 @@ interface DiscordClientLike {
   off(event: 'messageCreate', listener: (message: DiscordMessageLike) => void): unknown;
   login(token: string): Promise<unknown>;
   destroy(): void;
+  channels?: DiscordChannelsManagerLike;
   user?: {
     tag?: string | null;
   } | null;
@@ -75,6 +86,15 @@ function parseCsvIds(value: string | undefined): string[] {
     .filter((entry) => entry.length > 0);
 
   return [...new Set(ids)];
+}
+
+function normalizeIdList(values: string[]): string[] {
+  return [...new Set(values.map((entry) => entry.trim()).filter((entry) => entry.length > 0))];
+}
+
+function truncateContent(content: string): string {
+  if (content.length <= DISCORD_MAX_CONTENT_LENGTH) return content;
+  return `${content.slice(0, DISCORD_MAX_CONTENT_LENGTH - 3)}...`;
 }
 
 function toIsoTimestamp(timestamp: number | null | undefined): string | null {
@@ -119,12 +139,20 @@ export function isDiscordBotEnabled(env: NodeJS.ProcessEnv = process.env): boole
   return parseBooleanEnv(env.DISCORD_BOT_ENABLED, false);
 }
 
+export interface DiscordBotRuntimeConfig {
+  enabled: boolean;
+  token: string | null;
+  guildIds: string[];
+  channelIds: string[];
+}
+
 export class DiscordBotService {
   private readonly deps: DiscordBotDependencies;
   private client: DiscordClientLike | null = null;
   private listeners: DiscordClientListeners | null = null;
   private startInFlight: Promise<void> | null = null;
   private messageHandler: DiscordBotMessageHandler;
+  private runtimeConfig: DiscordBotRuntimeConfig | null = null;
 
   constructor(dependencies?: Partial<DiscordBotDependencies>) {
     const resolvedLogger = dependencies?.logger ?? logger;
@@ -139,6 +167,61 @@ export class DiscordBotService {
 
   setMessageHandler(handler: DiscordBotMessageHandler): void {
     this.messageHandler = handler;
+  }
+
+  setRuntimeConfig(config: DiscordBotRuntimeConfig | null): void {
+    if (!config) {
+      this.runtimeConfig = null;
+      return;
+    }
+
+    this.runtimeConfig = {
+      enabled: config.enabled,
+      token: typeof config.token === 'string' ? config.token : null,
+      guildIds: normalizeIdList(config.guildIds ?? []),
+      channelIds: normalizeIdList(config.channelIds ?? []),
+    };
+  }
+
+  async sendMessage(channelId: string, content: string): Promise<boolean> {
+    const client = this.client;
+    if (!client) {
+      this.deps.logger.warn('Discord outbound send skipped because bot is not connected');
+      return false;
+    }
+
+    const normalizedChannelId = channelId.trim();
+    if (!normalizedChannelId) {
+      this.deps.logger.warn('Discord outbound send skipped because channel id is missing');
+      return false;
+    }
+
+    const normalizedContent = content.trim();
+    if (!normalizedContent) {
+      this.deps.logger.warn('Discord outbound send skipped because message content is empty', {
+        channelId: normalizedChannelId,
+      });
+      return false;
+    }
+
+    try {
+      const channel = await client.channels?.fetch(normalizedChannelId);
+      if (!channel || typeof channel.send !== 'function') {
+        this.deps.logger.warn('Discord outbound send skipped because target channel is unavailable', {
+          channelId: normalizedChannelId,
+        });
+        return false;
+      }
+
+      await channel.send({ content: truncateContent(normalizedContent) });
+      return true;
+    } catch (error) {
+      this.deps.logger.warn('Discord outbound send failed; continuing fail-open', {
+        error: error instanceof Error ? error.message : String(error),
+        channelId: normalizedChannelId,
+      });
+      return false;
+    }
   }
 
   async start(): Promise<void> {
@@ -162,7 +245,9 @@ export class DiscordBotService {
   }
 
   private async startInternal(): Promise<void> {
-    if (!isDiscordBotEnabled(this.deps.env)) {
+    const runtimeConfig = this.runtimeConfig;
+    const enabled = runtimeConfig ? runtimeConfig.enabled : isDiscordBotEnabled(this.deps.env);
+    if (!enabled) {
       return;
     }
 
@@ -170,9 +255,15 @@ export class DiscordBotService {
       return;
     }
 
-    const token = (this.deps.env.DISCORD_BOT_TOKEN || '').trim();
-    const guildIds = parseCsvIds(this.deps.env.DISCORD_BOT_GUILD_IDS);
-    const channelIds = parseCsvIds(this.deps.env.DISCORD_BOT_CHANNEL_IDS);
+    const token = runtimeConfig
+      ? (runtimeConfig.token || '').trim()
+      : (this.deps.env.DISCORD_BOT_TOKEN || '').trim();
+    const guildIds = runtimeConfig
+      ? normalizeIdList(runtimeConfig.guildIds)
+      : parseCsvIds(this.deps.env.DISCORD_BOT_GUILD_IDS);
+    const channelIds = runtimeConfig
+      ? normalizeIdList(runtimeConfig.channelIds)
+      : parseCsvIds(this.deps.env.DISCORD_BOT_CHANNEL_IDS);
 
     if (!token) {
       this.deps.logger.warn('Discord bot enabled but token missing; continuing fail-open');

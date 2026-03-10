@@ -25,6 +25,7 @@ const TAB_ID_ICON_MAP: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   journal: BookOpen,
   'spx-command-center': Target,
+  'money-maker': Target,
   'ai-coach': Bot,
   'swing-sniper': Radar,
   'trade-day-replay': Play,
@@ -119,6 +120,7 @@ export function getMemberFallbackTitle(pathname: string): string {
   }
   if (pathname.startsWith('/members/journal')) return 'Journal'
   if (pathname.startsWith('/members/spx-command-center')) return 'SPX Command Center'
+  if (pathname.startsWith('/members/money-maker')) return 'Money Maker'
   if (pathname.startsWith('/members/ai-coach')) return 'AI Coach'
   if (pathname.startsWith('/members/swing-sniper')) return 'Swing Sniper'
   if (pathname.startsWith('/members/trade-day-replay')) return 'Trade Day Replay'

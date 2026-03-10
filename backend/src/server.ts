@@ -8,7 +8,7 @@ import { initSentry, flushSentry, Sentry } from './config/sentry';
 import { logger } from './lib/logger';
 import { connectRedis } from './config/redis';
 import { requestIdMiddleware } from './middleware/requestId';
-import { validateEnv } from './config/env';
+import { validateEnv, type Env } from './config/env';
 import { generalLimiter, chatLimiter, screenshotLimiter } from './middleware/rateLimiter';
 import { authenticateToken } from './middleware/auth';
 import healthRouter from './routes/health';
@@ -31,6 +31,7 @@ import academyAnalyticsRouter from './routes/academy-analytics';
 import academyAdminRouter from './routes/academy-admin';
 import tradeDayReplayRouter from './routes/trade-day-replay';
 import swingSniperRouter from './routes/swing-sniper';
+import moneyMakerRoutes from './routes/money-maker'; // Added Money Maker strategy routes
 import { startMorningBriefWorker, stopMorningBriefWorker } from './workers/morningBriefWorker';
 import { startPositionTrackerWorker, stopPositionTrackerWorker } from './workers/positionTrackerWorker';
 import { startSessionCleanupWorker, stopSessionCleanupWorker } from './workers/sessionCleanupWorker';
@@ -47,10 +48,11 @@ import { startSpxTtlEnforcementWorker, stopSpxTtlEnforcementWorker } from './wor
 import { restoreTickEvaluatorState, persistTickEvaluatorState } from './services/spx/tickEvaluator';
 import { getSPXSnapshot } from './services/spx';
 import { replaySnapshotWriter } from './services/spx/replaySnapshotWriter';
-import { discordBot } from './services/discord/discordBot';
+import { discordBot, type DiscordBotMessagePayload } from './services/discord/discordBot';
 import { parseDiscordMessageWithFallback } from './services/discord/messageParser';
 import { discordBroadcaster } from './services/discord/discordBroadcaster';
 import { discordPersistence, persistThenBroadcastDiscordSignal } from './services/discord/discordPersistence';
+import { resolveDiscordRuntimeConfig } from './services/discord/discordConfigStore';
 
 const app: Application = express();
 const PORT = process.env.PORT || 3001;
@@ -98,15 +100,15 @@ app.use((req: Request, res: Response, next: any) => {
       ? 90000
       : req.path.startsWith('/api/swing-sniper')
         ? 30000
-      : req.path.startsWith('/api/spx/snapshot')
-        ? 75000
-      : req.path.startsWith('/api/spx/contract-select')
-        ? 60000
-        : req.path.startsWith('/api/spx')
-          ? 45000
-    : (req.path.startsWith('/api/brief') || req.path.startsWith('/api/market'))
-      ? 45000
-      : 30000;
+        : req.path.startsWith('/api/spx/snapshot')
+          ? 75000
+          : req.path.startsWith('/api/spx/contract-select')
+            ? 60000
+            : req.path.startsWith('/api/spx')
+              ? 45000
+              : (req.path.startsWith('/api/brief') || req.path.startsWith('/api/market'))
+                ? 45000
+                : 30000;
   res.setTimeout(timeout, () => {
     if (!res.headersSent) {
       res.status(408).json({ error: 'Request timeout', message: 'The request took too long to process. Please try again.' });
@@ -203,6 +205,109 @@ app.use((err: Error, _req: Request, res: Response, _next: any) => {
 
 let httpServer: any;
 let stopNewsSentimentPolling: (() => void) | null = null;
+let discordConfigPollTimer: NodeJS.Timeout | null = null;
+let lastDiscordConfigFingerprint: string | null = null;
+let discordConfigSyncInFlight = false;
+
+function buildDiscordConfigFingerprint(config: {
+  enabled: boolean;
+  token: string | null;
+  guildIds: string[];
+  channelIds: string[];
+  deliveryMethod: string;
+  webhookUrl: string | null;
+  source: string;
+}): string {
+  return JSON.stringify({
+    enabled: config.enabled,
+    tokenHashSeed: config.token ? `${config.token.length}:${config.token.slice(0, 4)}` : null,
+    guildIds: [...config.guildIds].sort(),
+    channelIds: [...config.channelIds].sort(),
+    deliveryMethod: config.deliveryMethod,
+    webhookUrl: config.webhookUrl,
+    source: config.source,
+  });
+}
+
+function createDiscordMessageHandler() {
+  return async (payload: DiscordBotMessagePayload) => {
+    if (payload.authorIsBot) {
+      return;
+    }
+
+    try {
+      const parsed = await parseDiscordMessageWithFallback(payload);
+      await persistThenBroadcastDiscordSignal(parsed, {
+        persistence: discordPersistence,
+        broadcaster: discordBroadcaster,
+        logger,
+      });
+    } catch (error) {
+      logger.warn('Discord message pipeline failed; continuing fail-open', {
+        error: error instanceof Error ? error.message : String(error),
+        messageId: payload.messageId,
+        channelId: payload.channelId,
+      });
+    }
+  };
+}
+
+async function syncDiscordBotRuntimeConfig(env: Env, reason: 'startup' | 'poll'): Promise<void> {
+  if (discordConfigSyncInFlight) return;
+  discordConfigSyncInFlight = true;
+
+  try {
+    const config = await resolveDiscordRuntimeConfig({ env, logger });
+    const fingerprint = buildDiscordConfigFingerprint(config);
+
+    if (reason === 'poll' && fingerprint === lastDiscordConfigFingerprint) {
+      return;
+    }
+
+    if (config.enabled && config.token) {
+      discordBot.setRuntimeConfig({
+        enabled: true,
+        token: config.token,
+        guildIds: config.guildIds,
+        channelIds: config.channelIds,
+      });
+      discordBot.setMessageHandler(createDiscordMessageHandler());
+
+      // Ensure config changes are picked up immediately and old listeners are detached.
+      await discordBot.stop();
+      await discordBot.start();
+
+      logger.info('Discord bot runtime synchronized', {
+        reason,
+        source: config.source,
+        guildCount: config.guildIds.length,
+        channelCount: config.channelIds.length,
+      });
+    } else {
+      await discordBot.stop();
+      discordBot.setRuntimeConfig(null);
+
+      if (config.source !== 'disabled') {
+        logger.warn('Discord runtime config present but prerequisites are not met', {
+          reason,
+          source: config.source,
+          hasToken: Boolean(config.token),
+          guildCount: config.guildIds.length,
+          channelCount: config.channelIds.length,
+        });
+      }
+    }
+
+    lastDiscordConfigFingerprint = fingerprint;
+  } catch (error) {
+    logger.warn('Discord runtime sync failed; continuing fail-open', {
+      error: error instanceof Error ? error.message : String(error),
+      reason,
+    });
+  } finally {
+    discordConfigSyncInFlight = false;
+  }
+}
 
 async function start() {
   try {
@@ -257,29 +362,10 @@ async function start() {
       replaySnapshotWriter.start();
       logger.info('Replay snapshot writer lifecycle started');
     }
-    if (env.DISCORD_BOT_ENABLED) {
-      discordBot.setMessageHandler(async (payload) => {
-        if (payload.authorIsBot) {
-          return;
-        }
-
-        try {
-          const parsed = await parseDiscordMessageWithFallback(payload);
-          await persistThenBroadcastDiscordSignal(parsed, {
-            persistence: discordPersistence,
-            broadcaster: discordBroadcaster,
-            logger,
-          });
-        } catch (error) {
-          logger.warn('Discord message pipeline failed; continuing fail-open', {
-            error: error instanceof Error ? error.message : String(error),
-            messageId: payload.messageId,
-            channelId: payload.channelId,
-          });
-        }
-      });
-      await discordBot.start();
-    }
+    await syncDiscordBotRuntimeConfig(env, 'startup');
+    discordConfigPollTimer = setInterval(() => {
+      void syncDiscordBotRuntimeConfig(env, 'poll');
+    }, 30_000);
 
     // Restore tick evaluator state from Redis (survives backend restarts)
     restoreTickEvaluatorState().then((count) => {
@@ -327,6 +413,10 @@ async function gracefulShutdown(signal: string) {
     stopPortfolioSyncWorker();
     stopSpxEodCleanupWorker();
     stopSpxTtlEnforcementWorker();
+    if (discordConfigPollTimer) {
+      clearInterval(discordConfigPollTimer);
+      discordConfigPollTimer = null;
+    }
     await replaySnapshotWriter.stop();
     await discordBot.stop();
 

@@ -5,6 +5,7 @@ import type { ParsedDiscordSignal, DiscordSignalType, ParsedSignalFields } from 
 export type DiscordBroadcastEventKind =
   | 'discord_prep'
   | 'discord_fill'
+  | 'discord_update'
   | 'discord_trim'
   | 'discord_stop'
   | 'discord_exit'
@@ -49,7 +50,10 @@ export function mapDiscordSignalToEventKind(signalType: DiscordSignalType): Disc
       return 'discord_prep';
     case 'ptf':
     case 'filled_avg':
+    case 'add':
       return 'discord_fill';
+    case 'update':
+      return 'discord_update';
     case 'trim':
       return 'discord_trim';
     case 'stops':

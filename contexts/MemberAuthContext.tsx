@@ -161,6 +161,21 @@ const FALLBACK_TAB_CONFIGS: TabConfig[] = [
     is_active: true,
   },
   {
+    id: 'money-maker',
+    tab_id: 'money-maker',
+    label: 'Money Maker',
+    icon: 'Target',
+    path: '/members/money-maker',
+    required_tier: 'admin',
+    badge_text: 'Beta',
+    badge_variant: 'emerald',
+    description: 'High-Precision KCU Strategy Signals',
+    mobile_visible: true,
+    sort_order: 3,
+    is_required: false,
+    is_active: true,
+  },
+  {
     id: 'ai-coach',
     tab_id: 'ai-coach',
     label: 'AI Coach',
@@ -1037,63 +1052,63 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
           const result = await response.json()
 
-        if (result.success) {
-          // Use role IDs for tier determination
-          const roleIds = result.roles.map((r: { id: string; name: string | null }) => r.id)
-          const roleTitleMap = buildRoleTitleMapFromSyncResult(result)
+          if (result.success) {
+            // Use role IDs for tier determination
+            const roleIds = result.roles.map((r: { id: string; name: string | null }) => r.id)
+            const roleTitleMap = buildRoleTitleMapFromSyncResult(result)
 
-          const profile: MemberProfile = {
-            id: user.id,
-            email: user.email || null,
-            discord_user_id: result.discord_user_id,
-            discord_username: result.discord_username,
-            discord_avatar: result.discord_avatar || null,
-            discord_roles: roleIds,
-            discord_role_titles: roleTitleMap,
-            membership_tier: getMembershipTierRef.current(roleIds),
-            role: isAdmin ? 'admin' : null,
+            const profile: MemberProfile = {
+              id: user.id,
+              email: user.email || null,
+              discord_user_id: result.discord_user_id,
+              discord_username: result.discord_username,
+              discord_avatar: result.discord_avatar || null,
+              discord_roles: roleIds,
+              discord_role_titles: roleTitleMap,
+              membership_tier: getMembershipTierRef.current(roleIds),
+              role: isAdmin ? 'admin' : null,
+            }
+
+            const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              description: p.description,
+              granted_by_role: p.granted_by_role,
+            }))
+
+            // Get allowed tabs based on membership tier
+            const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier, isAdmin)
+
+            setState(prev => ({
+              ...prev,
+              profile,
+              permissions,
+              allowedTabs,
+              isLoading: false,
+            }))
+          } else {
+            // Sync failed but user is still authenticated
+            // Create basic profile from Supabase user
+            const profile: MemberProfile = {
+              id: user.id,
+              email: user.email || null,
+              discord_user_id: null,
+              discord_username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Member',
+              discord_avatar: user.user_metadata?.avatar_url || null,
+              discord_roles: [],
+              discord_role_titles: {},
+              membership_tier: null,
+              role: isAdmin ? 'admin' : null,
+            }
+
+            setState(prev => ({
+              ...prev,
+              profile,
+              isLoading: false,
+              error: result.error || 'Failed to sync Discord roles',
+              errorCode: result.code || null,
+            }))
           }
-
-          const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            description: p.description,
-            granted_by_role: p.granted_by_role,
-          }))
-
-          // Get allowed tabs based on membership tier
-          const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier, isAdmin)
-
-          setState(prev => ({
-            ...prev,
-            profile,
-            permissions,
-            allowedTabs,
-            isLoading: false,
-          }))
-        } else {
-          // Sync failed but user is still authenticated
-          // Create basic profile from Supabase user
-          const profile: MemberProfile = {
-            id: user.id,
-            email: user.email || null,
-            discord_user_id: null,
-            discord_username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Member',
-            discord_avatar: user.user_metadata?.avatar_url || null,
-            discord_roles: [],
-            discord_role_titles: {},
-            membership_tier: null,
-            role: isAdmin ? 'admin' : null,
-          }
-
-          setState(prev => ({
-            ...prev,
-            profile,
-            isLoading: false,
-            error: result.error || 'Failed to sync Discord roles',
-            errorCode: result.code || null,
-          }))
-        }
         } catch (syncError) {
           // Handle timeout or network errors during initial sync
           const isTimeout = syncError instanceof Error && syncError.name === 'AbortError'

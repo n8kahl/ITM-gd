@@ -9,7 +9,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   LayoutDashboard, Users, MessageSquare, GraduationCap, BookOpen,
   ClipboardCheck, Shield, ShieldAlert, Tag, Sliders, Activity, PanelTop,
-  ChevronRight, LogOut, Wand2, Bell,
+  ChevronRight, LogOut, Wand2, Bell, Radio,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
@@ -102,6 +102,7 @@ export function AdminSidebar() {
       items: [
         { name: 'Course Library', href: '/admin/courses', icon: GraduationCap },
         { name: 'Knowledge Base', href: '/admin/knowledge-base', icon: BookOpen },
+        { name: 'Alert Console', href: '/admin/alerts', icon: Radio },
         {
           name: 'Trade Review',
           href: '/admin/trade-review',
