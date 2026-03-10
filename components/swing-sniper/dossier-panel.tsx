@@ -23,6 +23,7 @@ type DossierTab = (typeof DOSSIER_TABS)[number]
 
 interface DossierPanelProps {
   dossier: SwingSniperDossierPayload | null
+  selectedSymbol: string | null
   loading: boolean
   error: boolean
   activeTab: DossierTab
@@ -124,6 +125,10 @@ function formatPercent(value: number | null): string {
   return value == null ? '--' : `${value.toFixed(1)}%`
 }
 
+function formatStrike(strike: number): string {
+  return Number.isInteger(strike) ? strike.toFixed(0) : strike.toFixed(1)
+}
+
 function monitoringTone(status: string | null): string {
   if (status === 'active') return 'text-emerald-100'
   if (status === 'degrading') return 'text-amber-100'
@@ -133,6 +138,7 @@ function monitoringTone(status: string | null): string {
 
 export function DossierPanel({
   dossier,
+  selectedSymbol,
   loading,
   error,
   activeTab,
@@ -154,16 +160,28 @@ export function DossierPanel({
     : null
 
   const topStructure = dossier?.structures[0] ?? null
+  const structureAlternatives = dossier?.structures.slice(1, 4) ?? []
+  const narrativePreview = dossier?.thesis.narrative_shifts.slice(0, 2) ?? []
   const leadCatalysts = dossier ? [...dossier.catalysts].sort((left, right) => left.days_out - right.days_out).slice(0, 3) : []
+  const transitionSymbol = selectedSymbol ?? dossier?.symbol ?? 'Research'
 
   return (
     <section className="glass-card-heavy rounded-[28px] border border-white/10 p-5" data-testid="swing-sniper-dossier">
       {loading ? (
         <div className="space-y-4">
           <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
-            <div className="h-5 w-44 animate-pulse rounded bg-white/10" />
-            <div className="mt-4 h-10 w-28 animate-pulse rounded bg-white/[0.08]" />
-            <div className="mt-4 h-4 w-5/6 animate-pulse rounded bg-white/5" />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="rounded-full border border-champagne/35 bg-champagne/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-champagne">
+                Refreshing execution plan
+              </div>
+              <div className="h-6 w-28 animate-pulse rounded-full bg-white/10" />
+            </div>
+            <h2 className="mt-4 font-[family-name:var(--font-playfair)] text-[clamp(2.75rem,6vw,4rem)] tracking-[-0.045em] text-white">
+              {transitionSymbol}
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-muted-foreground">
+              Pulling the latest thesis, contracts, and risk context for the selected symbol.
+            </p>
             <div className="mt-6 grid gap-3 md:grid-cols-4">
               {Array.from({ length: 4 }, (_, index) => (
                 <div key={index} className="h-20 animate-pulse rounded-[22px] border border-white/10 bg-white/[0.04]" />
@@ -259,14 +277,24 @@ export function DossierPanel({
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_340px]">
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
             <div className="space-y-4">
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-sm font-medium text-white">Why now</p>
-                  <p className="mt-3 text-sm leading-7 text-white/85">{dossier.thesis.summary}</p>
-                </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-sm font-medium text-white">Trade thesis</p>
+                <p className="mt-3 text-sm leading-7 text-white/85">{dossier.thesis.summary}</p>
 
+                {narrativePreview.length > 0 ? (
+                  <div className="mt-4 grid gap-2 lg:grid-cols-2">
+                    {narrativePreview.map((item) => (
+                      <div key={item} className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-3 text-sm leading-6 text-muted-foreground">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm font-medium text-white">Vol setup</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -283,13 +311,32 @@ export function DossierPanel({
                     ))}
                   </div>
                 </div>
-              </div>
 
+                <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-sm font-medium text-white">Catalyst clock</p>
+                  <div className="mt-4 space-y-3">
+                    {leadCatalysts.map((event) => (
+                      <div key={`${event.date}-${event.label}`} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
+                        <div className="font-mono text-xs uppercase tracking-[0.14em] text-champagne">
+                          {event.days_out <= 0 ? 'Now' : `${event.days_out}D`}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-white">{event.label}</p>
+                          <p className="mt-1 text-sm leading-6 text-muted-foreground">{event.context}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
               <div className="rounded-[24px] border border-emerald-500/18 bg-gradient-to-b from-emerald-500/[0.08] to-white/[0.03] p-4">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-white">Best expressions</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Top setup recommendations ranked for the current thesis.</p>
+                    <p className="text-sm font-medium text-white">Execution plan</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Primary structure, suggested contracts, and the risk conditions that matter now.</p>
                   </div>
                   <Button
                     type="button"
@@ -298,63 +345,119 @@ export function DossierPanel({
                     onClick={() => onTabChange('Structure')}
                     className="rounded-full border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
                   >
-                    Compare all
+                    Compare setups
                   </Button>
                 </div>
 
-                <div className="mt-4 space-y-3">
-                  {dossier.structures.slice(0, 3).map((structure) => (
-                    <div key={`${structure.name}-${structure.fit_score}`} className="rounded-[22px] border border-white/10 bg-[#050505] p-4">
+                {topStructure ? (
+                  <div className="mt-4 space-y-4">
+                    <div className="rounded-[22px] border border-white/10 bg-[#050505] p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-base font-semibold text-white">{structure.name}</p>
-                          <p className="mt-2 text-sm leading-6 text-muted-foreground">{structure.rationale}</p>
+                          <p className="text-base font-semibold text-white">{topStructure.name}</p>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">{topStructure.rationale}</p>
                         </div>
                         <span className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1 font-mono text-xs text-emerald-100">
-                          Fit {structure.fit_score.toFixed(1)}
+                          Fit {topStructure.fit_score.toFixed(1)}
                         </span>
                       </div>
 
-                      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                      <div className="mt-4 grid gap-2 sm:grid-cols-4">
                         {[
-                          ['Max risk', structure.max_loss],
-                          ['Style', structure.style],
-                          ['POP', structure.pop],
+                          ['Entry', topStructure.entry_type],
+                          ['Max loss', topStructure.max_loss],
+                          ['POP', topStructure.pop],
+                          ['Style', topStructure.style],
                         ].map(([label, value]) => (
-                          <div key={`${structure.name}-${label}`} className="rounded-2xl border border-white/10 px-3 py-2">
+                          <div key={`${topStructure.name}-${label}`} className="rounded-2xl border border-white/10 px-3 py-2">
                             <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">{label}</p>
                             <p className="mt-1 text-sm text-white">{value}</p>
                           </div>
                         ))}
                       </div>
                     </div>
-                  ))}
 
-                  {dossier.structures.length === 0 ? (
-                    <div className="rounded-[22px] border border-white/10 bg-[#050505] p-4 text-sm text-muted-foreground">
-                      Structure recommendations are refreshing.
+                    <div className="rounded-[22px] border border-white/10 bg-[#050505] p-4">
+                      <p className="text-xs uppercase tracking-[0.14em] text-white/55">Suggested contracts</p>
+                      {topStructure.contracts?.length ? (
+                        <div className="mt-3 space-y-2">
+                          {topStructure.contracts.map((leg) => (
+                            <div key={`${topStructure.name}-${leg.leg}-${leg.expiry}-${leg.strike}`} className="rounded-2xl border border-white/10 px-3 py-3">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">
+                                    {leg.side.toUpperCase()} {formatStrike(leg.strike)}{leg.optionType === 'call' ? 'C' : 'P'}
+                                  </p>
+                                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-white/45">
+                                    {leg.leg} · {leg.expiry} · qty {leg.quantity}
+                                  </p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-xs text-white/75 sm:grid-cols-4">
+                                  <div className="rounded-xl border border-white/10 px-2 py-1.5">
+                                    <p className="text-[10px] uppercase tracking-[0.12em] text-white/40">Mark</p>
+                                    <p className="mt-1">{leg.mark != null ? `$${leg.mark.toFixed(2)}` : '--'}</p>
+                                  </div>
+                                  <div className="rounded-xl border border-white/10 px-2 py-1.5">
+                                    <p className="text-[10px] uppercase tracking-[0.12em] text-white/40">Bid/Ask</p>
+                                    <p className="mt-1">
+                                      {leg.bid != null && leg.ask != null ? `$${leg.bid.toFixed(2)} / $${leg.ask.toFixed(2)}` : '--'}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-xl border border-white/10 px-2 py-1.5">
+                                    <p className="text-[10px] uppercase tracking-[0.12em] text-white/40">Delta</p>
+                                    <p className="mt-1">{leg.delta != null ? leg.delta.toFixed(2) : '--'}</p>
+                                  </div>
+                                  <div className="rounded-xl border border-white/10 px-2 py-1.5">
+                                    <p className="text-[10px] uppercase tracking-[0.12em] text-white/40">OI</p>
+                                    <p className="mt-1">{leg.openInterest != null ? leg.openInterest.toLocaleString() : '--'}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-muted-foreground">Suggested contracts are still building for this structure.</p>
+                      )}
                     </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
 
-            <div className="space-y-4">
-              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-sm font-medium text-white">Catalyst clock</p>
-                <div className="mt-4 space-y-3">
-                  {leadCatalysts.map((event) => (
-                    <div key={`${event.date}-${event.label}`} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
-                      <div className="font-mono text-xs uppercase tracking-[0.14em] text-champagne">
-                        {event.days_out <= 0 ? 'Now' : `${event.days_out}D`}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-white">{event.label}</p>
-                        <p className="mt-1 text-sm leading-6 text-muted-foreground">{event.context}</p>
+                    <div className="rounded-[22px] border border-white/10 bg-[#050505] p-4">
+                      <p className="text-xs uppercase tracking-[0.14em] text-white/55">Execution risk</p>
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-white/40">Kill switch</p>
+                          <p className="mt-1 text-sm leading-6 text-white/85">{dossier.risk.killers[0] ?? 'Monitor catalyst drift'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-white/40">Exit framework</p>
+                          <p className="mt-1 text-sm leading-6 text-white/85">{dossier.risk.exit_framework}</p>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    {structureAlternatives.length > 0 ? (
+                      <div className="rounded-[22px] border border-white/10 bg-[#050505] p-4">
+                        <p className="text-xs uppercase tracking-[0.14em] text-white/55">Alternatives</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {structureAlternatives.map((structure) => (
+                            <button
+                              key={`${structure.name}-${structure.fit_score}`}
+                              type="button"
+                              onClick={() => onTabChange('Structure')}
+                              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs uppercase tracking-[0.14em] text-white/75 transition-colors hover:bg-white/[0.08]"
+                            >
+                              {structure.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-[22px] border border-white/10 bg-[#050505] p-4 text-sm text-muted-foreground">
+                    Structure recommendations are refreshing.
+                  </div>
+                )}
               </div>
 
               <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
