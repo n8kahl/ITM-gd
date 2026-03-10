@@ -818,6 +818,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!response.ok || !result?.success) {
+        if (response.status === 401) {
+          console.warn('Discord sync skipped: session token was rejected by edge function')
+          return null
+        }
+
         const errorMessage = typeof result?.error === 'string'
           ? result.error
           : (response.status === 401
@@ -1177,20 +1182,22 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
               role: isAdmin ? 'admin' : null,
             }
 
+            const isUnauthorizedSync = response.status === 401
+
             setState(prev => ({
               ...prev,
               profile,
               isLoading: false,
-              error: typeof result?.error === 'string'
-                ? result.error
-                : (response.status === 401
-                  ? 'Session expired while syncing Discord roles. Please sign in again.'
-                  : 'Failed to sync Discord roles'),
-              errorCode: (
-                typeof result?.code === 'string'
-                  ? result.code
-                  : (response.status === 401 ? SYNC_ERROR_CODES.INVALID_SESSION : SYNC_ERROR_CODES.SYNC_FAILED)
-              ) as SyncErrorCode,
+              error: isUnauthorizedSync
+                ? null
+                : (typeof result?.error === 'string' ? result.error : 'Failed to sync Discord roles'),
+              errorCode: isUnauthorizedSync
+                ? null
+                : (
+                  typeof result?.code === 'string'
+                    ? result.code
+                    : SYNC_ERROR_CODES.SYNC_FAILED
+                ) as SyncErrorCode,
             }))
           }
         } catch (syncError) {
