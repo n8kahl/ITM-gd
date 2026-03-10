@@ -5,20 +5,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronRight,
+  CircleDot,
+  Cog,
   Loader2,
   RefreshCcw,
-  Radio,
   SendHorizonal,
-  Settings2,
-  SquareChartGantt,
 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 
 type TradeState = 'IDLE' | 'STAGED' | 'ACTIVE' | 'CLOSED'
 type SignalType =
@@ -173,20 +168,6 @@ interface SendPayload {
   tradeId?: string | null
 }
 
-const STATUS_STYLE: Record<DiscordConnectionStatus, string> = {
-  connected: 'border-emerald-500/40 bg-emerald-500/20 text-emerald-200',
-  reconnecting: 'border-amber-500/40 bg-amber-500/20 text-amber-200',
-  disconnected: 'border-zinc-500/40 bg-zinc-500/20 text-zinc-200',
-  error: 'border-red-500/40 bg-red-500/20 text-red-200',
-}
-
-const TRADE_STATE_STYLE: Record<TradeState, string> = {
-  IDLE: 'border-zinc-500/40 bg-zinc-500/20 text-zinc-200',
-  STAGED: 'border-blue-500/40 bg-blue-500/20 text-blue-200',
-  ACTIVE: 'border-emerald-500/40 bg-emerald-500/20 text-emerald-200',
-  CLOSED: 'border-purple-500/40 bg-purple-500/20 text-purple-200',
-}
-
 function toTodayEtDateString(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/New_York',
@@ -222,6 +203,12 @@ function formatExpirationChipLabel(expirationDate: string): string {
     day: 'numeric',
     weekday: 'short',
   }).format(parsed)
+}
+
+function formatExpirationForContractLabel(expirationDate: string): string {
+  const match = expirationDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return expirationDate
+  return `${match[2]}/${match[3]}`
 }
 
 export function AlertConsole() {
@@ -816,787 +803,809 @@ export function AlertConsole() {
     return ((liveMark - latestEntryPrice) / Math.abs(latestEntryPrice)) * 100
   }, [latestEntryPrice, liveMark])
 
+  const selectedStrikeLabel = selectedStrikeValue != null ? formatValue(selectedStrikeValue, 0) : '--'
+  const selectedContractCode = `${selectedStrikeLabel}${optionType === 'call' ? 'C' : 'P'}`
+  const selectedExpirationShort = formatExpirationForContractLabel(expiration)
+  const prepLabel = `PREP ${normalizedSymbol || '---'} ${selectedContractCode} ${selectedExpirationShort}`.trim()
+  const sessionLabel = session?.date ?? toTodayEtDateString()
+  const resolvedConnectionTone = connectionStatus === 'connected'
+    ? 'border-emerald-500/35 bg-emerald-500/12 text-emerald-200'
+    : connectionStatus === 'error'
+      ? 'border-red-500/35 bg-red-500/12 text-red-200'
+      : connectionStatus === 'reconnecting'
+        ? 'border-amber-500/35 bg-amber-500/12 text-amber-200'
+        : 'border-white/15 bg-white/10 text-white/70'
+
+  const selectedTradeLabel = selectedTrade
+    ? `${selectedTrade.symbol} ${selectedTrade.strike ?? '-'}${selectedTrade.contractType === 'put' ? 'P' : 'C'} ${selectedTrade.expiration ?? ''}`.trim()
+    : `${normalizedSymbol || '---'} ${selectedContractCode} ${selectedExpirationShort}`.trim()
+
   if (loading) {
     return (
-      <div className="flex h-56 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+      <div className="glass-card-heavy flex h-64 items-center justify-center rounded-2xl border border-emerald-500/20">
+        <div className="flex items-center gap-3 text-emerald-200">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="font-mono text-sm uppercase tracking-[0.16em]">Loading Console</span>
+        </div>
       </div>
     )
   }
 
+  const fieldClass = 'h-11 border border-emerald-500/20 bg-black/40 font-mono text-sm text-white placeholder:text-white/35 focus-visible:ring-1 focus-visible:ring-emerald-300/60'
+  const actionButtonClass = 'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-[0.08em] text-emerald-100 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-45'
+  const ghostButtonClass = 'inline-flex min-h-[44px] items-center justify-center rounded-lg border border-white/15 bg-black/35 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-[0.08em] text-white/80 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-45'
+  const chipClass = 'inline-flex min-h-[40px] items-center rounded-lg border border-emerald-500/20 bg-black/35 px-3 py-2 font-mono text-sm text-white/75 transition hover:border-emerald-400/45 hover:text-emerald-200'
+
   return (
-    <div className="space-y-6">
-      <Card className="border-white/10 bg-white/5">
-        <CardHeader className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="flex items-center gap-2 text-white">
-              <Radio className="h-4 w-4 text-emerald-400" />
-              Alert Session
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge className={STATUS_STYLE[connectionStatus]}>
-                Discord {connectionStatus.toUpperCase()}
-              </Badge>
-              <Badge className={TRADE_STATE_STYLE[tradeState]}>
-                {tradeState}
-              </Badge>
-            </div>
+    <div className="space-y-4">
+      <section className="glass-card-heavy relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-black/80 via-[#0a0f0d]/95 to-black/85">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.1),transparent_42%),radial-gradient(circle_at_78%_8%,rgba(243,229,171,0.07),transparent_34%)]" />
+
+        <div className="relative flex flex-wrap items-center justify-between gap-3 border-b border-emerald-500/15 px-4 py-3 md:px-5">
+          <div>
+            <h2 className="font-['Playfair_Display'] text-xl text-white">Alert Console</h2>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-emerald-200/70">
+              Emerald Standard Execution Surface
+            </p>
           </div>
-          <CardDescription className="text-white/60">
-            Stateful execution console for PREP to FILL to UPDATE/TRIM/STOPS to FULLY OUT.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.1em] ${resolvedConnectionTone}`}>
+              <CircleDot className="h-3 w-3" />
+              {connectionStatus === 'connected' ? `Live · ${sessionLabel}` : connectionStatus}
+            </div>
+            <Link
+              href="/admin/alerts/settings"
+              className="inline-flex min-h-[40px] items-center justify-center rounded-lg border border-emerald-500/25 bg-black/35 px-3 text-white/75 transition hover:border-emerald-400/45 hover:text-emerald-100"
+              title="Discord Settings"
+            >
+              <Cog className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+
+        <div className="relative flex items-center gap-2 border-b border-emerald-500/10 px-4 py-2 font-mono text-xs text-white/65 md:px-5">
+          <span className="text-emerald-200">{normalizedSymbol || 'TICKER'}</span>
+          <ChevronRight className="h-3.5 w-3.5 text-white/35" />
+          <span>{expiration ? formatExpirationChipLabel(expiration) : 'EXPIRATION'}</span>
+          <ChevronRight className="h-3.5 w-3.5 text-white/35" />
+          <span className="text-[#F3E5AB]">{selectedContractCode}</span>
+          <ChevronRight className="h-3.5 w-3.5 text-white/35" />
+          <span className="uppercase">{selectedTradeState}</span>
+        </div>
+
+        <div className="relative space-y-4 p-4 md:p-5">
           {!isConnected ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
-              <span>
-                Discord is not connected. Configure bot credentials before sending production alerts.
-              </span>
-              <Button variant="outline" asChild>
-                <Link href="/admin/alerts/settings">
-                  <Settings2 className="h-4 w-4" />
-                  Configure
-                </Link>
-              </Button>
+            <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+              Discord is not connected. Configure credentials in settings before sending production alerts.
             </div>
           ) : null}
-
           {config?.lastError ? (
-            <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">
+            <div className="rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-100">
               Last Discord error: {config.lastError}
             </div>
           ) : null}
-
           {error ? (
-            <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
-              <AlertCircle className="mt-0.5 h-4 w-4" />
+            <div className="flex items-start gap-2 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>
           ) : null}
-
           {success ? (
-            <div className="flex items-start gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-200">
-              <CheckCircle2 className="mt-0.5 h-4 w-4" />
+            <div className="flex items-start gap-2 rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{success}</span>
             </div>
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={startSession} disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <SquareChartGantt className="h-4 w-4" />}
-              {session ? 'Resume/Refresh Session' : 'Start Session'}
-            </Button>
-            <Button variant="outline" onClick={() => void loadAll()} disabled={busy}>
-              <RefreshCcw className="h-4 w-4" />
+            <button type="button" className={actionButtonClass} onClick={() => void runMutation(startSession)} disabled={busy}>
+              {session ? 'Resume Session' : 'Start Session'}
+            </button>
+            <button type="button" className={ghostButtonClass} onClick={() => void loadAll()} disabled={busy}>
+              <RefreshCcw className="mr-2 h-3.5 w-3.5" />
               Refresh
-            </Button>
-            <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2">
-              <Switch checked={mentionEveryone} onCheckedChange={setMentionEveryone} />
-              <span className="text-xs text-white/70">@everyone</span>
-            </div>
+            </button>
+            <button
+              type="button"
+              className={`${mentionEveryone ? actionButtonClass : ghostButtonClass}`}
+              onClick={() => setMentionEveryone((current) => !current)}
+              disabled={busy}
+            >
+              @everyone {mentionEveryone ? 'On' : 'Off'}
+            </button>
           </div>
 
           {session ? (
-            <div className="rounded-md border border-white/10 bg-black/20 p-3 text-xs text-white/70">
-              Session {session.id.slice(0, 8)} | {session.date} | Channel {session.channelId}
-              {' '}| Trades {session.tradeCount}
-              {session.netPnlPct != null ? ` | Net ${session.netPnlPct}%` : ''}
+            <div className="rounded-lg border border-emerald-500/20 bg-black/30 px-3 py-2 font-mono text-xs text-white/70">
+              Session {session.id.slice(0, 8)} · Channel {session.channelId} · Trades {session.tradeCount}
+              {session.netPnlPct != null ? ` · Net ${formatValue(session.netPnlPct, 2)}%` : ''}
             </div>
           ) : (
-            <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs text-white/60">
-              No active session yet. Start one to unlock alert actions.
+            <div className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 font-mono text-xs text-white/55">
+              No active session. Start a session to unlock alert actions.
             </div>
           )}
-        </CardContent>
-      </Card>
 
-      {trades.length > 0 ? (
-        <Card className="border-white/10 bg-white/5">
-          <CardHeader>
-            <CardTitle className="text-white">Trade Tabs</CardTitle>
-            <CardDescription className="text-white/60">
-              Switch active action context across concurrent staged/active trades.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {trades.map((trade) => {
-                const selected = selectedTrade?.id === trade.id
-                const tradeLabel = `${trade.symbol} ${trade.strike ?? '-'}${trade.contractType === 'call' ? 'C' : trade.contractType === 'put' ? 'P' : ''}`
-                return (
-                  <button
-                    key={trade.id}
-                    type="button"
-                    onClick={() => setSelectedTradeId(trade.id)}
-                    className={`shrink-0 rounded-md border px-3 py-2 text-xs transition ${
-                      selected
-                        ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
-                        : 'border-white/10 bg-black/30 text-white/70 hover:bg-white/10'
-                    }`}
-                  >
-                    <div className="font-medium">{tradeLabel}</div>
-                    <div className="text-[11px] opacity-80">
-                      {trade.state}
-                      {trade.finalPnlPct != null ? ` | ${trade.finalPnlPct}%` : ''}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card className="border-white/10 bg-white/5">
-        <CardHeader>
-          <CardTitle className="text-white">Contract Setup</CardTitle>
-          <CardDescription className="text-white/60">
-            Configure contract and dispatch PREP when trade state is IDLE/CLOSED.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2 rounded-md border border-white/10 bg-black/20 p-3">
-            <div className="flex items-center justify-between gap-2 text-xs text-white/70">
-              <span>Ticker Favorites</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void runMutation(togglePinCurrentTicker)}
-                disabled={busy || !normalizedSymbol}
-              >
-                {isCurrentTickerPinned ? 'Unpin Current' : 'Pin Current'}
-              </Button>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {favoriteChips.length === 0 ? (
-                <div className="px-1 text-[11px] text-white/50">No favorites yet.</div>
-              ) : (
-                favoriteChips.map((chipTicker) => (
-                  <button
-                    key={chipTicker}
-                    type="button"
-                    onClick={() => selectTicker(chipTicker)}
-                    className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] transition ${
-                      normalizedSymbol === chipTicker
-                        ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
-                        : 'border-white/10 bg-black/30 text-white/70 hover:bg-white/10'
-                    }`}
-                  >
-                    {chipTicker}
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            <Input value={symbol} onChange={(event) => setSymbol(event.target.value)} placeholder="Ticker" />
-            <Select value={String(strikesPerSide)} onValueChange={(value) => setStrikesPerSide(Number(value))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="6">6 per side</SelectItem>
-                <SelectItem value="10">10 per side</SelectItem>
-                <SelectItem value="14">14 per side</SelectItem>
-                <SelectItem value="20">20 per side</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={optionType} onValueChange={(value) => {
-              setOptionType(value as OptionType)
-              setSelectedOptionTicker(null)
-            }}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="call">Call</SelectItem>
-                <SelectItem value="put">Put</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sizeTag} onValueChange={(value) => setSizeTag(value as SizeTag)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="full">Full</SelectItem>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="lotto">Lotto</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input type="date" value={expiration} onChange={(event) => setExpiration(event.target.value)} />
-            <Button variant="outline" onClick={() => void loadExpirations()} disabled={expirationsLoading}>
-              {expirationsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-              Load Expirations
-            </Button>
-          </div>
-
-          <div className="space-y-2 rounded-md border border-white/10 bg-black/20 p-3">
-            <div className="flex items-center justify-between gap-2 text-xs text-white/70">
-              <span>Expiration Strip</span>
-              <span>{expirationOptions.length} options</span>
-            </div>
-            {expirationError ? (
-              <div className="rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] text-red-200">
-                {expirationError}
+          {trades.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-white/55">Trade Tabs</p>
+                <p className="font-mono text-[11px] text-white/45">{trades.length} total</p>
               </div>
-            ) : null}
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {expirationOptions.length === 0 ? (
-                <div className="px-1 text-[11px] text-white/50">
-                  No expirations loaded yet.
-                </div>
-              ) : (
-                expirationOptions.map((expirationDate) => (
-                  <button
-                    key={expirationDate}
-                    type="button"
-                    onClick={() => setExpiration(expirationDate)}
-                    className={`shrink-0 rounded-md border px-3 py-1.5 text-[11px] transition ${
-                      expirationDate === expiration
-                        ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
-                        : 'border-white/10 bg-black/30 text-white/70 hover:bg-white/10'
-                    }`}
-                  >
-                    {formatExpirationChipLabel(expirationDate)}
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => void loadChain()} disabled={chainLoading}>
-              {chainLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-              Load Chain
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void loadChainAt(offsetAbove, offsetBelow + strikesPerSide)}
-              disabled={chainLoading || !chainHasMoreBelow}
-            >
-              Load More Below
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void loadChainAt(offsetAbove + strikesPerSide, offsetBelow)}
-              disabled={chainLoading || !chainHasMoreAbove}
-            >
-              Load More Above
-            </Button>
-          </div>
-
-          <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/70">
-            {underlyingLast != null ? (
-              <span>
-                Underlying {symbol.toUpperCase()} {formatValue(underlyingLast, 2)}
-                {underlyingChangePct != null ? ` (${underlyingChangePct >= 0 ? '+' : ''}${formatValue(underlyingChangePct, 2)}%)` : ''}
-                {atmStrike != null ? ` | ATM ${formatValue(atmStrike, 2)}` : ''}
-              </span>
-            ) : (
-              <span>Load the options chain to select a contract visually.</span>
-            )}
-          </div>
-
-          <Input value={strike} onChange={(event) => setStrike(event.target.value)} placeholder="Selected strike" />
-          <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/70">
-            Selected contract: {symbol.toUpperCase()} {strike || '-'}
-            {optionType === 'call' ? 'C' : 'P'} {expiration} ({sizeTag.toUpperCase()})
-          </div>
-
-          {chainError ? (
-            <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">
-              {chainError}
-            </div>
-          ) : null}
-
-          <div className="hidden overflow-hidden rounded-md border border-white/10 md:block">
-            <div className="grid grid-cols-[1.2fr,0.6fr,1.2fr] gap-px bg-white/10 text-[11px] uppercase tracking-wide text-white/60">
-              <div className="bg-black/40 px-3 py-2">Calls</div>
-              <div className="bg-black/40 px-3 py-2 text-center">Strike</div>
-              <div className="bg-black/40 px-3 py-2">Puts</div>
-            </div>
-            <div className="max-h-72 overflow-y-auto">
-              {chainRows.length === 0 ? (
-                <div className="px-3 py-4 text-xs text-white/50">No strike rows loaded.</div>
-              ) : (
-                chainRows.map((row) => (
-                  <div key={row.strike} className="grid grid-cols-[1.2fr,0.6fr,1.2fr] gap-px border-t border-white/10 bg-white/10">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectContract(row, 'call')}
-                      disabled={!row.call}
-                      className={`bg-black/30 px-3 py-2 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                        optionType === 'call' && selectedStrikeValue === row.strike
-                          ? 'ring-1 ring-emerald-400/70 text-emerald-100'
-                          : 'text-white/70 hover:bg-white/10'
-                      }`}
-                    >
-                      <div>Last {formatValue(row.call?.last, 2)} | D {formatValue(row.call?.delta, 2)}</div>
-                      <div>IV {formatPercentValue(row.call?.iv, 1)} | OI {formatValue(row.call?.oi, 0)}</div>
-                    </button>
-                    <div className={`flex items-center justify-center bg-black/40 px-2 py-2 text-sm ${
-                      atmStrike === row.strike ? 'text-[#F3E5AB]' : 'text-white/80'
-                    }`}>
-                      {formatValue(row.strike, 2)}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectContract(row, 'put')}
-                      disabled={!row.put}
-                      className={`bg-black/30 px-3 py-2 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                        optionType === 'put' && selectedStrikeValue === row.strike
-                          ? 'ring-1 ring-emerald-400/70 text-emerald-100'
-                          : 'text-white/70 hover:bg-white/10'
-                      }`}
-                    >
-                      <div>Last {formatValue(row.put?.last, 2)} | D {formatValue(row.put?.delta, 2)}</div>
-                      <div>IV {formatPercentValue(row.put?.iv, 1)} | OI {formatValue(row.put?.oi, 0)}</div>
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2 md:hidden">
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={mobileChainSide === 'call' ? 'default' : 'outline'}
-                onClick={() => setMobileChainSide('call')}
-              >
-                Calls
-              </Button>
-              <Button
-                variant={mobileChainSide === 'put' ? 'default' : 'outline'}
-                onClick={() => setMobileChainSide('put')}
-              >
-                Puts
-              </Button>
-            </div>
-            <div className="max-h-72 space-y-2 overflow-y-auto rounded-md border border-white/10 bg-black/20 p-2">
-              {chainRows.length === 0 ? (
-                <div className="px-2 py-3 text-xs text-white/50">No strike rows loaded.</div>
-              ) : (
-                chainRows.map((row) => {
-                  const side = mobileChainSide === 'call' ? row.call : row.put
-                  const selected = optionType === mobileChainSide && selectedStrikeValue === row.strike
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {trades.map((trade) => {
+                  const selected = selectedTrade?.id === trade.id
+                  const tradeLabel = `${trade.symbol} ${trade.strike ?? '-'}${trade.contractType === 'call' ? 'C' : 'P'}`
                   return (
                     <button
                       type="button"
-                      key={`${mobileChainSide}-${row.strike}`}
-                      onClick={() => handleSelectContract(row, mobileChainSide)}
-                      disabled={!side}
-                      className={`w-full rounded-md border px-3 py-2 text-left text-xs disabled:cursor-not-allowed disabled:opacity-40 ${
+                      key={trade.id}
+                      onClick={() => setSelectedTradeId(trade.id)}
+                      className={`shrink-0 rounded-lg border px-3 py-2 text-left font-mono text-xs transition ${
                         selected
-                          ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
-                          : 'border-white/10 bg-black/30 text-white/70'
+                          ? 'border-emerald-400/55 bg-emerald-500/20 text-emerald-100'
+                          : 'border-white/15 bg-black/35 text-white/70 hover:border-emerald-500/35'
                       }`}
                     >
-                      <div className="font-medium">
-                        {formatValue(row.strike, 2)} {mobileChainSide === 'call' ? 'C' : 'P'}
-                        {atmStrike === row.strike ? ' | ATM' : ''}
+                      <div className="font-semibold">{tradeLabel}</div>
+                      <div className="mt-0.5 text-[11px] opacity-80">
+                        {trade.state}
+                        {trade.finalPnlPct != null ? ` · ${formatValue(trade.finalPnlPct, 2)}%` : ''}
                       </div>
-                      <div>Last {formatValue(side?.last, 2)} | D {formatValue(side?.delta, 2)} | IV {formatPercentValue(side?.iv, 1)}</div>
                     </button>
                   )
-                })
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <section className="rounded-xl border border-emerald-500/20 bg-black/35 p-3 md:p-4">
+            <div className="mb-3">
+              <h3 className="font-['Playfair_Display'] text-xl text-white">Contract Setup</h3>
+              <p className="text-sm text-white/60">Step flow: ticker → expiration → strike → PREP.</p>
+            </div>
+
+            <div className="mb-3 rounded-lg border border-emerald-500/15 bg-black/30 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="font-mono text-xs uppercase tracking-[0.12em] text-white/55">Ticker Favorites</span>
+                <button
+                  type="button"
+                  className={ghostButtonClass}
+                  onClick={() => void runMutation(togglePinCurrentTicker)}
+                  disabled={busy || !normalizedSymbol}
+                >
+                  {isCurrentTickerPinned ? 'Unpin Current' : 'Pin Current'}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {favoriteChips.length === 0 ? (
+                  <p className="font-mono text-xs text-white/50">No favorites yet.</p>
+                ) : (
+                  favoriteChips.map((chipTicker) => {
+                    const pinned = pinnedTickers.includes(chipTicker)
+                    return (
+                      <button
+                        type="button"
+                        key={chipTicker}
+                        onClick={() => selectTicker(chipTicker)}
+                        className={`${chipClass} ${normalizedSymbol === chipTicker ? 'border-emerald-400/55 bg-emerald-500/20 text-emerald-100' : ''}`}
+                      >
+                        {pinned ? <span className="mr-1.5 text-[10px]">📌</span> : null}
+                        {chipTicker}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+              <Input
+                value={symbol}
+                onChange={(event) => setSymbol(event.target.value)}
+                placeholder="Ticker"
+                className={fieldClass}
+              />
+              <select
+                value={String(strikesPerSide)}
+                onChange={(event) => setStrikesPerSide(Number(event.target.value))}
+                className={fieldClass}
+              >
+                <option value="6">6 per side</option>
+                <option value="10">10 per side</option>
+                <option value="14">14 per side</option>
+                <option value="20">20 per side</option>
+              </select>
+              <select
+                value={optionType}
+                onChange={(event) => {
+                  setOptionType(event.target.value as OptionType)
+                  setSelectedOptionTicker(null)
+                }}
+                className={fieldClass}
+              >
+                <option value="call">Call</option>
+                <option value="put">Put</option>
+              </select>
+              <select
+                value={sizeTag}
+                onChange={(event) => setSizeTag(event.target.value as SizeTag)}
+                className={fieldClass}
+              >
+                <option value="full">Full</option>
+                <option value="light">Light</option>
+                <option value="lotto">Lotto</option>
+              </select>
+              <Input
+                type="date"
+                value={expiration}
+                onChange={(event) => setExpiration(event.target.value)}
+                className={fieldClass}
+              />
+              <button type="button" className={ghostButtonClass} onClick={() => void loadExpirations()} disabled={expirationsLoading}>
+                {expirationsLoading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-2 h-3.5 w-3.5" />}
+                Load Expirations
+              </button>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-emerald-500/15 bg-black/30 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2 font-mono text-xs text-white/55">
+                <span>Expiration Strip</span>
+                <span>{expirationOptions.length} options</span>
+              </div>
+              {expirationError ? (
+                <div className="mb-2 rounded border border-red-500/35 bg-red-500/10 px-2 py-1 text-xs text-red-100">{expirationError}</div>
+              ) : null}
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {expirationOptions.length === 0 ? (
+                  <p className="font-mono text-xs text-white/45">No expirations loaded yet.</p>
+                ) : (
+                  expirationOptions.map((expirationDate) => {
+                    const selected = expirationDate === expiration
+                    const today = expirationDate === toTodayEtDateString()
+                    return (
+                      <button
+                        key={expirationDate}
+                        type="button"
+                        onClick={() => setExpiration(expirationDate)}
+                        className={`min-h-[40px] shrink-0 rounded-lg border px-3 py-2 text-center font-mono text-xs transition ${
+                          selected
+                            ? 'border-emerald-400/55 bg-emerald-500/18 text-emerald-100'
+                            : 'border-white/15 bg-black/35 text-white/70 hover:border-emerald-500/35'
+                        }`}
+                      >
+                        {formatExpirationChipLabel(expirationDate)}
+                        {today ? <span className="ml-1 text-[10px] text-[#F3E5AB]">0DTE</span> : null}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button type="button" className={ghostButtonClass} onClick={() => void loadChain()} disabled={chainLoading}>
+                {chainLoading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-2 h-3.5 w-3.5" />}
+                Load Chain
+              </button>
+              <button
+                type="button"
+                className={ghostButtonClass}
+                onClick={() => void loadChainAt(offsetAbove, offsetBelow + strikesPerSide)}
+                disabled={chainLoading || !chainHasMoreBelow}
+              >
+                Load More Below
+              </button>
+              <button
+                type="button"
+                className={ghostButtonClass}
+                onClick={() => void loadChainAt(offsetAbove + strikesPerSide, offsetBelow)}
+                disabled={chainLoading || !chainHasMoreAbove}
+              >
+                Load More Above
+              </button>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-emerald-500/15 bg-black/30 px-3 py-2 font-mono text-xs text-white/70">
+              {underlyingLast != null ? (
+                <>
+                  {normalizedSymbol || '---'} Last <span className="text-emerald-200">{formatValue(underlyingLast, 2)}</span>
+                  {underlyingChangePct != null ? ` · ${underlyingChangePct >= 0 ? '+' : ''}${formatValue(underlyingChangePct, 2)}%` : ''}
+                  {atmStrike != null ? ` · ATM ${formatValue(atmStrike, 0)}` : ''}
+                </>
+              ) : (
+                'Load the options chain to select a contract visually.'
               )}
             </div>
-          </div>
 
-          <Button onClick={sendPrep} disabled={busy || !session || !canRunPrep || !hasValidPrepContract}>
-            <SendHorizonal className="h-4 w-4" />
-            Send PREP
-          </Button>
-        </CardContent>
-      </Card>
-
-      {canRunStagedActions ? (
-        <Card className="border-white/10 bg-white/5">
-          <CardHeader>
-            <CardTitle className="text-white">Staged Actions</CardTitle>
-            {selectedTrade ? (
-              <CardDescription className="text-white/60">
-                Target trade #{selectedTrade.tradeIndex} {selectedTrade.symbol} {selectedTrade.strike ?? '-'}
-                {selectedTrade.contractType === 'call' ? 'C' : selectedTrade.contractType === 'put' ? 'P' : ''}
-              </CardDescription>
-            ) : null}
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => void runMutation(() => sendSignal({ signalType: 'ptf', tradeId: selectedTradeId }))}
-                disabled={busy || !session}
-              >
-                Send PTF
-              </Button>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Input value={fillPrice} onChange={(event) => setFillPrice(event.target.value)} placeholder="Fill price" />
-              <Input value={fillStopLevel} onChange={(event) => setFillStopLevel(event.target.value)} placeholder="Stop level (optional)" />
-              <Input value={fillStopPercent} onChange={(event) => setFillStopPercent(event.target.value)} placeholder="Stop % (optional)" />
-            </div>
-            <Button onClick={sendFill} disabled={busy || !session}>
-              <SendHorizonal className="h-4 w-4" />
-              Send FILL
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {canRunActiveActions ? (
-        <Card className="border-white/10 bg-white/5">
-          <CardHeader>
-            <CardTitle className="text-white">Active Trade Actions</CardTitle>
-            <CardDescription className="text-white/60">
-              Live quote drives one-tap UPDATE and TRIM messaging for the selected tab.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="rounded-md border border-white/10 bg-black/20 p-3 text-xs text-white/70">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  Entry {formatValue(latestEntryPrice, 3)} | Mark {formatValue(liveMark, 3)} | PnL {
-                    livePnlPercent != null
-                      ? `${livePnlPercent >= 0 ? '+' : ''}${formatValue(livePnlPercent, 2)}%`
-                      : '-'
-                  }
-                </span>
-                <Button variant="outline" onClick={() => void loadLiveQuote()} disabled={quoteLoading}>
-                  {quoteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-                  Refresh Quote
-                </Button>
-              </div>
-              <div className="mt-1 text-[11px] text-white/50">
-                {liveQuote?.optionTicker ?? selectedOptionTicker ?? 'No option ticker selected'}
-                {liveQuote?.updatedAt ? ` | Updated ${new Date(liveQuote.updatedAt).toLocaleTimeString()}` : ''}
-              </div>
-              {quoteError ? (
-                <div className="mt-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] text-red-200">
-                  {quoteError}
-                </div>
+            <div className="mt-3">
+              {chainError ? (
+                <div className="mb-2 rounded border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-100">{chainError}</div>
               ) : null}
+
+              <div className="hidden overflow-hidden rounded-xl border border-emerald-500/20 md:block">
+                <table className="w-full border-collapse font-mono text-xs">
+                  <thead className="bg-black/45 text-[10px] uppercase tracking-[0.12em] text-white/55">
+                    <tr>
+                      <th className="px-2 py-2 text-right text-emerald-300">OI</th>
+                      <th className="px-2 py-2 text-right text-emerald-300">IV</th>
+                      <th className="px-2 py-2 text-right text-emerald-300">Delta</th>
+                      <th className="px-2 py-2 text-right text-emerald-300">Last</th>
+                      <th className="px-2 py-2 text-center">Strike</th>
+                      <th className="px-2 py-2 text-left text-red-300">Last</th>
+                      <th className="px-2 py-2 text-left text-red-300">Delta</th>
+                      <th className="px-2 py-2 text-left text-red-300">IV</th>
+                      <th className="px-2 py-2 text-left text-red-300">OI</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chainRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="px-3 py-4 text-center text-white/45">No strike rows loaded.</td>
+                      </tr>
+                    ) : (
+                      chainRows.map((row) => {
+                        const callSelected = optionType === 'call' && selectedStrikeValue === row.strike
+                        const putSelected = optionType === 'put' && selectedStrikeValue === row.strike
+                        const atm = atmStrike === row.strike
+                        return (
+                          <tr
+                            key={row.strike}
+                            className={`border-t border-emerald-500/10 ${atm ? 'bg-[#F3E5AB]/5' : ''} ${callSelected || putSelected ? 'bg-emerald-500/12' : ''}`}
+                          >
+                            <td className="px-2 py-2 text-right text-white/55">{formatValue(row.call?.oi, 0)}</td>
+                            <td className="px-2 py-2 text-right text-white/55">{formatPercentValue(row.call?.iv, 1)}</td>
+                            <td className="px-2 py-2 text-right text-white/65">{formatValue(row.call?.delta, 2)}</td>
+                            <td className="px-2 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleSelectContract(row, 'call')}
+                                disabled={!row.call}
+                                className={`rounded px-2 py-1 ${callSelected ? 'border border-emerald-400/60 text-emerald-200' : 'text-emerald-300 hover:bg-emerald-500/10'}`}
+                              >
+                                {formatValue(row.call?.last, 2)}
+                              </button>
+                            </td>
+                            <td className={`px-2 py-2 text-center font-semibold ${atm ? 'text-[#F3E5AB]' : 'text-white/75'}`}>
+                              {formatValue(row.strike, 0)}
+                            </td>
+                            <td className="px-2 py-2 text-left">
+                              <button
+                                type="button"
+                                onClick={() => handleSelectContract(row, 'put')}
+                                disabled={!row.put}
+                                className={`rounded px-2 py-1 ${putSelected ? 'border border-emerald-400/60 text-emerald-200' : 'text-red-300 hover:bg-red-500/10'}`}
+                              >
+                                {formatValue(row.put?.last, 2)}
+                              </button>
+                            </td>
+                            <td className="px-2 py-2 text-left text-white/65">{formatValue(row.put?.delta, 2)}</td>
+                            <td className="px-2 py-2 text-left text-white/55">{formatPercentValue(row.put?.iv, 1)}</td>
+                            <td className="px-2 py-2 text-left text-white/55">{formatValue(row.put?.oi, 0)}</td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="space-y-2 md:hidden">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMobileChainSide('call')}
+                    className={`${mobileChainSide === 'call' ? actionButtonClass : ghostButtonClass} w-full`}
+                  >
+                    Calls
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileChainSide('put')}
+                    className={`${mobileChainSide === 'put' ? actionButtonClass : ghostButtonClass} w-full`}
+                  >
+                    Puts
+                  </button>
+                </div>
+                <div className="max-h-72 overflow-y-auto rounded-xl border border-emerald-500/20 bg-black/35">
+                  <table className="w-full border-collapse font-mono text-xs">
+                    <thead className="bg-black/45 text-[10px] uppercase tracking-[0.12em] text-white/50">
+                      <tr>
+                        <th className="px-2 py-2 text-left">Strike</th>
+                        <th className="px-2 py-2 text-right">Last</th>
+                        <th className="px-2 py-2 text-right">Delta</th>
+                        <th className="px-2 py-2 text-right">OI</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {chainRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-2 py-4 text-center text-white/45">No strike rows loaded.</td>
+                        </tr>
+                      ) : (
+                        chainRows.map((row) => {
+                          const side = mobileChainSide === 'call' ? row.call : row.put
+                          const selected = optionType === mobileChainSide && selectedStrikeValue === row.strike
+                          const atm = atmStrike === row.strike
+                          return (
+                            <tr key={`${mobileChainSide}-${row.strike}`} className={`border-t border-emerald-500/10 ${selected ? 'bg-emerald-500/15' : ''}`}>
+                              <td className={`px-2 py-3 ${atm ? 'text-[#F3E5AB]' : 'text-white/75'}`}>
+                                <button type="button" onClick={() => handleSelectContract(row, mobileChainSide)} className="w-full text-left">
+                                  {formatValue(row.strike, 0)} {atm ? '◄' : ''}
+                                </button>
+                              </td>
+                              <td className={`${mobileChainSide === 'call' ? 'text-emerald-300' : 'text-red-300'} px-2 py-3 text-right`}>
+                                {formatValue(side?.last, 2)}
+                              </td>
+                              <td className="px-2 py-3 text-right text-white/60">{formatValue(side?.delta, 2)}</td>
+                              <td className="px-2 py-3 text-right text-white/55">{formatValue(side?.oi, 0)}</td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Input value={updatePercent} onChange={(event) => setUpdatePercent(event.target.value)} placeholder="Update %" />
-              <Button
-                variant="outline"
-                onClick={() => void runMutation(async () => {
-                  const resolvedPercent = parseNumberInput(updatePercent) ?? livePnlPercent ?? undefined
-                  if (resolvedPercent == null) {
-                    throw new Error('UPDATE requires a manual percent or an active live quote')
-                  }
-                  await sendSignal({
-                    signalType: 'update',
-                    tradeId: selectedTradeId,
-                    fields: { percent: resolvedPercent },
-                  })
-                })}
-                disabled={busy || !session}
-              >
-                Send UPDATE
-              </Button>
-              <div className="flex gap-2">
-                {[15, 25, 50].map((quickTrim) => (
-                  <Button
-                    key={quickTrim}
-                    variant="ghost"
+            <Input
+              value={strike}
+              onChange={(event) => setStrike(event.target.value)}
+              placeholder="Selected strike"
+              className={`${fieldClass} mt-3`}
+            />
+            <p className="mt-2 rounded-lg border border-emerald-500/15 bg-black/30 px-3 py-2 font-mono text-xs text-white/70">
+              Selected contract: {normalizedSymbol || '---'} {selectedContractCode} {expiration} ({sizeTag.toUpperCase()})
+            </p>
+
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {(['full', 'light', 'lotto'] as const).map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setSizeTag(tag)}
+                  className={`${tag === sizeTag ? actionButtonClass : ghostButtonClass} w-full`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="mt-3 inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-emerald-400/40 bg-emerald-500 px-4 py-3 font-mono text-sm font-bold uppercase tracking-[0.1em] text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-45"
+              onClick={() => void sendPrep()}
+              disabled={busy || !session || !canRunPrep || !hasValidPrepContract}
+            >
+              {prepLabel}
+            </button>
+          </section>
+
+          {canRunStagedActions ? (
+            <section className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 md:p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-mono text-sm font-semibold uppercase tracking-[0.12em] text-blue-100">
+                  {selectedTradeLabel} · STAGED
+                </h3>
+                <button
+                  type="button"
+                  className={ghostButtonClass}
+                  onClick={() => void runMutation(() => sendSignal({ signalType: 'ptf', tradeId: selectedTradeId }))}
+                  disabled={busy || !session}
+                >
+                  Send PTF
+                </button>
+              </div>
+              <div className="mb-3 flex flex-wrap items-center gap-4 border-b border-blue-400/20 pb-2 font-mono text-xs text-white/75">
+                <span>Bid {formatValue(liveQuote?.bid, 2)}</span>
+                <span>Ask {formatValue(liveQuote?.ask, 2)}</span>
+                <span>Last {formatValue(liveQuote?.last, 2)}</span>
+                <span>{normalizedSymbol} {formatValue(underlyingLast, 2)}</span>
+              </div>
+              <div className="grid gap-2 md:grid-cols-[1fr,1fr,1fr,auto]">
+                <Input value={fillPrice} onChange={(event) => setFillPrice(event.target.value)} placeholder="Fill price" className={fieldClass} />
+                <Input value={fillStopLevel} onChange={(event) => setFillStopLevel(event.target.value)} placeholder="Stops level (optional)" className={fieldClass} />
+                <Input value={fillStopPercent} onChange={(event) => setFillStopPercent(event.target.value)} placeholder="Stops % (optional)" className={fieldClass} />
+                <button type="button" className={actionButtonClass} onClick={() => void sendFill()} disabled={busy || !session}>
+                  <SendHorizonal className="mr-2 h-3.5 w-3.5" />
+                  Fill
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {canRunActiveActions ? (
+            <section className="rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-3 md:p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-emerald-500/20 pb-2 font-mono text-xs text-white/80">
+                <div>
+                  <p className="text-sm font-semibold text-emerald-100">{selectedTradeLabel}</p>
+                  <p>
+                    Entry {formatValue(latestEntryPrice, 3)} · Now {formatValue(liveMark, 3)} · P&L{' '}
+                    {livePnlPercent != null ? `${livePnlPercent >= 0 ? '+' : ''}${formatValue(livePnlPercent, 2)}%` : '-'}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" className={ghostButtonClass} onClick={() => void loadLiveQuote()} disabled={quoteLoading}>
+                    {quoteLoading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-2 h-3.5 w-3.5" />}
+                    Quote
+                  </button>
+                  <button
+                    type="button"
+                    className={actionButtonClass}
                     onClick={() => void runMutation(async () => {
-                      const resolvedPercent = livePnlPercent ?? parseNumberInput(trimPercent) ?? undefined
+                      const resolvedPercent = parseNumberInput(updatePercent) ?? livePnlPercent ?? undefined
                       if (resolvedPercent == null) {
-                        throw new Error('TRIM requires a manual percent or an active live quote')
+                        throw new Error('UPDATE requires a manual percent or an active live quote')
                       }
                       await sendSignal({
-                        signalType: 'trim',
+                        signalType: 'update',
                         tradeId: selectedTradeId,
                         fields: { percent: resolvedPercent },
                       })
-                      setSuccess(`Sent TRIM (${quickTrim}% preset).`)
                     })}
                     disabled={busy || !session}
                   >
-                    Trim {quickTrim}%
-                  </Button>
-                ))}
+                    Update
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="grid gap-3 sm:grid-cols-4">
-              <Input value={trimPercent} onChange={(event) => setTrimPercent(event.target.value)} placeholder="Custom trim %" />
-              <Button
-                variant="outline"
-                onClick={() => void runMutation(async () => {
-                  const resolvedPercent = parseNumberInput(trimPercent) ?? livePnlPercent ?? undefined
-                  if (resolvedPercent == null) {
-                    throw new Error('TRIM requires a manual percent or an active live quote')
-                  }
-                  await sendSignal({
-                    signalType: 'trim',
-                    tradeId: selectedTradeId,
-                    fields: { percent: resolvedPercent },
-                  })
-                })}
-                disabled={busy || !session}
-              >
-                Send TRIM
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void runMutation(() => sendSignal({ signalType: 'breakeven', tradeId: selectedTradeId }))}
-                disabled={busy || !session}
-              >
-                Send B/E
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => void runMutation(() => sendSignal({ signalType: 'fully_out', tradeId: selectedTradeId }))}
-                disabled={busy || !session}
-              >
-                FULLY OUT
-              </Button>
-            </div>
+              {quoteError ? (
+                <div className="mb-3 rounded border border-red-500/35 bg-red-500/10 px-3 py-2 text-xs text-red-100">{quoteError}</div>
+              ) : null}
+              <p className="mb-3 font-mono text-[11px] text-white/45">
+                {liveQuote?.optionTicker ?? selectedOptionTicker ?? 'No option ticker selected'}
+                {liveQuote?.updatedAt ? ` · Updated ${new Date(liveQuote.updatedAt).toLocaleTimeString()}` : ''}
+              </p>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Input value={stopLevel} onChange={(event) => setStopLevel(event.target.value)} placeholder="Stops level" />
-              <Input value={stopPercent} onChange={(event) => setStopPercent(event.target.value)} placeholder="Stops %" />
-              <Button
-                variant="outline"
-                onClick={() => void runMutation(() => sendSignal({
-                  signalType: 'stops',
-                  tradeId: selectedTradeId,
-                  fields: {
-                    level: parseNumberInput(stopLevel),
-                    percent: parseNumberInput(stopPercent),
-                  },
-                }))}
-                disabled={busy || !session}
-              >
-                Send STOPS
-              </Button>
-            </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.12em] text-white/55">Trim</p>
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+                    {[15, 25, 50].map((quickTrim) => (
+                      <button
+                        key={quickTrim}
+                        type="button"
+                        className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-yellow-500/30 bg-yellow-500/12 px-3 font-mono text-sm font-semibold text-yellow-200 transition hover:bg-yellow-500/20 disabled:cursor-not-allowed disabled:opacity-45"
+                        onClick={() => void runMutation(async () => {
+                          const resolvedPercent = livePnlPercent ?? parseNumberInput(trimPercent) ?? undefined
+                          if (resolvedPercent == null) {
+                            throw new Error('TRIM requires a manual percent or an active live quote')
+                          }
+                          await sendSignal({
+                            signalType: 'trim',
+                            tradeId: selectedTradeId,
+                            fields: { percent: resolvedPercent },
+                          })
+                          setSuccess(`Sent TRIM (${quickTrim}% preset).`)
+                        })}
+                        disabled={busy || !session}
+                      >
+                        {quickTrim}%
+                      </button>
+                    ))}
+                    <Input
+                      value={trimPercent}
+                      onChange={(event) => setTrimPercent(event.target.value)}
+                      placeholder="%"
+                      className={fieldClass}
+                    />
+                    <button
+                      type="button"
+                      className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-yellow-500/30 bg-yellow-500/12 px-3 font-mono text-sm font-semibold text-yellow-200 transition hover:bg-yellow-500/20 disabled:cursor-not-allowed disabled:opacity-45"
+                      onClick={() => void runMutation(async () => {
+                        const resolvedPercent = parseNumberInput(trimPercent) ?? livePnlPercent ?? undefined
+                        if (resolvedPercent == null) {
+                          throw new Error('TRIM requires a manual percent or an active live quote')
+                        }
+                        await sendSignal({
+                          signalType: 'trim',
+                          tradeId: selectedTradeId,
+                          fields: { percent: resolvedPercent },
+                        })
+                      })}
+                      disabled={busy || !session}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Input value={trailPercent} onChange={(event) => setTrailPercent(event.target.value)} placeholder="Trail %" />
-              <Button
-                variant="outline"
-                onClick={() => void runMutation(() => sendSignal({
-                  signalType: 'trail',
-                  tradeId: selectedTradeId,
-                  fields: { percent: parseNumberInput(trailPercent) },
-                }))}
-                disabled={busy || !session}
-              >
-                Send TRAIL
-              </Button>
-              <div className="flex gap-2">
-                {[10, 20, 30].map((quickTrail) => (
-                  <Button
-                    key={quickTrail}
-                    variant="ghost"
+                <div>
+                  <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.12em] text-white/55">Stops & Trail</p>
+                  <div className="grid gap-2 md:grid-cols-6">
+                    <Input value={stopLevel} onChange={(event) => setStopLevel(event.target.value)} placeholder="Stop level" className={fieldClass} />
+                    <Input value={stopPercent} onChange={(event) => setStopPercent(event.target.value)} placeholder="Stop %" className={fieldClass} />
+                    <button
+                      type="button"
+                      className={ghostButtonClass}
+                      onClick={() => void runMutation(() => sendSignal({
+                        signalType: 'stops',
+                        tradeId: selectedTradeId,
+                        fields: {
+                          level: parseNumberInput(stopLevel),
+                          percent: parseNumberInput(stopPercent),
+                        },
+                      }))}
+                      disabled={busy || !session}
+                    >
+                      Set Stops
+                    </button>
+                    <button
+                      type="button"
+                      className={ghostButtonClass}
+                      onClick={() => void runMutation(() => sendSignal({ signalType: 'breakeven', tradeId: selectedTradeId }))}
+                      disabled={busy || !session}
+                    >
+                      B/E
+                    </button>
+                    {[10, 20, 30].map((quickTrail) => (
+                      <button
+                        key={quickTrail}
+                        type="button"
+                        className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-purple-500/30 bg-purple-500/12 px-3 font-mono text-sm font-semibold text-purple-200 transition hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-45"
+                        onClick={() => void runMutation(() => sendSignal({
+                          signalType: 'trail',
+                          tradeId: selectedTradeId,
+                          fields: { percent: quickTrail },
+                        }))}
+                        disabled={busy || !session}
+                      >
+                        +{quickTrail}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid gap-2 md:grid-cols-[1fr,auto,1fr,auto]">
+                  <Input value={addPrice} onChange={(event) => setAddPrice(event.target.value)} placeholder="New AVG price" className={fieldClass} />
+                  <button
+                    type="button"
+                    className={ghostButtonClass}
                     onClick={() => void runMutation(() => sendSignal({
-                      signalType: 'trail',
+                      signalType: 'add',
                       tradeId: selectedTradeId,
-                      fields: { percent: quickTrail },
+                      fields: {
+                        price: parseNumberInput(addPrice),
+                        symbol: selectedTrade?.symbol ?? latestTrade?.symbol,
+                      },
                     }))}
                     disabled={busy || !session}
                   >
-                    +{quickTrail}%
-                  </Button>
-                ))}
+                    Add
+                  </button>
+                  <Input value={exitAboveLevel} onChange={(event) => setExitAboveLevel(event.target.value)} placeholder="Exit above level" className={fieldClass} />
+                  <button
+                    type="button"
+                    className={ghostButtonClass}
+                    onClick={() => void runMutation(() => sendSignal({
+                      signalType: 'exit_above',
+                      tradeId: selectedTradeId,
+                      fields: { level: parseNumberInput(exitAboveLevel) },
+                    }))}
+                    disabled={busy || !session}
+                  >
+                    Exit Above
+                  </button>
+                </div>
+                <div className="grid gap-2 md:grid-cols-[1fr,auto]">
+                  <Input value={exitBelowLevel} onChange={(event) => setExitBelowLevel(event.target.value)} placeholder="Exit below level" className={fieldClass} />
+                  <button
+                    type="button"
+                    className={ghostButtonClass}
+                    onClick={() => void runMutation(() => sendSignal({
+                      signalType: 'exit_below',
+                      tradeId: selectedTradeId,
+                      fields: { level: parseNumberInput(exitBelowLevel) },
+                    }))}
+                    disabled={busy || !session}
+                  >
+                    Exit Below
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 border-red-500/60 bg-red-500/15 px-4 py-3 font-mono text-sm font-bold uppercase tracking-[0.1em] text-red-200 transition hover:bg-red-500/22 disabled:cursor-not-allowed disabled:opacity-45"
+                  onClick={() => void runMutation(() => sendSignal({ signalType: 'fully_out', tradeId: selectedTradeId }))}
+                  disabled={busy || !session}
+                >
+                  Fully Out
+                </button>
               </div>
+            </section>
+          ) : null}
+
+          <section className="rounded-xl border border-emerald-500/20 bg-black/30 p-3 md:p-4">
+            <h3 className="mb-2 font-mono text-xs uppercase tracking-[0.12em] text-white/55">Commentary & Session Closeout</h3>
+            <div className="mb-3 flex gap-2">
+              <Textarea
+                value={commentaryText}
+                onChange={(event) => setCommentaryText(event.target.value)}
+                placeholder="Commentary..."
+                className="min-h-[44px] border border-emerald-500/20 bg-black/40 text-sm text-white placeholder:text-white/35 focus-visible:ring-1 focus-visible:ring-emerald-300/60"
+              />
+              <button type="button" className={actionButtonClass} onClick={() => void sendCommentary()} disabled={busy || !session}>
+                Send
+              </button>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Input value={addPrice} onChange={(event) => setAddPrice(event.target.value)} placeholder="New AVG price" />
-              <Button
-                variant="outline"
-                onClick={() => void runMutation(() => sendSignal({
-                  signalType: 'add',
-                  tradeId: selectedTradeId,
-                  fields: {
-                    price: parseNumberInput(addPrice),
-                    symbol: selectedTrade?.symbol ?? latestTrade?.symbol,
-                  },
-                }))}
-                disabled={busy || !session}
-              >
-                Send ADD
-              </Button>
-              <div />
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-4">
-              <Input value={exitAboveLevel} onChange={(event) => setExitAboveLevel(event.target.value)} placeholder="Exit above level" />
-              <Button
-                variant="outline"
-                onClick={() => void runMutation(() => sendSignal({
-                  signalType: 'exit_above',
-                  tradeId: selectedTradeId,
-                  fields: { level: parseNumberInput(exitAboveLevel) },
-                }))}
-                disabled={busy || !session}
-              >
-                Send EXIT ABOVE
-              </Button>
-              <Input value={exitBelowLevel} onChange={(event) => setExitBelowLevel(event.target.value)} placeholder="Exit below level" />
-              <Button
-                variant="outline"
-                onClick={() => void runMutation(() => sendSignal({
-                  signalType: 'exit_below',
-                  tradeId: selectedTradeId,
-                  fields: { level: parseNumberInput(exitBelowLevel) },
-                }))}
-                disabled={busy || !session}
-              >
-                Send EXIT BELOW
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card className="border-white/10 bg-white/5">
-        <CardHeader>
-          <CardTitle className="text-white">Commentary & Session Closeout</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Textarea
-            value={commentaryText}
-            onChange={(event) => setCommentaryText(event.target.value)}
-            placeholder="Type commentary update..."
-            className="min-h-20"
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={sendCommentary} disabled={busy || !session}>
-              <SendHorizonal className="h-4 w-4" />
-              Send Commentary
-            </Button>
-          </div>
-
-          <div className="space-y-2 rounded-md border border-white/10 bg-black/20 p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-white/60">End Session Recap (Optional Override)</p>
             {generatedRecap ? (
-              <p className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/60">
-                Generated: {generatedRecap}
+              <p className="mb-2 rounded border border-emerald-500/20 bg-emerald-500/8 px-3 py-2 text-xs text-emerald-100">
+                Generated recap: {generatedRecap}
               </p>
             ) : null}
             <Textarea
               value={sessionSummaryDraft}
               onChange={(event) => setSessionSummaryDraft(event.target.value)}
-              placeholder="Leave blank to auto-generate recap from closed trades."
-              className="min-h-20"
+              placeholder="Optional recap override..."
+              className="min-h-24 border border-emerald-500/20 bg-black/40 text-sm text-white placeholder:text-white/35 focus-visible:ring-1 focus-visible:ring-emerald-300/60"
             />
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={previewRecap} disabled={busy || !session}>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className={ghostButtonClass} onClick={() => void previewRecap()} disabled={busy || !session}>
                 Preview Recap
-              </Button>
-              <Button variant="outline" onClick={endSession} disabled={busy || !canEndSession}>
-                End Session & Post Recap
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-white/10 bg-white/5">
-        <CardHeader>
-          <CardTitle className="text-white">Session Trades</CardTitle>
-          <CardDescription className="text-white/60">
-            Latest session snapshot from persisted Discord trades.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {trades.length === 0 ? (
-            <p className="text-sm text-white/50">No trades in this session yet.</p>
-          ) : (
-            trades.map((trade) => (
-              <button
-                type="button"
-                key={trade.id}
-                onClick={() => setSelectedTradeId(trade.id)}
-                className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs transition ${
-                  selectedTrade?.id === trade.id
-                    ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
-                    : 'border-white/10 bg-black/20 text-white/70 hover:bg-white/10'
-                }`}
-              >
-                <span>
-                  #{trade.tradeIndex} {trade.symbol} {trade.strike ?? '-'}
-                  {trade.contractType === 'put' ? 'P' : trade.contractType === 'call' ? 'C' : ''}
-                  {trade.expiration ? ` | ${trade.expiration}` : ''}
-                </span>
-                <span>
-                  Entry {trade.entryPrice ?? '-'}
-                  {trade.finalPnlPct != null ? ` | P&L ${trade.finalPnlPct}%` : ''}
-                  {' '}| {trade.state}
-                </span>
               </button>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="border-white/10 bg-white/5">
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-white">Session Log</CardTitle>
-              <CardDescription className="text-white/60">
-                All alerts sent this session with delivery status.
-              </CardDescription>
+              <button type="button" className={ghostButtonClass} onClick={() => void endSession()} disabled={busy || !canEndSession}>
+                End Session & Post Recap
+              </button>
             </div>
-            <Button variant="outline" onClick={() => setShowSessionLog((current) => !current)}>
-              {showSessionLog ? 'Hide Log' : `Show Log (${sessionMessages.length})`}
-            </Button>
-          </div>
-        </CardHeader>
-        {showSessionLog ? (
-          <CardContent className="space-y-2">
-            {sessionMessages.length === 0 ? (
-              <p className="text-sm text-white/50">No session messages yet.</p>
-            ) : (
-              sessionMessages.map((message) => (
-                <div
-                  key={`${message.id}-${message.messageId}`}
-                  className="space-y-2 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/70"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge className="border-white/20 bg-white/10 text-white/80">
-                        {(message.signalType ?? 'message').toUpperCase()}
-                      </Badge>
-                      <span>{new Date(message.sentAt).toLocaleTimeString()}</span>
-                      <Badge className={`${
-                        message.webhookStatus === 'failed'
-                          ? 'border-red-500/40 bg-red-500/20 text-red-200'
-                          : message.webhookStatus === 'resent'
-                            ? 'border-amber-500/40 bg-amber-500/20 text-amber-200'
-                            : 'border-emerald-500/40 bg-emerald-500/20 text-emerald-200'
-                      }`}>
-                        {(message.webhookStatus ?? 'sent').toUpperCase()}
-                      </Badge>
+          </section>
+
+          <section className="rounded-xl border border-emerald-500/20 bg-black/30">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between px-4 py-3 font-mono text-xs uppercase tracking-[0.12em] text-white/65 transition hover:text-white"
+              onClick={() => setShowSessionLog((current) => !current)}
+            >
+              <span>Session Log ({sessionMessages.length})</span>
+              <span>{showSessionLog ? 'Hide' : 'Show'}</span>
+            </button>
+            {showSessionLog ? (
+              <div className="space-y-2 border-t border-emerald-500/15 p-3">
+                {sessionMessages.length === 0 ? (
+                  <p className="font-mono text-xs text-white/45">No session messages yet.</p>
+                ) : (
+                  sessionMessages.map((message) => (
+                    <div
+                      key={`${message.id}-${message.messageId}`}
+                      className="rounded-lg border border-emerald-500/15 bg-black/35 px-3 py-2 text-xs text-white/75"
+                    >
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded border border-white/20 bg-white/10 px-2 py-0.5 text-white/80">
+                            {(message.signalType ?? 'message').toUpperCase()}
+                          </span>
+                          <span>{new Date(message.sentAt).toLocaleTimeString()}</span>
+                          <span className={`rounded border px-2 py-0.5 ${
+                            message.webhookStatus === 'failed'
+                              ? 'border-red-500/35 bg-red-500/10 text-red-200'
+                              : message.webhookStatus === 'resent'
+                                ? 'border-amber-500/35 bg-amber-500/10 text-amber-200'
+                                : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200'
+                          }`}>
+                            {(message.webhookStatus ?? 'sent').toUpperCase()}
+                          </span>
+                        </div>
+                        {message.webhookStatus === 'failed' ? (
+                          <button
+                            type="button"
+                            className={ghostButtonClass}
+                            onClick={() => void retryFailedMessage(message.messageId)}
+                            disabled={busy}
+                          >
+                            Retry
+                          </button>
+                        ) : null}
+                      </div>
+                      <p className="whitespace-pre-wrap break-words text-[12px] text-white/85">{message.content}</p>
                     </div>
-                    {message.webhookStatus === 'failed' ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void retryFailedMessage(message.messageId)}
-                        disabled={busy}
-                      >
-                        Retry
-                      </Button>
-                    ) : null}
-                  </div>
-                  <p className="whitespace-pre-wrap break-words text-[12px] text-white/80">{message.content}</p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        ) : null}
-      </Card>
+                  ))
+                )}
+              </div>
+            ) : null}
+          </section>
+        </div>
+      </section>
     </div>
   )
 }
