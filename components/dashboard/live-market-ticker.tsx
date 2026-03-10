@@ -87,8 +87,10 @@ export function LiveMarketTicker() {
             <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
             <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
           </div>
-        ) : marketFeedUnavailable && indices.length === 0 ? (
-          <div className="text-xs text-muted-foreground">Live market feed unavailable</div>
+        ) : indices.length === 0 ? (
+          <div className="text-xs text-muted-foreground">
+            {marketFeedUnavailable ? 'Live market feed unavailable' : 'No live index quotes right now'}
+          </div>
         ) : (
           indices.map(quote => {
             const isUp = quote.change >= 0

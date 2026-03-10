@@ -44,30 +44,82 @@ function hasFallbackSource(value: unknown): boolean {
         && (value as { source?: unknown }).source === 'fallback';
 }
 
+function buildMarketFallback(url: string): any {
+    const timestamp = new Date().toISOString();
+
+    if (url.includes('/api/market/indices')) {
+        return { quotes: [], metrics: { vwap: null }, source: 'fallback' };
+    }
+
+    if (url.includes('/api/market/status')) {
+        return {
+            status: 'closed',
+            session: 'none',
+            message: 'Market data temporarily unavailable',
+            nextOpen: 'Check data provider status',
+            source: 'fallback',
+        };
+    }
+
+    if (url.includes('/api/market/movers')) {
+        return { gainers: [], losers: [], source: 'fallback' };
+    }
+
+    if (url.includes('/api/market/analytics')) {
+        return {
+            timestamp,
+            status: { isOpen: false, session: 'none', message: 'Market analytics temporarily unavailable' },
+            indices: [],
+            regime: {
+                label: 'Neutral',
+                description: 'Live analytics unavailable; using safe neutral fallback.',
+                signals: ['Data provider unavailable'],
+            },
+            breadth: { advancers: 0, decliners: 0, ratio: 0, label: 'Unavailable' },
+            source: 'fallback',
+        };
+    }
+
+    if (url.includes('/api/market/splits') || url.includes('/api/market/holidays')) {
+        return [];
+    }
+
+    return { source: 'fallback' };
+}
+
 const fetcher = async (key: MarketKey) => {
     const [url, token] = key;
     const targetUrl = resolveMarketUrl(url);
-    const res = await fetch(targetUrl, {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-        cache: 'no-store',
-    });
+
+    let res: Response;
+    try {
+        res = await fetch(targetUrl, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+            cache: 'no-store',
+        });
+    } catch {
+        return buildMarketFallback(url);
+    }
 
     const fallbackHeader = res.headers.get('X-Market-Fallback');
     const body = parseJsonBody(await res.text());
 
     // Fallback payloads are intentionally returned by the proxy when upstream providers fail.
     // Treat these as degraded data, not runtime errors.
-    if (fallbackHeader) return body;
+    if (fallbackHeader) return body ?? buildMarketFallback(url);
 
     if (!res.ok) {
+        if (res.status >= 500) {
+            return body ?? buildMarketFallback(url);
+        }
         const detail = getErrorDetail(body);
         throw new Error(`Market request failed (${res.status})${detail ? `: ${detail}` : ''}`);
     }
 
     if (body == null) {
-        throw new Error('Market request returned an invalid JSON payload');
+        return buildMarketFallback(url);
     }
 
     return body;
