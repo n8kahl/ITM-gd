@@ -39,12 +39,14 @@ export async function fetchSymbolBars(options: SymbolDataFetcherOptions): Promis
         const toStr = toDate.toISOString().split('T')[0]
 
         // E.g. /v2/aggs/ticker/TSLA/range/5/minute/2026-02-23/2026-03-10
+        // Request the newest bars first so `limit` captures recent market state,
+        // then sort ascending locally for indicator computations.
         const response = await massiveClient.get(
             `/v2/aggs/ticker/${symbol.toUpperCase()}/range/${multiplier}/${timespan}/${fromStr}/${toStr}`,
             {
                 params: {
                     adjusted: true,
-                    sort: 'asc',
+                    sort: 'desc',
                     limit
                 }
             }
@@ -57,14 +59,23 @@ export async function fetchSymbolBars(options: SymbolDataFetcherOptions): Promis
 
         // Map Massive's aggregate format (v2/aggs) to our internal CandleBar format
         // v2/aggs format: o, h, l, c, v, t
-        return response.data.results.map((b: any) => ({
-            timestamp: b.t,
-            open: Number(b.o),
-            high: Number(b.h),
-            low: Number(b.l),
-            close: Number(b.c),
-            volume: Number(b.v)
-        }))
+        const bars: Array<{
+            timestamp: number
+            open: number
+            high: number
+            low: number
+            close: number
+            volume: number
+        }> = response.data.results.map((b: any) => ({
+                timestamp: b.t,
+                open: Number(b.o),
+                high: Number(b.h),
+                low: Number(b.l),
+                close: Number(b.c),
+                volume: Number(b.v)
+            }))
+
+        return bars.sort((left, right) => left.timestamp - right.timestamp)
     } catch (error) {
         console.error(`[SymbolDataFetcher] Failed to fetch bars for ${symbol}:`, error)
         return []

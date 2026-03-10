@@ -51,6 +51,25 @@ export interface ConfluenceZone {
     isKingQueen: boolean         // VWAP present in zone?
 }
 
+export interface MoneyMakerIndicatorSnapshot {
+    vwap: number | null
+    ema8: number | null
+    ema21: number | null
+    ema34: number | null
+    sma200: number | null
+}
+
+export interface MoneyMakerSymbolSnapshot {
+    symbol: string
+    price: number
+    priceChange: number | null
+    priceChangePercent: number | null
+    orbRegime: 'trending_up' | 'trending_down' | 'choppy'
+    strongestConfluence: ConfluenceZone | null
+    indicators: MoneyMakerIndicatorSnapshot
+    lastCandleAt: number
+}
+
 export interface MoneyMakerSignal {
     id: string
     symbol: string
@@ -88,4 +107,10 @@ export interface MoneyMakerSignal {
     status: 'forming' | 'ready' | 'expired'
     ttlSeconds: number             // Auto-expire after N seconds
     expiresAt: number
+}
+
+export interface MoneyMakerSnapshotResult {
+    timestamp: number
+    signals: MoneyMakerSignal[]
+    symbolSnapshots: MoneyMakerSymbolSnapshot[]
 }

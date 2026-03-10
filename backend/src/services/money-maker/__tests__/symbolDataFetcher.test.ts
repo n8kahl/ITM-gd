@@ -48,7 +48,7 @@ describe('SymbolDataFetcher', () => {
             expect(massiveClient.get).toHaveBeenCalledWith(
                 expect.stringContaining('/v2/aggs/ticker/TSLA/range/5/minute/'),
                 expect.objectContaining({
-                    params: { adjusted: true, sort: 'asc', limit: 500 }
+                    params: { adjusted: true, sort: 'desc', limit: 500 }
                 })
             )
         })
