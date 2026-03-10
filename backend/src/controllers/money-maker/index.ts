@@ -1,56 +1,110 @@
 import { Request, Response } from 'express'
 import { buildSnapshot } from '../../services/money-maker/snapshotBuilder'
-import { createClient } from '@supabase/supabase-js'
-import dotenv from 'dotenv'
+import { supabase } from '../../config/database'
+import { isValidSymbol, normalizeSymbol } from '../../lib/symbols'
 
-dotenv.config()
+const DEFAULT_WATCHLIST_SYMBOLS = ['SPY', 'TSLA', 'AAPL', 'NVDA', 'META']
 
-const supabaseUrl = process.env.SUPABASE_URL || ''
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-const supabase = createClient(supabaseUrl, supabaseKey)
+interface AuthenticatedUser {
+    id: string
+}
+
+interface WatchlistRow {
+    id?: string
+    user_id?: string
+    symbol: string
+    display_order: number
+    is_active: boolean
+}
+
+async function getAuthenticatedUser(req: Request): Promise<AuthenticatedUser | null> {
+    const authHeader = req.headers.authorization
+    if (!authHeader?.startsWith('Bearer ')) {
+        return null
+    }
+
+    const token = authHeader.slice('Bearer '.length).trim()
+    if (!token) {
+        return null
+    }
+
+    const { data: { user }, error } = await supabase.auth.getUser(token)
+    if (error || !user) {
+        return null
+    }
+
+    return { id: user.id }
+}
+
+async function listDefaultWatchlist(): Promise<WatchlistRow[]> {
+    const { data, error } = await supabase
+        .from('money_maker_default_symbols')
+        .select('symbol, display_order')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true })
+
+    if (error || !data || data.length === 0) {
+        return DEFAULT_WATCHLIST_SYMBOLS.map((symbol, index) => ({
+            symbol,
+            display_order: index + 1,
+            is_active: true,
+        }))
+    }
+
+    return data.map((row) => ({
+        symbol: row.symbol,
+        display_order: row.display_order,
+        is_active: true,
+    }))
+}
+
+async function listEffectiveWatchlist(userId: string): Promise<WatchlistRow[]> {
+    const { data, error } = await supabase
+        .from('money_maker_watchlists')
+        .select('id, user_id, symbol, display_order, is_active')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('display_order', { ascending: true })
+
+    if (error || !data || data.length === 0) {
+        return listDefaultWatchlist()
+    }
+
+    return data
+}
+
+function sanitizeWatchlistSymbols(symbols: unknown[]): string[] {
+    const normalized = symbols
+        .filter((symbol): symbol is string => typeof symbol === 'string')
+        .map((symbol) => normalizeSymbol(symbol))
+        .filter(Boolean)
+
+    const uniqueSymbols = Array.from(new Set(normalized))
+    const invalidSymbols = uniqueSymbols.filter((symbol) => !isValidSymbol(symbol))
+
+    if (invalidSymbols.length > 0) {
+        throw new Error(`invalid symbols: ${invalidSymbols.join(', ')}`)
+    }
+
+    return uniqueSymbols.slice(0, 5)
+}
 
 // GET /api/money-maker/snapshot
 export async function getSnapshot(req: Request, res: Response) {
     try {
-        const authHeader = req.headers.authorization
-        if (!authHeader) {
-            return res.status(401).json({ error: 'Missing authorization header' })
+        const user = await getAuthenticatedUser(req)
+        if (!user) {
+            return res.status(401).json({ error: 'Unauthorized' })
         }
 
-        // Get user from token
-        const token = authHeader.replace('Bearer ', '')
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token)
-
-        if (userError || !user) {
-            return res.status(401).json({ error: 'Invalid token' })
-        }
-
-        // 1. Get user's watchlist symbols
-        const { data: watchlists, error } = await supabase
-            .from('money_maker_watchlists')
-            .select('symbol')
-            .eq('user_id', user.id)
-            .eq('is_active', true)
-
-        let symbols: string[] = []
-
-        if (error || !watchlists || watchlists.length === 0) {
-            // Fallback to default symbols if error or empty
-            const { data: defaults } = await supabase
-                .from('money_maker_default_symbols')
-                .select('symbol')
-                .eq('is_active', true)
-
-            symbols = defaults ? defaults.map(d => d.symbol) : ['SPY', 'QQQ', 'IWM']
-        } else {
-            symbols = watchlists.map(w => w.symbol)
-        }
-
-        // 2. Build snapshot using the engine
+        const watchlist = await listEffectiveWatchlist(user.id)
+        const symbols = watchlist.map((row) => row.symbol)
         const snapshot = await buildSnapshot(symbols, user.id)
 
-        // 3. Return snapshot
-        return res.status(200).json(snapshot)
+        return res.status(200).json({
+            ...snapshot,
+            symbols,
+        })
     } catch (err: any) {
         console.error('[getSnapshot] Error:', err)
         return res.status(500).json({ error: 'Failed to build snapshot' })
@@ -60,24 +114,12 @@ export async function getSnapshot(req: Request, res: Response) {
 // GET /api/money-maker/watchlist
 export async function getWatchlist(req: Request, res: Response) {
     try {
-        const authHeader = req.headers.authorization
-        if (!authHeader) return res.status(401).json({ error: 'Unauthorized' })
+        const user = await getAuthenticatedUser(req)
+        if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
-        const token = authHeader.replace('Bearer ', '')
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+        const watchlists = await listEffectiveWatchlist(user.id)
 
-        if (userError || !user) return res.status(401).json({ error: 'Unauthorized' })
-
-        const { data, error } = await supabase
-            .from('money_maker_watchlists')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('is_active', true)
-            .order('display_order', { ascending: true })
-
-        if (error) throw error
-
-        return res.status(200).json({ watchlists: data })
+        return res.status(200).json({ watchlists })
     } catch (err: any) {
         return res.status(500).json({ error: err.message })
     }
@@ -86,9 +128,9 @@ export async function getWatchlist(req: Request, res: Response) {
 // POST /api/money-maker/watchlist
 export async function updateWatchlist(req: Request, res: Response) {
     try {
-        const { symbols } = req.body // Array of strings e.g. ['TSLA', 'AAPL', 'NVDA']
+        const symbols = req.body?.symbols
 
-        if (!Array.isArray(symbols)) {
+        if (!Array.isArray(symbols) || symbols.some((symbol) => typeof symbol !== 'string')) {
             return res.status(400).json({ error: 'symbols must be an array' })
         }
 
@@ -96,37 +138,47 @@ export async function updateWatchlist(req: Request, res: Response) {
             return res.status(400).json({ error: 'maximum 5 symbols allowed in watchlist' })
         }
 
-        const authHeader = req.headers.authorization
-        if (!authHeader) return res.status(401).json({ error: 'Unauthorized' })
+        const normalizedSymbols = sanitizeWatchlistSymbols(symbols)
+        const user = await getAuthenticatedUser(req)
+        if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
-        const token = authHeader.replace('Bearer ', '')
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+        const now = new Date().toISOString()
 
-        if (userError || !user) return res.status(401).json({ error: 'Unauthorized' })
-
-        // A simple overwrite strategy (deactivate all old, insert new)
-        // 1. Deactivate old
-        await supabase
+        const { error: deactivateError } = await supabase
             .from('money_maker_watchlists')
-            .update({ is_active: false })
+            .update({ is_active: false, updated_at: now })
             .eq('user_id', user.id)
 
-        // 2. Insert new or reactivate
-        const inserts = symbols.map((sym: string, i: number) => ({
-            user_id: user.id,
-            symbol: sym.trim().toUpperCase(),
-            display_order: i,
-            is_active: true
-        }))
+        if (deactivateError) throw deactivateError
 
-        const { error: upsertError } = await supabase
-            .from('money_maker_watchlists')
-            .upsert(inserts, { onConflict: 'user_id, symbol' })
+        if (normalizedSymbols.length > 0) {
+            const inserts = normalizedSymbols.map((symbol, index) => ({
+                user_id: user.id,
+                symbol,
+                display_order: index + 1,
+                is_active: true,
+                updated_at: now,
+            }))
 
-        if (upsertError) throw upsertError
+            const { error: upsertError } = await supabase
+                .from('money_maker_watchlists')
+                .upsert(inserts, { onConflict: 'user_id,symbol' })
 
-        return res.status(200).json({ message: 'Watchlist updated' })
+            if (upsertError) throw upsertError
+        }
+
+        return res.status(200).json({
+            message: 'Watchlist updated',
+            watchlists: normalizedSymbols.map((symbol, index) => ({
+                symbol,
+                display_order: index + 1,
+                is_active: true,
+            })),
+        })
     } catch (err: any) {
+        if (err instanceof Error && err.message.startsWith('invalid symbols:')) {
+            return res.status(400).json({ error: err.message })
+        }
         return res.status(500).json({ error: err.message })
     }
 }

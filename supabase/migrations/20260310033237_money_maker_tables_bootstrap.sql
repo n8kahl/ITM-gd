@@ -1,6 +1,6 @@
--- User watchlists (4-5 symbols per user)
--- Idempotent so environments that already received the bootstrap backfill can
--- still safely reconcile this original migration during a later db push.
+-- Reconciles production after the original Money Maker table migration was
+-- missing from remote migration history. Keep this idempotent so fresh
+-- environments can run both the original migration and this bootstrap safely.
 CREATE TABLE IF NOT EXISTS public.money_maker_watchlists (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id),
@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS public.money_maker_watchlists (
   UNIQUE(user_id, symbol)
 );
 
--- Signal history (every fired signal, for audit & backtesting)
 CREATE TABLE IF NOT EXISTS public.money_maker_signals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id),
@@ -22,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.money_maker_signals (
   patience_candle_pattern varchar(20) NOT NULL,
   patience_candle_timeframe varchar(5) NOT NULL,
   confluence_score numeric(3,1) NOT NULL,
-  confluence_levels jsonb NOT NULL,       -- [{source, price, weight}]
+  confluence_levels jsonb NOT NULL,
   is_king_queen boolean NOT NULL DEFAULT false,
   entry_price numeric(10,2) NOT NULL,
   stop_price numeric(10,2) NOT NULL,
@@ -36,7 +35,6 @@ CREATE TABLE IF NOT EXISTS public.money_maker_signals (
   created_at timestamptz DEFAULT now()
 );
 
--- Default watchlist symbols (smart defaults)
 CREATE TABLE IF NOT EXISTS public.money_maker_default_symbols (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   symbol varchar(10) NOT NULL UNIQUE,
@@ -45,7 +43,6 @@ CREATE TABLE IF NOT EXISTS public.money_maker_default_symbols (
   is_active boolean DEFAULT true
 );
 
--- Seed smart defaults
 INSERT INTO public.money_maker_default_symbols (symbol, display_name, display_order) VALUES
   ('SPY', 'S&P 500 ETF', 1),
   ('TSLA', 'Tesla', 2),
@@ -54,7 +51,6 @@ INSERT INTO public.money_maker_default_symbols (symbol, display_name, display_or
   ('META', 'Meta Platforms', 5)
 ON CONFLICT (symbol) DO NOTHING;
 
--- RLS Policies
 ALTER TABLE public.money_maker_watchlists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.money_maker_signals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.money_maker_default_symbols ENABLE ROW LEVEL SECURITY;
@@ -115,7 +111,6 @@ BEGIN
   END IF;
 END $$;
 
--- Indexes
 CREATE INDEX IF NOT EXISTS idx_mm_watchlists_user ON public.money_maker_watchlists(user_id) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_mm_signals_user_time ON public.money_maker_signals(user_id, triggered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mm_signals_symbol_time ON public.money_maker_signals(symbol, triggered_at DESC);

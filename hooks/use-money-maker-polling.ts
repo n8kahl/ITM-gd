@@ -1,69 +1,142 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useMoneyMaker } from '@/components/money-maker/money-maker-provider'
 import { useMemberAuth } from '@/contexts/MemberAuthContext'
 
-const POLLING_INTERVAL_MS = 60 * 1000 // Every 1 minute
+const WATCHLIST_ENDPOINT = '/api/members/money-maker/watchlist'
+const SNAPSHOT_ENDPOINT = '/api/members/money-maker/snapshot'
+const POLLING_INTERVAL_MS = 5 * 1000
+
+async function readErrorMessage(response: Response, fallback: string): Promise<string> {
+    try {
+        const payload = await response.json()
+        if (typeof payload?.error === 'string' && payload.error.trim()) {
+            return payload.error
+        }
+        if (typeof payload?.message === 'string' && payload.message.trim()) {
+            return payload.message
+        }
+    } catch {
+        // Ignore JSON parse failures and use the fallback message below.
+    }
+
+    return fallback
+}
 
 export function useMoneyMakerPolling() {
     const { session } = useMemberAuth()
-    const { state, setSymbols, setIsLoading, setError, setLastUpdated } = useMoneyMaker()
-    const hasInitialFetch = useRef(false)
+    const {
+        setSymbols,
+        setSignals,
+        setIsLoading,
+        setIsRefreshing,
+        setError,
+        setLastUpdated,
+    } = useMoneyMaker()
+    const hasLoadedSnapshot = useRef(false)
 
-    // 1. Fetch Watchlist on mount
-    useEffect(() => {
-        if (!session?.access_token || hasInitialFetch.current) return
-
-        const fetchWatchlist = async () => {
-            try {
-                const res = await fetch('/api/money-maker/watchlist', {
-                    headers: { Authorization: `Bearer ${session.access_token}` },
-                })
-
-                if (!res.ok) throw new Error('Failed to load watchlist')
-
-                const data = await res.json()
-                const symbols = data.watchlists?.map((w: any) => w.symbol) || ['SPY', 'QQQ', 'IWM']
-                setSymbols(symbols)
-            } catch (err: any) {
-                console.error('Watchlist fetch error:', err)
-                // Fallback silently to defaults
-            }
-        }
-
-        fetchWatchlist()
-        hasInitialFetch.current = true
-    }, [session, setSymbols])
-
-    // 2. Poll Snapshot
-    useEffect(() => {
+    const fetchWatchlist = useCallback(async () => {
         if (!session?.access_token) return
 
-        const fetchSnapshot = async () => {
+        try {
+            const response = await fetch(WATCHLIST_ENDPOINT, {
+                headers: { Authorization: `Bearer ${session.access_token}` },
+                cache: 'no-store',
+            })
+
+            if (!response.ok) {
+                throw new Error(await readErrorMessage(response, 'Failed to load watchlist'))
+            }
+
+            const data = await response.json()
+            const symbols = Array.isArray(data.watchlists)
+                ? data.watchlists
+                    .map((watchlist: { symbol?: unknown }) => watchlist?.symbol)
+                    .filter((symbol: unknown): symbol is string => typeof symbol === 'string' && symbol.length > 0)
+                : []
+
+            if (symbols.length > 0) {
+                setSymbols(symbols)
+            }
+        } catch (err) {
+            console.error('Watchlist fetch error:', err)
+        }
+    }, [session?.access_token, setSymbols])
+
+    const fetchSnapshot = useCallback(async (mode: 'initial' | 'background' = 'background') => {
+        if (!session?.access_token) return
+
+        const isInitialLoad = mode === 'initial' || !hasLoadedSnapshot.current
+        if (isInitialLoad) {
             setIsLoading(true)
-            try {
-                const res = await fetch('/api/money-maker/snapshot', {
-                    headers: { Authorization: `Bearer ${session.access_token}` },
-                })
+        } else {
+            setIsRefreshing(true)
+        }
 
-                if (!res.ok) throw new Error('Failed to load market snapshot')
+        try {
+            const response = await fetch(SNAPSHOT_ENDPOINT, {
+                headers: { Authorization: `Bearer ${session.access_token}` },
+                cache: 'no-store',
+            })
 
-                const data = await res.json()
+            if (!response.ok) {
+                throw new Error(await readErrorMessage(response, 'Failed to load market snapshot'))
+            }
 
-                // Context will be expanded to store signals. For now we just mark success.
-                setLastUpdated(data.timestamp || Date.now())
-                setError(null)
-            } catch (err: any) {
-                setError(err.message || 'Unknown polling error')
-            } finally {
-                setIsLoading(false)
+            const data = await response.json()
+            const signals = Array.isArray(data.signals) ? data.signals : []
+            const symbols = Array.isArray(data.symbols)
+                ? data.symbols.filter((symbol: unknown): symbol is string => typeof symbol === 'string' && symbol.length > 0)
+                : []
+
+            setSignals(signals)
+            if (symbols.length > 0) {
+                setSymbols(symbols)
+            }
+            setLastUpdated(typeof data.timestamp === 'number' ? data.timestamp : Date.now())
+            setError(null)
+            hasLoadedSnapshot.current = true
+        } catch (err: any) {
+            setError(err?.message || 'Unknown polling error')
+        } finally {
+            setIsLoading(false)
+            setIsRefreshing(false)
+        }
+    }, [session?.access_token, setError, setIsLoading, setIsRefreshing, setLastUpdated, setSignals, setSymbols])
+
+    useEffect(() => {
+        hasLoadedSnapshot.current = false
+
+        if (!session?.access_token) {
+            setSignals([])
+            setIsLoading(false)
+            setIsRefreshing(false)
+            return
+        }
+
+        let cancelled = false
+
+        const hydrate = async () => {
+            await fetchWatchlist()
+            if (!cancelled) {
+                await fetchSnapshot('initial')
             }
         }
 
-        fetchSnapshot()
-        const interval = setInterval(fetchSnapshot, POLLING_INTERVAL_MS)
+        void hydrate()
 
-        return () => clearInterval(interval)
-    }, [session, setIsLoading, setError, setLastUpdated])
+        const interval = window.setInterval(() => {
+            void fetchSnapshot('background')
+        }, POLLING_INTERVAL_MS)
+
+        return () => {
+            cancelled = true
+            window.clearInterval(interval)
+        }
+    }, [session?.access_token, fetchSnapshot, fetchWatchlist, setIsLoading, setIsRefreshing, setSignals])
+
+    return {
+        refreshSnapshot: () => fetchSnapshot(hasLoadedSnapshot.current ? 'background' : 'initial'),
+    }
 }

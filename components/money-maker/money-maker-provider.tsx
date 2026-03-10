@@ -3,10 +3,13 @@
 import React, { createContext, useContext, ReactNode, useState, useCallback } from 'react'
 import { MoneyMakerSignal } from '@/lib/money-maker/types'
 
+const DEFAULT_SYMBOLS = ['SPY', 'TSLA', 'AAPL', 'NVDA', 'META']
+
 export interface MoneyMakerState {
     symbols: string[]
     signals: MoneyMakerSignal[]
     isLoading: boolean
+    isRefreshing: boolean
     lastUpdated: number | null
     error: string | null
 }
@@ -16,6 +19,7 @@ export interface MoneyMakerContextType {
     setSymbols: (symbols: string[]) => void
     setSignals: (signals: MoneyMakerSignal[]) => void
     setIsLoading: (loading: boolean) => void
+    setIsRefreshing: (refreshing: boolean) => void
     setError: (error: string | null) => void
     setLastUpdated: (timestamp: number) => void
 }
@@ -24,9 +28,10 @@ const MoneyMakerContext = createContext<MoneyMakerContextType | undefined>(undef
 
 export function MoneyMakerProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<MoneyMakerState>({
-        symbols: ['SPY', 'QQQ', 'IWM'], // initial state while fetching real watchlist
+        symbols: DEFAULT_SYMBOLS,
         signals: [],
         isLoading: true,
+        isRefreshing: false,
         lastUpdated: null,
         error: null,
     })
@@ -41,6 +46,10 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
 
     const setIsLoading = useCallback((isLoading: boolean) => {
         setState(prev => ({ ...prev, isLoading }))
+    }, [])
+
+    const setIsRefreshing = useCallback((isRefreshing: boolean) => {
+        setState(prev => ({ ...prev, isRefreshing }))
     }, [])
 
     const setError = useCallback((error: string | null) => {
@@ -58,6 +67,7 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
                 setSymbols,
                 setSignals,
                 setIsLoading,
+                setIsRefreshing,
                 setError,
                 setLastUpdated,
             }}

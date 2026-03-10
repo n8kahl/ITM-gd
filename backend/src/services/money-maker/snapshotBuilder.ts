@@ -115,8 +115,9 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
                         })
 
                         if (rr.isValid) {
+                            const zoneKey = `${zone.priceLow.toFixed(4)}-${zone.priceHigh.toFixed(4)}-${routing.strategyType}`
                             const signalId = userId
-                                ? uuidv5(`${userId}-${symbol}-${currentBar.timestamp}`, SIGNAL_NAMESPACE)
+                                ? uuidv5(`${userId}-${symbol}-${currentBar.timestamp}-${dir}-${zoneKey}`, SIGNAL_NAMESPACE)
                                 : uuidv4()
 
                             signalCandidates.push({

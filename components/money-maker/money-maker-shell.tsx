@@ -9,8 +9,9 @@ import { WatchlistManager } from './watchlist-manager'
 import { ActiveStrategiesClock } from './active-strategies-clock'
 
 export function MoneyMakerShell({ children }: { children: React.ReactNode }) {
-    useMoneyMakerPolling()
+    const { refreshSnapshot } = useMoneyMakerPolling()
     const { state } = useMoneyMaker()
+    const isBusy = state.isLoading || state.isRefreshing
 
     const formattedTime = state.lastUpdated
         ? new Intl.DateTimeFormat('en-US', { timeStyle: 'medium' }).format(new Date(state.lastUpdated))
@@ -28,12 +29,20 @@ export function MoneyMakerShell({ children }: { children: React.ReactNode }) {
                 <div className="flex flex-wrap items-center gap-3">
                     <ActiveStrategiesClock />
                     <div className="hidden md:flex items-center space-x-2 text-sm text-muted-foreground ml-2">
-                        {state.isLoading && <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />}
+                        {isBusy && <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />}
                         <span>Last updated: {formattedTime}</span>
                     </div>
                     <WatchlistManager />
-                    <Button variant="outline" size="sm" className="gap-2">
-                        {state.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        disabled={isBusy}
+                        onClick={() => {
+                            void refreshSnapshot()
+                        }}
+                    >
+                        {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                         <span className="hidden sm:inline">Refresh</span>
                     </Button>
                 </div>
