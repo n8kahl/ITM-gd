@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { BookmarkPlus, ListPlus } from 'lucide-react'
+import { BookmarkMinus, BookmarkPlus, ChevronRight, ListPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type {
@@ -27,10 +27,13 @@ interface DossierPanelProps {
   error: boolean
   activeTab: DossierTab
   monitoring: SwingSniperMonitoringPayload | null
+  isSaved: boolean
+  thesisPending: boolean
+  watchlistPending: boolean
   onTabChange: (tab: DossierTab) => void
   onSaveThesis: () => void
+  onRemoveThesis: () => void
   onAddToWatchlist: () => void
-  savePending: boolean
 }
 
 function chartTooltip({ active, payload, label }: any) {
@@ -84,16 +87,63 @@ function densityTone(count: number): string {
   return 'bg-white/[0.08]'
 }
 
+function holdingWindow(daysOut: number | undefined): string {
+  if (daysOut == null) return '7-14 trading days'
+  if (daysOut <= 3) return '3-7 trading days'
+  if (daysOut <= 7) return '5-10 trading days'
+  if (daysOut <= 14) return '7-14 trading days'
+  return '14-30 trading days'
+}
+
+function entryPosture(
+  view: SwingSniperDossierPayload['view'],
+  ivRvSpread: number | null,
+): string {
+  if (view === 'Long vol') {
+    return ivRvSpread != null && ivRvSpread <= 0
+      ? 'Enter while IV trails realized'
+      : 'Wait for a better premium reset'
+  }
+
+  if (view === 'Short vol') {
+    return ivRvSpread != null && ivRvSpread >= 0
+      ? 'Wait for event fade or failed extension'
+      : 'Tactical only until premium rebuilds'
+  }
+
+  return 'Catalyst dependent'
+}
+
+function confidenceLabel(score: number): string {
+  if (score >= 85) return 'High conviction'
+  if (score >= 70) return 'Actionable'
+  return 'Tactical'
+}
+
+function formatPercent(value: number | null): string {
+  return value == null ? '--' : `${value.toFixed(1)}%`
+}
+
+function monitoringTone(status: string | null): string {
+  if (status === 'active') return 'text-emerald-100'
+  if (status === 'degrading') return 'text-amber-100'
+  if (status === 'invalidated') return 'text-red-100'
+  return 'text-white/80'
+}
+
 export function DossierPanel({
   dossier,
   loading,
   error,
   activeTab,
   monitoring,
+  isSaved,
+  thesisPending,
+  watchlistPending,
   onTabChange,
   onSaveThesis,
+  onRemoveThesis,
   onAddToWatchlist,
-  savePending,
 }: DossierPanelProps) {
   const symbolMonitoring = dossier
     ? monitoring?.savedTheses.find((item) => item.symbol === dossier.symbol) || null
@@ -103,35 +153,41 @@ export function DossierPanel({
     ? dossier.vol_map.iv_now - dossier.vol_map.rv_20d
     : null
 
+  const topStructure = dossier?.structures[0] ?? null
+  const leadCatalysts = dossier ? [...dossier.catalysts].sort((left, right) => left.days_out - right.days_out).slice(0, 3) : []
+
   return (
-    <section className="glass-card-heavy rounded-2xl border border-white/10 p-5" data-testid="swing-sniper-dossier">
+    <section className="glass-card-heavy rounded-[28px] border border-white/10 p-5" data-testid="swing-sniper-dossier">
       {loading ? (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="h-5 w-48 animate-pulse rounded bg-white/10" />
-            <div className="mt-3 h-8 w-24 animate-pulse rounded bg-white/7" />
-            <div className="mt-3 h-4 w-5/6 animate-pulse rounded bg-white/6" />
+          <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
+            <div className="h-5 w-44 animate-pulse rounded bg-white/10" />
+            <div className="mt-4 h-10 w-28 animate-pulse rounded bg-white/[0.08]" />
+            <div className="mt-4 h-4 w-5/6 animate-pulse rounded bg-white/5" />
+            <div className="mt-6 grid gap-3 md:grid-cols-4">
+              {Array.from({ length: 4 }, (_, index) => (
+                <div key={index} className="h-20 animate-pulse rounded-[22px] border border-white/10 bg-white/[0.04]" />
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {DOSSIER_TABS.map((tab) => (
-              <div key={tab} className="h-8 w-20 animate-pulse rounded-full border border-white/10 bg-white/[0.03]" />
-            ))}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_320px]">
+            <div className="h-56 animate-pulse rounded-[24px] border border-white/10 bg-white/[0.03]" />
+            <div className="h-56 animate-pulse rounded-[24px] border border-white/10 bg-white/[0.03]" />
           </div>
-          <div className="h-80 animate-pulse rounded-2xl border border-white/10 bg-white/[0.03]" />
         </div>
       ) : null}
 
       {!loading && error ? (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-muted-foreground">
+        <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5 text-sm text-muted-foreground">
           Refreshing research data…
         </div>
       ) : null}
 
       {!loading && !error && dossier ? (
         <>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={cn('rounded-full border px-3 py-1 font-mono text-xs', scoreTone(dossier.orc_score))}>
                     ORC {dossier.orc_score}
@@ -142,41 +198,194 @@ export function DossierPanel({
                   <span className="rounded-full border border-white/10 bg-[#050505] px-3 py-1 text-xs uppercase tracking-[0.16em] text-white/75">
                     {dossier.catalyst_label}
                   </span>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs uppercase tracking-[0.16em] text-white/70">
+                    {confidenceLabel(dossier.orc_score)}
+                  </span>
                 </div>
 
-                <h2 className="mt-4 font-[family-name:var(--font-playfair)] text-4xl tracking-[-0.03em] text-white">
+                <h2 className="mt-4 font-[family-name:var(--font-playfair)] text-[clamp(2.75rem,6vw,4rem)] tracking-[-0.045em] text-white">
                   {dossier.symbol}
                 </h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{dossier.headline}</p>
+                <p className="mt-3 max-w-4xl text-base leading-8 text-white/82">{dossier.headline}</p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={onSaveThesis}
-                  disabled={savePending}
-                  className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  onClick={() => onTabChange('Structure')}
+                  className="rounded-full bg-white text-black hover:bg-white/90"
                 >
-                  <BookmarkPlus className="mr-2 h-4 w-4" />
-                  {savePending ? 'Saving…' : 'Save thesis'}
+                  Build trade
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
+                  onClick={isSaved ? onRemoveThesis : onSaveThesis}
+                  disabled={thesisPending}
+                  className="rounded-full border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+                >
+                  {isSaved ? (
+                    <BookmarkMinus className="mr-2 h-4 w-4" />
+                  ) : (
+                    <BookmarkPlus className="mr-2 h-4 w-4" />
+                  )}
+                  {thesisPending ? (isSaved ? 'Removing…' : 'Saving…') : isSaved ? 'Remove thesis' : 'Save thesis'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={onAddToWatchlist}
-                  className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  disabled={watchlistPending}
+                  className="rounded-full border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
                 >
                   <ListPlus className="mr-2 h-4 w-4" />
-                  Add to watchlist
+                  {watchlistPending ? 'Adding…' : 'Add to watchlist'}
                 </Button>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {[
+                ['Best expression', topStructure?.name ?? dossier.view],
+                ['Entry posture', entryPosture(dossier.view, ivRvSpread)],
+                ['Hold window', holdingWindow(leadCatalysts[0]?.days_out)],
+                ['Kill switch', dossier.risk.killers[0] ?? 'Monitor catalyst drift'],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-[22px] border border-white/10 bg-[#050505] px-4 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/45">{label}</p>
+                  <p className="mt-2 text-sm leading-6 text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_340px]">
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-sm font-medium text-white">Why now</p>
+                  <p className="mt-3 text-sm leading-7 text-white/85">{dossier.thesis.summary}</p>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-sm font-medium text-white">Vol setup</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {[
+                      ['IV now', formatPercent(dossier.vol_map.iv_now)],
+                      ['RV 20D', formatPercent(dossier.vol_map.rv_20d)],
+                      ['Skew', dossier.vol_map.skew],
+                      ['Term', dossier.vol_map.term_shape],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">{label}</p>
+                        <p className="mt-1 text-sm text-white">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-emerald-500/18 bg-gradient-to-b from-emerald-500/[0.08] to-white/[0.03] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-white">Best expressions</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Top setup recommendations ranked for the current thesis.</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onTabChange('Structure')}
+                    className="rounded-full border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+                  >
+                    Compare all
+                  </Button>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {dossier.structures.slice(0, 3).map((structure) => (
+                    <div key={`${structure.name}-${structure.fit_score}`} className="rounded-[22px] border border-white/10 bg-[#050505] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-base font-semibold text-white">{structure.name}</p>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">{structure.rationale}</p>
+                        </div>
+                        <span className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1 font-mono text-xs text-emerald-100">
+                          Fit {structure.fit_score.toFixed(1)}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                        {[
+                          ['Max risk', structure.max_loss],
+                          ['Style', structure.style],
+                          ['POP', structure.pop],
+                        ].map(([label, value]) => (
+                          <div key={`${structure.name}-${label}`} className="rounded-2xl border border-white/10 px-3 py-2">
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">{label}</p>
+                            <p className="mt-1 text-sm text-white">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {dossier.structures.length === 0 ? (
+                    <div className="rounded-[22px] border border-white/10 bg-[#050505] p-4 text-sm text-muted-foreground">
+                      Structure recommendations are refreshing.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-sm font-medium text-white">Catalyst clock</p>
+                <div className="mt-4 space-y-3">
+                  {leadCatalysts.map((event) => (
+                    <div key={`${event.date}-${event.label}`} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
+                      <div className="font-mono text-xs uppercase tracking-[0.14em] text-champagne">
+                        {event.days_out <= 0 ? 'Now' : `${event.days_out}D`}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-white">{event.label}</p>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">{event.context}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-sm font-medium text-white">Thesis health</p>
+                {symbolMonitoring ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">Status</p>
+                      <p className={cn('mt-1 text-sm font-medium capitalize', monitoringTone(symbolMonitoring.monitoring.status))}>
+                        {symbolMonitoring.monitoring.status}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">Health score</p>
+                      <p className="mt-1 text-sm text-white">{symbolMonitoring.monitoring.healthScore.toFixed(0)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-3 text-sm leading-6 text-muted-foreground">
+                      {symbolMonitoring.monitoring.note}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-[#050505] px-3 py-3 text-sm leading-6 text-muted-foreground">
+                    Save the thesis to track IV drift, catalyst changes, and invalidation pressure from the rail.
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <p className="mr-2 text-[11px] uppercase tracking-[0.16em] text-white/45">Deep dive</p>
             {DOSSIER_TABS.map((tab) => (
               <button
                 key={tab}
@@ -196,30 +405,30 @@ export function DossierPanel({
 
           {activeTab === 'Thesis' ? (
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">Why Swing Sniper cares</p>
                 <p className="mt-2 text-sm leading-7 text-white/85">{dossier.thesis.summary}</p>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">What could invalidate it</p>
                 <ul className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
                   {dossier.thesis.risks.map((risk) => (
-                    <li key={risk} className="rounded-xl border border-white/10 bg-[#050505] px-3 py-2">{risk}</li>
+                    <li key={risk} className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-2">{risk}</li>
                   ))}
                 </ul>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">Narrative shift</p>
                 <ul className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
                   {dossier.thesis.narrative_shifts.map((item) => (
-                    <li key={item} className="rounded-xl border border-white/10 bg-[#050505] px-3 py-2">{item}</li>
+                    <li key={item} className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-2">{item}</li>
                   ))}
                 </ul>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">Factor breakdown</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   {[
@@ -227,7 +436,7 @@ export function DossierPanel({
                     ['Catalyst', dossier.thesis.factors.catalyst],
                     ['Liquidity', dossier.thesis.factors.liquidity],
                   ].map(([label, value]) => (
-                    <div key={label} className="rounded-xl border border-white/10 bg-[#050505] p-3">
+                    <div key={label} className="rounded-2xl border border-white/10 bg-[#050505] p-3">
                       <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
                       <p className="mt-1 font-mono text-lg text-white">{value}</p>
                       <div className="mt-2 h-1.5 rounded-full bg-white/[0.08]">
@@ -242,21 +451,21 @@ export function DossierPanel({
 
           {activeTab === 'Vol Map' ? (
             <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_320px]">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">Surface read</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">{dossier.vol_map.surface_read}</p>
 
                 <div className="mt-4 grid grid-cols-5 gap-2">
                   {dossier.vol_map.term_structure.map((bar) => (
-                    <div key={bar.label} className="rounded-xl border border-white/10 bg-[#050505] p-2 text-center">
-                      <div className="mx-auto h-16 w-8 rounded-t-lg border border-emerald-500/40 bg-gradient-to-b from-emerald-400/95 to-emerald-900/90" style={{ height: `${Math.max(20, Math.min(82, bar.iv))}px` }} />
+                    <div key={bar.label} className="rounded-2xl border border-white/10 bg-[#050505] p-2 text-center">
+                      <div className="mx-auto w-8 rounded-t-lg border border-emerald-500/40 bg-gradient-to-b from-emerald-400/95 to-emerald-900/90" style={{ height: `${Math.max(20, Math.min(82, bar.iv))}px` }} />
                       <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{bar.label}</p>
                       <p className="mt-1 font-mono text-xs text-white">{bar.iv.toFixed(1)}%</p>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-4 rounded-xl border border-white/10 bg-[#050505] p-3">
+                <div className="mt-4 rounded-2xl border border-white/10 bg-[#050505] p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs uppercase tracking-[0.14em] text-white/60">IV vs RV (30D)</p>
                     <p className="text-xs text-white/75">
@@ -284,7 +493,7 @@ export function DossierPanel({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">Current context</p>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {[
@@ -295,7 +504,7 @@ export function DossierPanel({
                     ['Skew', dossier.vol_map.skew],
                     ['Term', dossier.vol_map.term_shape],
                   ].map(([label, value]) => (
-                    <div key={label} className="rounded-xl border border-white/10 bg-[#050505] px-3 py-2 text-sm">
+                    <div key={label} className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-2 text-sm">
                       <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
                       <p className="mt-1 font-medium text-white">{value}</p>
                     </div>
@@ -307,10 +516,14 @@ export function DossierPanel({
 
           {activeTab === 'Catalysts' ? (
             <div className="mt-5 space-y-4">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">Catalyst density strip</p>
                 <div className="mt-3 grid grid-cols-10 gap-1 lg:grid-cols-15">
-                  {buildDensityStrip(dossier.catalysts.map((event) => event.days_out).filter((days) => days >= 1 && days <= 30)).map((point) => (
+                  {buildDensityStrip(
+                    dossier.catalysts
+                      .map((event) => event.days_out)
+                      .filter((days) => days >= 1 && days <= 30),
+                  ).map((point) => (
                     <div key={point.day} className="rounded-md border border-white/10 bg-[#050505] p-1 text-center">
                       <div className={cn('mx-auto h-6 w-full rounded', densityTone(point.count))} />
                       <p className="mt-1 text-[10px] text-muted-foreground">{point.day}</p>
@@ -319,7 +532,7 @@ export function DossierPanel({
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">Catalyst stack</p>
                 <div className="mt-4 space-y-3">
                   {[...dossier.catalysts]
@@ -343,7 +556,7 @@ export function DossierPanel({
           {activeTab === 'Structure' ? (
             <div className="mt-5 space-y-4">
               {dossier.structures.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-muted-foreground">
+                <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 text-sm text-muted-foreground">
                   Structure recommendations are refreshing.
                 </div>
               ) : null}
@@ -351,7 +564,7 @@ export function DossierPanel({
               {dossier.structures.map((structure) => (
                 <div
                   key={`${structure.name}-${structure.fit_score}`}
-                  className="rounded-2xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/[0.08] to-white/[0.03] p-4"
+                  className="rounded-[24px] border border-emerald-500/20 bg-gradient-to-b from-emerald-500/[0.08] to-white/[0.03] p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -370,20 +583,20 @@ export function DossierPanel({
                       ['POP', structure.pop],
                       ['Style', structure.style],
                     ].map(([label, value]) => (
-                      <div key={`${structure.name}-${label}`} className="rounded-xl border border-white/10 bg-[#050505] px-3 py-2 text-sm">
+                      <div key={`${structure.name}-${label}`} className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-2 text-sm">
                         <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
                         <p className="mt-1 font-medium text-white">{value}</p>
                       </div>
                     ))}
                   </div>
 
-                  <details className="mt-4 rounded-xl border border-white/10 bg-[#050505] p-3">
+                  <details className="mt-4 rounded-2xl border border-white/10 bg-[#050505] p-3">
                     <summary className="cursor-pointer text-sm text-white/85">Expand: contract picks + scenario distribution</summary>
                     <div className="mt-3 space-y-3">
                       {structure.contracts?.length ? (
                         <div className="space-y-2">
                           {structure.contracts.map((leg) => (
-                            <div key={`${structure.name}-${leg.leg}-${leg.expiry}-${leg.strike}`} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-muted-foreground">
+                            <div key={`${structure.name}-${leg.leg}-${leg.expiry}-${leg.strike}`} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-muted-foreground">
                               <span className="font-medium text-white">{leg.leg}</span> · {leg.side} {leg.quantity} {leg.expiry} {leg.strike}{leg.optionType === 'call' ? 'C' : 'P'} · mark {leg.mark != null ? `$${leg.mark.toFixed(2)}` : '--'}
                             </div>
                           ))}
@@ -393,7 +606,7 @@ export function DossierPanel({
                       )}
 
                       {structure.payoff_diagram?.length ? (
-                        <div className="rounded-lg border border-white/10 p-3">
+                        <div className="rounded-xl border border-white/10 p-3">
                           <p className="text-xs uppercase tracking-[0.14em] text-white/60">Payoff diagram</p>
                           <div className="mt-2 h-40">
                             <ResponsiveContainer width="100%" height="100%">
@@ -424,7 +637,7 @@ export function DossierPanel({
                       {structure.scenario_distribution?.length ? (
                         <div className="grid gap-2 sm:grid-cols-5">
                           {structure.scenario_distribution.map((scenario) => (
-                            <div key={`${structure.name}-${scenario.label}`} className="rounded-lg border border-white/10 px-2 py-2 text-center">
+                            <div key={`${structure.name}-${scenario.label}`} className="rounded-xl border border-white/10 px-2 py-2 text-center">
                               <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">{scenario.label}</p>
                               <p className="mt-1 text-sm font-medium text-white">{scenario.probability.toFixed(0)}%</p>
                               <p className="text-xs text-muted-foreground">
@@ -443,26 +656,37 @@ export function DossierPanel({
 
           {activeTab === 'Risk' ? (
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">What kills the idea</p>
                 <ul className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
                   {dossier.risk.killers.map((killer) => (
-                    <li key={killer} className="rounded-xl border border-white/10 bg-[#050505] px-3 py-2">{killer}</li>
+                    <li key={killer} className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-2">{killer}</li>
                   ))}
                 </ul>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-sm font-medium text-white">Exit framework</p>
                 <p className="mt-2 text-sm leading-7 text-muted-foreground">{dossier.risk.exit_framework}</p>
 
                 {symbolMonitoring ? (
-                  <div className="mt-4 rounded-xl border border-white/10 bg-[#050505] p-3 text-sm">
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-[#050505] p-3 text-sm">
                     <p className="text-xs uppercase tracking-[0.14em] text-white/55">Risk Sentinel</p>
-                    <p className="mt-1 text-white">{symbolMonitoring.monitoring.status} · health {symbolMonitoring.monitoring.healthScore.toFixed(0)}</p>
+                    <p className={cn('mt-1 capitalize', monitoringTone(symbolMonitoring.monitoring.status))}>
+                      {symbolMonitoring.monitoring.status} · health {symbolMonitoring.monitoring.healthScore.toFixed(0)}
+                    </p>
                     <p className="mt-2 text-muted-foreground">{symbolMonitoring.monitoring.note}</p>
                   </div>
-                ) : null}
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onSaveThesis}
+                    className="mt-4 inline-flex items-center rounded-full border border-white/10 bg-[#050505] px-3 py-1.5 text-xs uppercase tracking-[0.14em] text-white/75 transition-colors hover:bg-white/[0.06]"
+                  >
+                    Save thesis to monitor
+                    <ChevronRight className="ml-1.5 h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           ) : null}

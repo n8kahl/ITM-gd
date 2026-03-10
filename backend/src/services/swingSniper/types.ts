@@ -374,6 +374,7 @@ export interface SwingSniperWatchlistUpdateInput {
   symbols?: string[];
   selectedSymbol?: string | null;
   filters?: Partial<SwingSniperWatchlistFilters>;
+  removeThesisSymbol?: string | null;
   thesis?: {
     symbol: string;
     score: number | null;

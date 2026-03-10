@@ -1014,6 +1014,9 @@ router.post(
         ...payload,
         symbols: payload.symbols ? sanitizeSymbols(payload.symbols, 50) : undefined,
         selectedSymbol: payload.selectedSymbol ? sanitizeSymbols([payload.selectedSymbol], 1)[0] || null : payload.selectedSymbol,
+        removeThesisSymbol: payload.removeThesisSymbol
+          ? sanitizeSymbols([payload.removeThesisSymbol], 1)[0] || null
+          : payload.removeThesisSymbol,
         thesis: payload.thesis
           ? {
             ...payload.thesis,
