@@ -8,6 +8,11 @@ type MarketKey = [url: string, token: string];
 
 const FORCE_DIRECT_MARKET_API = process.env.NEXT_PUBLIC_FORCE_DIRECT_MARKET_API === 'true';
 const DIRECT_MARKET_API_BASE = (process.env.NEXT_PUBLIC_AI_COACH_API_URL || '').replace(/\/+$/, '');
+const MARKET_FALLBACK_POLL_MS = 60_000;
+const MARKET_SWR_BASE_CONFIG = {
+    shouldRetryOnError: false,
+    revalidateOnFocus: false,
+} as const;
 
 function resolveMarketUrl(url: string): string {
     // Keep same-origin /api/market by default so mobile + desktop share auth and transport behavior.
@@ -17,6 +22,28 @@ function resolveMarketUrl(url: string): string {
     return url;
 }
 
+function parseJsonBody(rawBody: string): any | null {
+    if (!rawBody) return null;
+
+    try {
+        return JSON.parse(rawBody);
+    } catch {
+        return null;
+    }
+}
+
+function getErrorDetail(body: any): string {
+    if (body && typeof body.message === 'string') return body.message;
+    if (body && typeof body.error === 'string') return body.error;
+    return '';
+}
+
+function hasFallbackSource(value: unknown): boolean {
+    return typeof value === 'object'
+        && value !== null
+        && (value as { source?: unknown }).source === 'fallback';
+}
+
 const fetcher = async (key: MarketKey) => {
     const [url, token] = key;
     const targetUrl = resolveMarketUrl(url);
@@ -24,26 +51,26 @@ const fetcher = async (key: MarketKey) => {
         headers: {
             Authorization: `Bearer ${token}`,
         },
+        cache: 'no-store',
     });
+
     const fallbackHeader = res.headers.get('X-Market-Fallback');
-    if (fallbackHeader) {
-        const body = await res.json().catch(() => null);
-        const detail = typeof body?.message === 'string'
-            ? body.message
-            : (typeof body?.error === 'string' ? body.error : '');
-        throw new Error(`Market data unavailable (${fallbackHeader})${detail ? `: ${detail}` : ''}`);
-    }
+    const body = parseJsonBody(await res.text());
+
+    // Fallback payloads are intentionally returned by the proxy when upstream providers fail.
+    // Treat these as degraded data, not runtime errors.
+    if (fallbackHeader) return body;
+
     if (!res.ok) {
-        let detail = '';
-        try {
-            const body = await res.json();
-            if (body && typeof body.message === 'string') detail = body.message;
-        } catch {
-            // no-op
-        }
+        const detail = getErrorDetail(body);
         throw new Error(`Market request failed (${res.status})${detail ? `: ${detail}` : ''}`);
     }
-    return res.json();
+
+    if (body == null) {
+        throw new Error('Market request returned an invalid JSON payload');
+    }
+
+    return body;
 };
 
 export interface MarketIndex {
@@ -69,6 +96,7 @@ export interface MarketStatusResponse {
     nextOpen?: string;
     nextClose?: string;
     session: string;
+    source?: string;
 }
 
 export interface MarketMover {
@@ -81,6 +109,7 @@ export interface MarketMover {
 export interface MarketMoversResponse {
     gainers: MarketMover[];
     losers: MarketMover[];
+    source?: string;
 }
 
 export interface StockSplit {
@@ -95,7 +124,8 @@ export function useMarketIndices() {
     const token = session?.access_token;
 
     const { data, error, isLoading } = useSWR<MarketIndicesResponse>(token ? ['/api/market/indices', token] : null, fetcher, {
-        refreshInterval: 10000, // Poll every 10s
+        ...MARKET_SWR_BASE_CONFIG,
+        refreshInterval: (latestData) => hasFallbackSource(latestData) ? MARKET_FALLBACK_POLL_MS : 10_000,
     });
 
     return {
@@ -112,7 +142,8 @@ export function useMarketStatus() {
     const token = session?.access_token;
 
     const { data, error, isLoading } = useSWR<MarketStatusResponse>(token ? ['/api/market/status', token] : null, fetcher, {
-        refreshInterval: 60000, // Poll every minute
+        ...MARKET_SWR_BASE_CONFIG,
+        refreshInterval: (latestData) => hasFallbackSource(latestData) ? MARKET_FALLBACK_POLL_MS : 60_000,
     });
 
     return {
@@ -128,7 +159,8 @@ export function useMarketMovers(limit: number = 5) {
     const url = `/api/market/movers?limit=${limit}`;
 
     const { data, error, isLoading } = useSWR<MarketMoversResponse>(token ? [url, token] : null, fetcher, {
-        refreshInterval: 60000, // Poll every minute
+        ...MARKET_SWR_BASE_CONFIG,
+        refreshInterval: (latestData) => hasFallbackSource(latestData) ? MARKET_FALLBACK_POLL_MS : 60_000,
     });
 
     return {
@@ -144,7 +176,8 @@ export function useUpcomingSplits() {
     const token = session?.access_token;
 
     const { data, error, isLoading } = useSWR<StockSplit[]>(token ? ['/api/market/splits', token] : null, fetcher, {
-        refreshInterval: 3600000, // Poll every hour
+        ...MARKET_SWR_BASE_CONFIG,
+        refreshInterval: 3_600_000, // Poll every hour
     });
 
     return {
@@ -178,6 +211,7 @@ export interface MarketHealthSnapshot {
         ratio: number;
         label: string;
     };
+    source?: string;
 }
 
 export function useMarketAnalytics() {
@@ -185,7 +219,8 @@ export function useMarketAnalytics() {
     const token = session?.access_token;
 
     const { data, error, isLoading } = useSWR<MarketHealthSnapshot>(token ? ['/api/market/analytics', token] : null, fetcher, {
-        refreshInterval: 30000, // Poll every 30s
+        ...MARKET_SWR_BASE_CONFIG,
+        refreshInterval: (latestData) => hasFallbackSource(latestData) ? MARKET_FALLBACK_POLL_MS : 30_000,
     });
 
     const isValidAnalytics =
