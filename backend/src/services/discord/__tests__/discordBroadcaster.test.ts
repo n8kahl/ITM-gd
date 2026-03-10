@@ -40,6 +40,7 @@ function buildSignal(signalType: DiscordSignalType, overrides?: Partial<ParsedDi
       symbol: 'SPX',
       strike: 5400,
       optionType: 'call',
+      expiration: '03/01',
       price: 1.2,
       percent: null,
       level: null,
@@ -57,6 +58,8 @@ describe('services/discord/discordBroadcaster', () => {
     expect(mapDiscordSignalToEventKind('prep')).toBe('discord_prep');
     expect(mapDiscordSignalToEventKind('ptf')).toBe('discord_fill');
     expect(mapDiscordSignalToEventKind('filled_avg')).toBe('discord_fill');
+    expect(mapDiscordSignalToEventKind('add')).toBe('discord_fill');
+    expect(mapDiscordSignalToEventKind('update')).toBe('discord_update');
     expect(mapDiscordSignalToEventKind('trim')).toBe('discord_trim');
     expect(mapDiscordSignalToEventKind('stops')).toBe('discord_stop');
     expect(mapDiscordSignalToEventKind('breakeven')).toBe('discord_stop');
@@ -91,6 +94,7 @@ describe('services/discord/discordBroadcaster', () => {
           symbol: 'SPX',
           strike: 5400,
           optionType: 'call',
+          expiration: '03/01',
           price: 1.2,
           percent: null,
           level: null,

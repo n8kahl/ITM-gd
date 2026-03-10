@@ -1,7 +1,7 @@
 import { supabase } from '../../config/database';
 import { logger } from '../../lib/logger';
 import { toEasternTime } from '../marketHours';
-import type { DiscordSignalType, ParsedDiscordSignal } from './messageParser';
+import type { ParsedDiscordSignal } from './messageParser';
 
 interface DiscordTradeSessionUpsertRow {
   session_date: string;
@@ -9,6 +9,7 @@ interface DiscordTradeSessionUpsertRow {
   channel_name: string | null;
   guild_id: string;
   caller_name: string | null;
+  source: 'discord_bot' | 'admin_console';
 }
 
 interface DiscordTradeSessionSelectRow {
@@ -27,9 +28,12 @@ interface DiscordMessageUpsertRow {
   author_id: string;
   content: string;
   sent_at: string;
+  source: 'discord_bot' | 'admin_console';
   is_signal: boolean;
   signal_type: string | null;
   parsed_trade_id: string | null;
+  admin_alert_id: string | null;
+  webhook_status: 'sent' | 'failed' | 'resent';
 }
 
 interface DiscordParsedTradeInsertRow {
@@ -38,6 +42,7 @@ interface DiscordParsedTradeInsertRow {
   symbol: string;
   strike: number;
   contract_type: string;
+  expiry: string | null;
   direction: string | null;
   entry_price: number | null;
   entry_timestamp: string | null;
@@ -129,6 +134,13 @@ interface PersistDiscordMessageResult {
   parsedTradeId: string | null;
 }
 
+export interface PersistDiscordMessageOptions {
+  source?: 'discord_bot' | 'admin_console';
+  adminAlertId?: string | null;
+  webhookStatus?: 'sent' | 'failed' | 'resent';
+  targetTradeId?: string | null;
+}
+
 interface PersistedSessionContext {
   sessionId: string;
   sessionDate: string;
@@ -184,12 +196,6 @@ function isSignalForPersistence(signalType: ParsedDiscordSignal['signalType']): 
   return signalType !== 'commentary';
 }
 
-function isOpenLifecycleSignal(signalType: DiscordSignalType): boolean {
-  return signalType === 'prep' || signalType === 'ptf' || signalType === 'filled_avg'
-    || signalType === 'trim' || signalType === 'stops' || signalType === 'breakeven'
-    || signalType === 'trail';
-}
-
 function resolveDirection(signal: ParsedDiscordSignal): string | null {
   const content = signal.content.toLowerCase();
   if (/\bshort\b/.test(content)) return 'short';
@@ -239,14 +245,22 @@ export class DiscordPersistenceService {
     };
   }
 
-  async persistDiscordMessage(signal: ParsedDiscordSignal): Promise<PersistDiscordMessageResult> {
+  async persistDiscordMessage(
+    signal: ParsedDiscordSignal,
+    options?: PersistDiscordMessageOptions,
+  ): Promise<PersistDiscordMessageResult> {
+    const source = options?.source ?? 'discord_bot';
     const sessionDate = toSessionDateEt(signal.createdAt);
-    const session = await this.upsertDiscordTradeSession(signal, sessionDate);
+    const session = await this.upsertDiscordTradeSession(signal, sessionDate, source);
     const parsedTradeId = isSignalForPersistence(signal.signalType)
-      ? await this.persistParsedTradeLifecycle(signal, session.sessionId)
+      ? await this.persistParsedTradeLifecycle(signal, session.sessionId, options?.targetTradeId ?? null)
       : null;
 
-    await this.upsertDiscordMessageRow(signal, session.sessionId, parsedTradeId);
+    await this.upsertDiscordMessageRow(signal, session.sessionId, parsedTradeId, {
+      source,
+      adminAlertId: options?.adminAlertId ?? null,
+      webhookStatus: options?.webhookStatus ?? 'sent',
+    });
     await this.updateSessionRollups({
       sessionId: session.sessionId,
       persistedSessionStart: session.sessionStart,
@@ -289,41 +303,67 @@ export class DiscordPersistenceService {
     return initialized;
   }
 
-  private async persistParsedTradeLifecycle(signal: ParsedDiscordSignal, sessionId: string): Promise<string | null> {
+  private async persistParsedTradeLifecycle(
+    signal: ParsedDiscordSignal,
+    sessionId: string,
+    targetTradeId: string | null,
+  ): Promise<string | null> {
     const context = await this.getOrInitializeLifecycleContext(signal, sessionId);
 
     switch (signal.signalType) {
       case 'prep': {
-        if (context.currentTradeId && isOpenLifecycleSignal(signal.signalType)) {
-          if (context.state === 'ACTIVE' || context.state === 'STAGED') {
-            await this.closeTrade(context.currentTradeId, signal);
-          }
-        }
         const stagedTradeId = await this.createStagedTrade(signal, sessionId);
         context.state = 'STAGED';
         context.currentTradeId = stagedTradeId;
         return stagedTradeId;
       }
 
-      case 'ptf':
+      case 'ptf': {
+        let tradeId = await this.resolvePreferredOpenTradeId(
+          sessionId,
+          targetTradeId,
+          context.currentTradeId,
+        );
+        if (!tradeId) {
+          tradeId = await this.createStagedTrade(signal, sessionId);
+        }
+        if (!tradeId) return null;
+
+        await this.appendLifecycleEvent(tradeId, signal);
+        context.state = 'STAGED';
+        context.currentTradeId = tradeId;
+        return tradeId;
+      }
+
       case 'filled_avg': {
-        let tradeId = context.currentTradeId;
+        let tradeId = await this.resolvePreferredOpenTradeId(
+          sessionId,
+          targetTradeId,
+          context.currentTradeId,
+        );
         if (!tradeId) {
           tradeId = await this.createStagedTrade(signal, sessionId);
         }
         if (!tradeId) return null;
 
         await this.activateTrade(tradeId, signal);
+        await this.appendLifecycleEvent(tradeId, signal);
         context.state = 'ACTIVE';
         context.currentTradeId = tradeId;
         return tradeId;
       }
 
       case 'trim':
+      case 'update':
+      case 'add':
       case 'stops':
       case 'breakeven':
       case 'trail': {
-        const tradeId = context.currentTradeId ?? await this.resolveLatestOpenTradeId(sessionId);
+        const tradeId = await this.resolvePreferredOpenTradeId(
+          sessionId,
+          targetTradeId,
+          context.currentTradeId,
+        );
         if (!tradeId) return null;
 
         await this.appendLifecycleEvent(tradeId, signal);
@@ -335,12 +375,19 @@ export class DiscordPersistenceService {
       case 'exit_above':
       case 'exit_below':
       case 'fully_out': {
-        const tradeId = context.currentTradeId ?? await this.resolveLatestOpenTradeId(sessionId);
+        const tradeId = await this.resolvePreferredOpenTradeId(
+          sessionId,
+          targetTradeId,
+          context.currentTradeId,
+        );
         if (!tradeId) return null;
 
         await this.closeTrade(tradeId, signal);
-        context.state = 'CLOSED';
-        context.currentTradeId = null;
+        if (context.currentTradeId === tradeId) {
+          const nextOpenTradeId = await this.resolveLatestOpenTradeId(sessionId);
+          context.currentTradeId = nextOpenTradeId;
+          context.state = nextOpenTradeId ? 'ACTIVE' : 'CLOSED';
+        }
         return tradeId;
       }
 
@@ -366,6 +413,46 @@ export class DiscordPersistenceService {
     return data ?? null;
   }
 
+  private async findTradeById(sessionId: string, tradeId: string): Promise<DiscordParsedTradeSelectRow | null> {
+    const parsedTradesTable = this.deps.db.from('discord_parsed_trades') as DiscordParsedTradesTableClient;
+    const { data, error } = await parsedTradesTable
+      .select('id,trade_index,entry_timestamp,fully_exited,lifecycle_events')
+      .eq('session_id', sessionId)
+      .eq('id', tradeId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return data ?? null;
+  }
+
+  private async resolvePreferredOpenTradeId(
+    sessionId: string,
+    preferredTradeId: string | null,
+    fallbackTradeId: string | null,
+  ): Promise<string | null> {
+    const normalizedPreferred = toNullableString(preferredTradeId);
+    if (normalizedPreferred) {
+      const preferredRow = await this.findTradeById(sessionId, normalizedPreferred);
+      if (preferredRow && preferredRow.fully_exited !== true) {
+        return normalizedPreferred;
+      }
+    }
+
+    const normalizedFallback = toNullableString(fallbackTradeId);
+    if (normalizedFallback) {
+      const fallbackRow = await this.findTradeById(sessionId, normalizedFallback);
+      if (fallbackRow && fallbackRow.fully_exited !== true) {
+        return normalizedFallback;
+      }
+    }
+
+    return this.resolveLatestOpenTradeId(sessionId);
+  }
+
   private async resolveLatestOpenTradeId(sessionId: string): Promise<string | null> {
     const row = await this.findLatestOpenTrade(sessionId);
     return toNullableString(row?.id);
@@ -385,6 +472,7 @@ export class DiscordPersistenceService {
       symbol: resolveSymbol(signal),
       strike: resolveStrike(signal),
       contract_type: resolveContractType(signal),
+      expiry: toNullableString(signal.fields.expiration),
       direction: resolveDirection(signal),
       entry_price: null,
       entry_timestamp: null,
@@ -415,11 +503,13 @@ export class DiscordPersistenceService {
     const symbol = toNullableString(signal.fields.symbol);
     const strike = toFiniteNumber(signal.fields.strike);
     const optionType = signal.fields.optionType;
+    const expiration = toNullableString(signal.fields.expiration);
 
     if (direction) patch.direction = direction;
     if (price != null) patch.entry_price = price;
     if (symbol) patch.symbol = symbol.toUpperCase();
     if (strike != null) patch.strike = strike;
+    if (expiration) patch.expiry = expiration;
     if (optionType === 'call' || optionType === 'put') patch.contract_type = optionType;
 
     const { error } = await parsedTradesTable
@@ -484,6 +574,7 @@ export class DiscordPersistenceService {
   private async upsertDiscordTradeSession(
     signal: ParsedDiscordSignal,
     sessionDate: string,
+    source: 'discord_bot' | 'admin_console',
   ): Promise<PersistedSessionContext> {
     const sessionRow: DiscordTradeSessionUpsertRow = {
       session_date: sessionDate,
@@ -491,6 +582,7 @@ export class DiscordPersistenceService {
       channel_name: signal.channelId,
       guild_id: signal.guildId,
       caller_name: signal.authorId,
+      source,
     };
 
     const tradeSessionsTable = this.deps.db.from('discord_trade_sessions') as DiscordTradeSessionsTableClient;
@@ -615,6 +707,11 @@ export class DiscordPersistenceService {
     signal: ParsedDiscordSignal,
     sessionId: string,
     parsedTradeId: string | null,
+    options: {
+      source: 'discord_bot' | 'admin_console';
+      adminAlertId: string | null;
+      webhookStatus: 'sent' | 'failed' | 'resent';
+    },
   ): Promise<void> {
     const messageRow: DiscordMessageUpsertRow = {
       session_id: sessionId,
@@ -623,9 +720,12 @@ export class DiscordPersistenceService {
       author_id: signal.authorId,
       content: signal.content,
       sent_at: signal.createdAt,
+      source: options.source,
       is_signal: isSignalForPersistence(signal.signalType),
       signal_type: signal.signalType,
       parsed_trade_id: parsedTradeId,
+      admin_alert_id: options.adminAlertId,
+      webhook_status: options.webhookStatus,
     };
 
     const messagesTable = this.deps.db.from('discord_messages') as DiscordMessagesTableClient;

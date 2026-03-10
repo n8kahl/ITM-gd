@@ -11,6 +11,7 @@ type SessionRow = {
   channel_name: string | null;
   guild_id: string;
   caller_name: string | null;
+  source: 'discord_bot' | 'admin_console';
   session_start: string | null;
   session_end: string | null;
   trade_count: number;
@@ -24,9 +25,12 @@ type MessageRow = {
   author_id: string;
   content: string;
   sent_at: string;
+  source: 'discord_bot' | 'admin_console';
   is_signal: boolean;
   signal_type: string | null;
   parsed_trade_id: string | null;
+  admin_alert_id: string | null;
+  webhook_status: 'sent' | 'failed' | 'resent';
 };
 
 type TradeRow = {
@@ -36,6 +40,7 @@ type TradeRow = {
   symbol: string;
   strike: number;
   contract_type: string;
+  expiry: string | null;
   direction: string | null;
   entry_price: number | null;
   entry_timestamp: string | null;
@@ -63,6 +68,7 @@ function buildSignal(
       symbol: 'SPX',
       strike: 6000,
       optionType: 'call',
+      expiration: '03/01',
       price: 1.1,
       percent: null,
       level: null,
@@ -100,6 +106,7 @@ class InMemoryDiscordDb {
                   channel_name: input.channel_name ?? null,
                   guild_id: input.guild_id,
                   caller_name: input.caller_name ?? null,
+                  source: input.source ?? 'discord_bot',
                   session_start: input.session_start ?? null,
                   session_end: input.session_end ?? null,
                   trade_count: input.trade_count ?? 0,
@@ -110,6 +117,7 @@ class InMemoryDiscordDb {
                 row.channel_name = input.channel_name ?? row.channel_name;
                 row.guild_id = input.guild_id;
                 row.caller_name = input.caller_name ?? row.caller_name;
+                row.source = input.source ?? row.source;
               }
               return {
                 data: {
@@ -237,6 +245,7 @@ class InMemoryDiscordDb {
                 symbol: row.symbol,
                 strike: row.strike,
                 contract_type: row.contract_type,
+                expiry: row.expiry ?? null,
                 direction: row.direction ?? null,
                 entry_price: row.entry_price ?? null,
                 entry_timestamp: row.entry_timestamp ?? null,
@@ -352,6 +361,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6000,
         optionType: 'call',
+        expiration: '03/01',
         price: 1.23,
         percent: null,
         level: null,
@@ -365,6 +375,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6000,
         optionType: 'call',
+        expiration: '03/01',
         price: null,
         percent: 25,
         level: null,
@@ -379,8 +390,13 @@ describe('services/discord/discordPersistence', () => {
       fully_exited: false,
     }));
     expect(Array.isArray(db.trades[0].lifecycle_events)).toBe(true);
-    expect(db.trades[0].lifecycle_events).toHaveLength(1);
+    expect(db.trades[0].lifecycle_events).toHaveLength(2);
     expect(db.trades[0].lifecycle_events[0]).toEqual(expect.objectContaining({
+      type: 'filled_avg',
+      price: 1.23,
+      at: '2026-03-01T15:05:00.000Z',
+    }));
+    expect(db.trades[0].lifecycle_events[1]).toEqual(expect.objectContaining({
       type: 'trim',
       percent: 25,
       at: '2026-03-01T15:10:00.000Z',
@@ -395,7 +411,7 @@ describe('services/discord/discordPersistence', () => {
     }));
   });
 
-  it('implicitly closes ACTIVE trade on new PREP and starts next staged trade', async () => {
+  it('starts a new staged trade on PREP without auto-closing existing open trades', async () => {
     const db = new InMemoryDiscordDb();
     const service = new DiscordPersistenceService({
       db: db as any,
@@ -410,6 +426,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6000,
         optionType: 'call',
+        expiration: '03/01',
         price: 1.2,
         percent: null,
         level: null,
@@ -423,6 +440,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6010,
         optionType: 'call',
+        expiration: '03/01',
         price: 1.05,
         percent: null,
         level: null,
@@ -434,8 +452,8 @@ describe('services/discord/discordPersistence', () => {
     expect(db.trades[0]).toEqual(expect.objectContaining({
       id: 'trade-1',
       trade_index: 1,
-      fully_exited: true,
-      exit_timestamp: '2026-03-01T15:20:00.000Z',
+      fully_exited: false,
+      entry_timestamp: null,
     }));
     expect(db.trades[1]).toEqual(expect.objectContaining({
       id: 'trade-2',
@@ -469,6 +487,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6000,
         optionType: 'call',
+        expiration: '03/01',
         price: 1.21,
         percent: null,
         level: null,
@@ -482,6 +501,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6000,
         optionType: 'call',
+        expiration: '03/01',
         price: null,
         percent: 20,
         level: null,
@@ -495,6 +515,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6000,
         optionType: 'call',
+        expiration: '03/01',
         price: null,
         percent: 15,
         level: null,
@@ -509,6 +530,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6010,
         optionType: 'call',
+        expiration: '03/01',
         price: 1.05,
         percent: null,
         level: null,
@@ -522,6 +544,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6010,
         optionType: 'call',
+        expiration: '03/01',
         price: 1.1,
         percent: null,
         level: null,
@@ -535,6 +558,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6010,
         optionType: 'call',
+        expiration: '03/01',
         price: null,
         percent: -5.5,
         level: null,
@@ -564,6 +588,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6000,
         optionType: 'call',
+        expiration: '03/01',
         price: 1.2,
         percent: null,
         level: null,
@@ -577,6 +602,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6000,
         optionType: 'call',
+        expiration: '03/01',
         price: null,
         percent: null,
         level: null,
@@ -590,6 +616,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6010,
         optionType: 'call',
+        expiration: '03/01',
         price: 1.05,
         percent: null,
         level: null,
@@ -602,6 +629,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6010,
         optionType: 'call',
+        expiration: '03/01',
         price: 1.07,
         percent: null,
         level: null,
@@ -615,6 +643,7 @@ describe('services/discord/discordPersistence', () => {
         symbol: 'SPX',
         strike: 6010,
         optionType: 'call',
+        expiration: '03/01',
         price: null,
         percent: 8,
         level: null,
@@ -649,6 +678,27 @@ describe('services/discord/discordPersistence', () => {
       is_signal: false,
       signal_type: 'commentary',
       parsed_trade_id: null,
+    }));
+  });
+
+  it('persists admin-console metadata when provided', async () => {
+    const db = new InMemoryDiscordDb();
+    const service = new DiscordPersistenceService({
+      db: db as any,
+      logger: { warn: jest.fn() },
+    });
+
+    await service.persistDiscordMessage(buildSignal('prep'), {
+      source: 'admin_console',
+      adminAlertId: 'd626fcf7-5dd3-443d-b87d-b6df217f0e92',
+      webhookStatus: 'failed',
+    });
+
+    expect(db.sessions[0].source).toBe('admin_console');
+    expect(db.messages[0]).toEqual(expect.objectContaining({
+      source: 'admin_console',
+      admin_alert_id: 'd626fcf7-5dd3-443d-b87d-b6df217f0e92',
+      webhook_status: 'failed',
     }));
   });
 

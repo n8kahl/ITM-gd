@@ -28,7 +28,9 @@ describe('services/discord/messageParser', () => {
       { text: 'ptf @ 1.35', expected: 'ptf' },
       { text: 'pft @ 1.35', expected: 'ptf' },
       { text: 'filled avg 1.28', expected: 'filled_avg' },
+      { text: '+68% here @everyone', expected: 'update' },
       { text: 'trim 25%', expected: 'trim' },
+      { text: 'added to SPX, new AVG 1.35', expected: 'add' },
       { text: 'stops 0.95', expected: 'stops' },
       { text: 'move to b/e 1.10', expected: 'breakeven' },
       { text: 'trail 1.30', expected: 'trail' },
@@ -52,6 +54,10 @@ describe('services/discord/messageParser', () => {
 
     const trimSignal = parseDiscordMessage(buildPayload('trim 33%'));
     expect(trimSignal.fields.percent).toBe(33);
+
+    const updateSignal = parseDiscordMessage(buildPayload('+47% here @everyone'));
+    expect(updateSignal.signalType).toBe('update');
+    expect(updateSignal.fields.percent).toBe(47);
 
     const exitSignal = parseDiscordMessage(buildPayload('exit above 5421.5'));
     expect(exitSignal.fields.level).toBe(5421.5);
@@ -156,6 +162,11 @@ describe('services/discord/messageParser', () => {
     expect(mutated.previousState).toBe('ACTIVE');
     expect(mutated.nextState).toBe('ACTIVE');
     expect(mutated.transition).toBe('mutated');
+
+    const addMutation = machine.ingest(parseDiscordMessage(buildPayload('added to SPX new avg 1.32')));
+    expect(addMutation.previousState).toBe('ACTIVE');
+    expect(addMutation.nextState).toBe('ACTIVE');
+    expect(addMutation.transition).toBe('mutated');
 
     const closed = machine.ingest(parseDiscordMessage(buildPayload('fully out')));
     expect(closed.previousState).toBe('ACTIVE');

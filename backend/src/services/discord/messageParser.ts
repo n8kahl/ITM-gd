@@ -8,7 +8,9 @@ export type DiscordSignalType =
   | 'prep'
   | 'ptf'
   | 'filled_avg'
+  | 'update'
   | 'trim'
+  | 'add'
   | 'stops'
   | 'breakeven'
   | 'trail'
@@ -24,7 +26,9 @@ const DISCORD_SIGNAL_TYPES = [
   'prep',
   'ptf',
   'filled_avg',
+  'update',
   'trim',
+  'add',
   'stops',
   'breakeven',
   'trail',
@@ -41,7 +45,7 @@ const DISCORD_FALLBACK_MAX_TOKENS = 220;
 const DISCORD_LLM_FALLBACK_SYSTEM_PROMPT = [
   'You are a strict parser for single Discord SPX options trade messages.',
   'Map one message into a JSON object with shape:',
-  '{"signalType":"prep|ptf|filled_avg|trim|stops|breakeven|trail|exit_above|exit_below|fully_out|commentary","fields":{"symbol":string|null,"strike":number|string|null,"optionType":"call"|"put"|string|null,"price":number|string|null,"percent":number|string|null,"level":number|string|null}}',
+  '{"signalType":"prep|ptf|filled_avg|update|trim|add|stops|breakeven|trail|exit_above|exit_below|fully_out|commentary","fields":{"symbol":string|null,"strike":number|string|null,"optionType":"call"|"put"|string|null,"expiration":string|null,"price":number|string|null,"percent":number|string|null,"level":number|string|null}}',
   'Use commentary when intent is unclear.',
   'Return JSON only. No markdown.',
 ].join('\n');
@@ -50,6 +54,7 @@ export interface ParsedSignalFields {
   symbol: string | null;
   strike: number | null;
   optionType: DiscordOptionType | null;
+  expiration: string | null;
   price: number | null;
   percent: number | null;
   level: number | null;
@@ -98,12 +103,14 @@ const PATTERN_MAP: Array<{ type: DiscordSignalType; regex: RegExp }> = [
   { type: 'exit_above', regex: /\bexit\s+above\b/i },
   { type: 'exit_below', regex: /\bexit\s+below\b/i },
   { type: 'filled_avg', regex: /\bfilled\s+avg\b/i },
+  { type: 'add', regex: /\badd(?:ed)?\b/i },
   { type: 'ptf', regex: /\b(?:ptf|pft)\b/i },
   { type: 'prep', regex: /\bprep\b/i },
   { type: 'trim', regex: /\btrim\b/i },
   { type: 'stops', regex: /\bstops?\b/i },
   { type: 'breakeven', regex: /\b(?:b\/e|breakeven|b[\s-]?e)\b/i },
   { type: 'trail', regex: /\btrail(?:ing)?\b/i },
+  { type: 'update', regex: /(?:\bupdate\b|[+-]?\d+(?:\.\d+)?%\s+here)/i },
 ];
 
 const rawLlmFallbackSchema = z.object({
@@ -112,6 +119,7 @@ const rawLlmFallbackSchema = z.object({
     symbol: z.string().nullable().optional(),
     strike: z.union([z.number(), z.string(), z.null()]).optional(),
     optionType: z.union([z.string(), z.null()]).optional(),
+    expiration: z.union([z.string(), z.null()]).optional(),
     price: z.union([z.number(), z.string(), z.null()]).optional(),
     percent: z.union([z.number(), z.string(), z.null()]).optional(),
     level: z.union([z.number(), z.string(), z.null()]).optional(),
@@ -122,6 +130,10 @@ const SYMBOL_STOP_WORDS = new Set([
   'PREP',
   'PTF',
   'PFT',
+  'ADD',
+  'ADDED',
+  'UPDATE',
+  'HERE',
   'FILLED',
   'AVG',
   'TRIM',
@@ -168,8 +180,13 @@ function coerceSignalType(value: string): DiscordSignalType {
     case 'filled_avg':
     case 'filledavg':
       return 'filled_avg';
+    case 'update':
+      return 'update';
     case 'trim':
       return 'trim';
+    case 'add':
+    case 'added':
+      return 'add';
     case 'stop':
     case 'stops':
       return 'stops';
@@ -207,11 +224,21 @@ function coerceSymbol(value: unknown): string | null {
   return normalized;
 }
 
+function coerceExpiration(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+  if (/^\d{2}\/\d{2}$/.test(normalized)) return normalized;
+  return null;
+}
+
 function coerceFields(value: z.infer<typeof rawLlmFallbackSchema>['fields']): ParsedSignalFields {
   return {
     symbol: coerceSymbol(value.symbol),
     strike: toNumberFromUnknown(value.strike),
     optionType: coerceOptionType(value.optionType),
+    expiration: coerceExpiration(value.expiration),
     price: toNumberFromUnknown(value.price),
     percent: toNumberFromUnknown(value.percent),
     level: toNumberFromUnknown(value.level),
@@ -276,6 +303,14 @@ function extractPercent(content: string): number | null {
   return toNumber(match?.[1]);
 }
 
+function extractExpiration(content: string): string | null {
+  const slashMatch = content.match(/\b(\d{2}\/\d{2})\b/);
+  if (slashMatch?.[1]) return slashMatch[1];
+  const isoMatch = content.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  if (isoMatch?.[1]) return isoMatch[1];
+  return null;
+}
+
 function extractLevel(content: string, signalType: DiscordSignalType): number | null {
   if (signalType === 'exit_above') {
     const match = content.match(/\bexit\s+above\b[^0-9]*(\d+(?:\.\d+)?)/i);
@@ -329,6 +364,7 @@ export function parseDiscordMessage(payload: DiscordBotMessagePayload): ParsedDi
       symbol,
       strike: optionContract.strike,
       optionType: optionContract.optionType,
+      expiration: extractExpiration(content),
       price: extractPrice(content),
       percent: extractPercent(content),
       level: extractLevel(content, signalType),
@@ -471,6 +507,8 @@ export class DiscordTradeStateMachine {
         }
         break;
       case 'trim':
+      case 'update':
+      case 'add':
       case 'stops':
       case 'breakeven':
       case 'trail':

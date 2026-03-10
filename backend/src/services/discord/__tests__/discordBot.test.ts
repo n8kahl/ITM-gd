@@ -5,6 +5,10 @@ import { DiscordBotService } from '../discordBot';
 class MockDiscordClient extends EventEmitter {
   login = jest.fn(async (_token: string) => 'logged_in');
   destroy = jest.fn(() => undefined);
+  send = jest.fn(async (_payload: string | { content: string }) => undefined);
+  channels = {
+    fetch: jest.fn(async (_channelId: string) => ({ send: this.send })),
+  };
   user: { tag?: string | null } | null = { tag: 'test-bot#0001' };
 }
 
@@ -111,6 +115,37 @@ describe('services/discord/discordBot', () => {
       createdAt: '2026-03-01T15:00:00.000Z',
       editedAt: null,
     });
+
+    await service.stop();
+  });
+
+  it('uses runtime config when provided (db-configured mode)', async () => {
+    const client = new MockDiscordClient();
+    const service = new DiscordBotService({
+      env: {
+        DISCORD_BOT_ENABLED: 'false',
+        DISCORD_BOT_TOKEN: '',
+        DISCORD_BOT_GUILD_IDS: '',
+        DISCORD_BOT_CHANNEL_IDS: '',
+      },
+      createClient: () => client,
+      logger: { info: jest.fn(), warn: jest.fn() },
+    });
+
+    service.setRuntimeConfig({
+      enabled: true,
+      token: 'runtime-token',
+      guildIds: ['guild-1'],
+      channelIds: ['channel-1'],
+    });
+
+    await service.start();
+    expect(client.login).toHaveBeenCalledWith('runtime-token');
+
+    const sent = await service.sendMessage('channel-1', 'hello from runtime');
+    expect(sent).toBe(true);
+    expect(client.channels.fetch).toHaveBeenCalledWith('channel-1');
+    expect(client.send).toHaveBeenCalledWith({ content: 'hello from runtime' });
 
     await service.stop();
   });
