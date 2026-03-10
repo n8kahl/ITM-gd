@@ -11,6 +11,12 @@ export type SwingSniperExitBias = 'hold' | 'trim' | 'take_profit' | 'close' | 'r
 export interface SwingSniperOpportunity {
   symbol: string;
   score: number;
+  orc: {
+    volMispricing: number;
+    catalystDensity: number;
+    liquidity: number;
+    total: number;
+  };
   direction: SwingSniperDirection;
   setupLabel: string;
   thesis: string;
@@ -26,6 +32,8 @@ export interface SwingSniperOpportunity {
   catalystDate: string | null;
   catalystDaysUntil: number | null;
   catalystDensity: number;
+  liquidityScore: number | null;
+  liquidityTier: 'unknown' | 'thin' | 'adequate' | 'deep';
   narrativeMomentum: SwingSniperNarrativeMomentum;
   expressionPreview: string;
   reasons: string[];
@@ -36,8 +44,15 @@ export interface SwingSniperOpportunity {
 export interface SwingSniperUniverseResponse {
   generatedAt: string;
   universeSize: number;
+  scanLimit: number;
   symbolsScanned: number;
   opportunities: SwingSniperOpportunity[];
+  boardThemes: Array<{
+    key: string;
+    label: string;
+    count: number;
+    avgScore: number;
+  }>;
   notes: string[];
 }
 
@@ -75,14 +90,8 @@ export interface SwingSniperCatalystDensityPoint {
 }
 
 export type SwingSniperStructureStrategy =
-  | 'long_call'
-  | 'long_put'
   | 'call_debit_spread'
   | 'put_debit_spread'
-  | 'call_credit_spread'
-  | 'put_credit_spread'
-  | 'long_straddle'
-  | 'long_strangle'
   | 'call_calendar'
   | 'put_calendar'
   | 'call_diagonal'
@@ -215,6 +224,11 @@ export interface SwingSniperPortfolioExposureSummary {
 
 export interface SwingSniperMonitoringResponse {
   generatedAt: string;
+  cadence: {
+    mode: 'on_demand_cached';
+    refreshIntervalMinutes: number;
+    nextEvaluationAt: string;
+  };
   savedTheses: SwingSniperSavedThesisMonitoringSnapshot[];
   portfolio: SwingSniperPortfolioExposureSummary;
   positionAdvice: SwingSniperMonitoringPositionAdvice[];
@@ -227,6 +241,11 @@ export interface SwingSniperDossierResponse {
   companyName: string | null;
   currentPrice: number | null;
   score: number | null;
+  factors: {
+    volatility: number;
+    catalyst: number;
+    liquidity: number;
+  };
   direction: SwingSniperDirection;
   setupLabel: string;
   expressionPreview: string;
@@ -263,6 +282,7 @@ export interface SwingSniperDossierResponse {
     invalidation: string[];
     watchItems: string[];
     notes: string[];
+    exitFramework: string;
   };
   news: Array<{
     id: string;
@@ -296,12 +316,26 @@ export interface SwingSniperBriefResponse {
     signals: string[];
   };
   memo: string;
+  boardThemes: Array<{
+    key: string;
+    label: string;
+    count: number;
+    avgScore: number;
+  }>;
+  outlook: {
+    window: '7-14d';
+    bias: 'vol_expansion' | 'vol_compression' | 'balanced';
+    confidence: number;
+    summary: string;
+    catalysts: string[];
+    riskFlags: string[];
+  };
   actionQueue: string[];
   savedTheses: SwingSniperSavedThesisSnapshot[];
 }
 
 export interface SwingSniperWatchlistFilters {
-  preset: 'all' | 'long_vol' | 'short_vol' | 'catalyst_dense';
+  preset: 'all' | 'long_vol' | 'short_vol' | 'catalyst_dense' | 'seven_day';
   minScore: number;
 }
 
@@ -434,6 +468,10 @@ export interface SwingSniperVolBenchmark {
   rv10: number | null;
   rv20: number | null;
   rv30: number | null;
+  avgVolume20: number | null;
+  avgDollarVolume20: number | null;
+  liquidityScore: number | null;
+  liquidityTier: 'unknown' | 'thin' | 'adequate' | 'deep';
   overlayBase: Array<{
     date: string;
     label: string;

@@ -33,6 +33,11 @@ function standardDeviation(values: number[]): number {
   return Math.sqrt(variance);
 }
 
+function safeNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  return null;
+}
+
 function toLogReturns(closes: number[]): number[] {
   const returns: number[] = [];
   for (let index = 1; index < closes.length; index += 1) {
@@ -109,6 +114,37 @@ export async function getSwingSniperVolBenchmark(symbol: string): Promise<SwingS
   const rv20Series = deriveRealizedVolSeries(closes, 20);
   const rv30Series = deriveRealizedVolSeries(closes, 30);
 
+  const recentVolumeRows = bars.slice(-20)
+    .map((bar) => ({
+      close: safeNumber(bar.c),
+      volume: safeNumber((bar as unknown as { v?: number }).v),
+    }))
+    .filter((row): row is { close: number; volume: number } => row.close != null && row.volume != null && row.close > 0 && row.volume >= 0);
+
+  const avgVolume20 = recentVolumeRows.length > 0
+    ? round(average(recentVolumeRows.map((row) => row.volume)))
+    : null;
+  const avgDollarVolume20 = recentVolumeRows.length > 0
+    ? round(average(recentVolumeRows.map((row) => row.volume * row.close)))
+    : null;
+
+  const liquidityScore = avgDollarVolume20 == null
+    ? null
+    : round(clamp(
+      ((Math.log10(avgDollarVolume20 + 1) - 6) * 22 * 0.7)
+      + ((Math.log10((avgVolume20 ?? 0) + 1) - 4) * 25 * 0.3),
+      0,
+      100,
+    ), 1);
+
+  const liquidityTier: SwingSniperVolBenchmark['liquidityTier'] = liquidityScore == null
+    ? 'unknown'
+    : liquidityScore >= 72
+      ? 'deep'
+      : liquidityScore >= 45
+        ? 'adequate'
+        : 'thin';
+
   const overlayBase = dates.slice(-30).map((date, index, rows) => {
     const absoluteIndex = dates.length - rows.length + index;
     return {
@@ -122,6 +158,10 @@ export async function getSwingSniperVolBenchmark(symbol: string): Promise<SwingS
     rv10: latestValue(rv10Series),
     rv20: latestValue(rv20Series),
     rv30: latestValue(rv30Series),
+    avgVolume20,
+    avgDollarVolume20,
+    liquidityScore,
+    liquidityTier,
     overlayBase,
   };
 

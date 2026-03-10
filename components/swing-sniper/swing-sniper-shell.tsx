@@ -1,7 +1,7 @@
 'use client'
 
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react'
-import { Radar, RefreshCw, Sparkles } from 'lucide-react'
+import { Radar, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/members/page-header'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -9,17 +9,14 @@ import { DossierPanel } from '@/components/swing-sniper/dossier-panel'
 import { OpportunityBoard } from '@/components/swing-sniper/opportunity-board'
 import { SwingSniperMemoRail } from '@/components/swing-sniper/swing-sniper-memo-rail'
 import type {
-  SwingSniperBacktestPayload,
-  SwingSniperBriefPayload,
+  SwingSniperBoardPayload,
+  SwingSniperDirection,
   SwingSniperDossierPayload,
-  SwingSniperHealthPayload,
+  SwingSniperMemoPayload,
   SwingSniperMonitoringPayload,
-  SwingSniperUniversePayload,
   SwingSniperWatchlistPayload,
   SwingSniperWatchlistSavePayload,
 } from '@/lib/swing-sniper/types'
-
-type HealthState = 'checking' | 'ready' | 'error'
 
 type DossierTab = 'Thesis' | 'Vol Map' | 'Catalysts' | 'Structure' | 'Risk'
 
@@ -28,162 +25,94 @@ interface SaveWatchlistResponse {
   data: SwingSniperWatchlistPayload
 }
 
-async function parseJson<T>(response: Response): Promise<T> {
+async function loadJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    method: 'GET',
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    throw new Error('request_failed')
+  }
+
   return response.json() as Promise<T>
 }
 
-function shellTone(status: SwingSniperHealthPayload['status'] | 'checking' | 'error'): {
-  badge: string
-  title: string
-  body: string
-} {
-  if (status === 'ready') {
-    return {
-      badge: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200',
-      title: 'Research stack ready',
-      body: 'Massive core checks passed and Swing Sniper can render the ranked board, dossier, and memo rail.',
-    }
-  }
+function toDirection(view: SwingSniperDossierPayload['view']): SwingSniperDirection {
+  if (view === 'Long vol') return 'long_vol'
+  if (view === 'Short vol') return 'short_vol'
+  return 'neutral'
+}
 
-  if (status === 'degraded') {
-    return {
-      badge: 'border-amber-500/25 bg-amber-500/10 text-amber-100',
-      title: 'Research stack degraded',
-      body: 'The tab remains usable, but one or more upstream services are soft-failing and some enrichments may be thinner.',
-    }
-  }
-
-  if (status === 'checking') {
-    return {
-      badge: 'border-white/10 bg-white/5 text-white/70',
-      title: 'Running preflight',
-      body: 'Checking Massive connectivity, options reference access, and optional catalyst feeds.',
-    }
-  }
-
-  return {
-    badge: 'border-red-500/25 bg-red-500/10 text-red-100',
-    title: 'Research stack unavailable',
-    body: 'The shell loaded, but the health endpoint could not be reached.',
-  }
+function staleLabel(generatedAt: string | null): string | null {
+  if (!generatedAt) return null
+  const deltaMs = Date.now() - new Date(generatedAt).getTime()
+  if (!Number.isFinite(deltaMs) || deltaMs < 60_000) return null
+  const minutes = Math.floor(deltaMs / 60_000)
+  return `Updated ${minutes} min ago`
 }
 
 export function SwingSniperShell() {
-  const [healthState, setHealthState] = useState<HealthState>('checking')
-  const [health, setHealth] = useState<SwingSniperHealthPayload | null>(null)
-  const [healthError, setHealthError] = useState<string | null>(null)
-  const [universe, setUniverse] = useState<SwingSniperUniversePayload | null>(null)
-  const [universeError, setUniverseError] = useState<string | null>(null)
-  const [brief, setBrief] = useState<SwingSniperBriefPayload | null>(null)
-  const [briefError, setBriefError] = useState<string | null>(null)
-  const [briefLoading, setBriefLoading] = useState(true)
+  const [board, setBoard] = useState<SwingSniperBoardPayload | null>(null)
+  const [boardLoading, setBoardLoading] = useState(true)
+  const [boardFailureCount, setBoardFailureCount] = useState(0)
+
+  const [memo, setMemo] = useState<SwingSniperMemoPayload | null>(null)
+  const [memoLoading, setMemoLoading] = useState(true)
+
   const [monitoring, setMonitoring] = useState<SwingSniperMonitoringPayload | null>(null)
-  const [monitoringError, setMonitoringError] = useState<string | null>(null)
   const [monitoringLoading, setMonitoringLoading] = useState(true)
-  const [backtest, setBacktest] = useState<SwingSniperBacktestPayload | null>(null)
-  const [backtestError, setBacktestError] = useState<string | null>(null)
-  const [backtestLoading, setBacktestLoading] = useState(false)
+
   const [watchlist, setWatchlist] = useState<SwingSniperWatchlistPayload | null>(null)
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<DossierTab>('Thesis')
+
   const [dossier, setDossier] = useState<SwingSniperDossierPayload | null>(null)
   const [dossierLoading, setDossierLoading] = useState(false)
-  const [dossierError, setDossierError] = useState<string | null>(null)
+  const [dossierError, setDossierError] = useState(false)
+
   const [savePending, setSavePending] = useState(false)
   const [filters, setFilters] = useState<SwingSniperWatchlistPayload['filters']>({
     preset: 'all',
     minScore: 0,
   })
 
-  const loadHealth = useCallback(async () => {
-    setHealthState('checking')
-    setHealthError(null)
+  const loadBoard = useCallback(async (refresh: boolean = false) => {
+    if (!board) setBoardLoading(true)
 
     try {
-      const response = await fetch('/api/members/swing-sniper/health', {
-        method: 'GET',
-        cache: 'no-store',
-      })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null
-        throw new Error(payload?.message || `Health check failed (${response.status})`)
+      const query = refresh ? '?refresh=1' : ''
+      const payload = await loadJson<SwingSniperBoardPayload>(`/api/members/swing-sniper/board${query}`)
+      setBoard(payload)
+      setBoardFailureCount(0)
+    } catch {
+      if (!board) {
+        setBoardFailureCount((current) => current + 1)
       }
-
-      const payload = await parseJson<SwingSniperHealthPayload>(response)
-      setHealth(payload)
-      setHealthState('ready')
-    } catch (error) {
-      setHealth(null)
-      setHealthState('error')
-      setHealthError(error instanceof Error ? error.message : 'Unable to load Swing Sniper health.')
-    }
-  }, [])
-
-  const loadUniverse = useCallback(async () => {
-    setUniverseError(null)
-    try {
-      const response = await fetch('/api/members/swing-sniper/universe', {
-        method: 'GET',
-        cache: 'no-store',
-      })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null
-        throw new Error(payload?.message || `Universe load failed (${response.status})`)
-      }
-
-      const payload = await parseJson<SwingSniperUniversePayload>(response)
-      setUniverse(payload)
-    } catch (error) {
-      setUniverse(null)
-      setUniverseError(error instanceof Error ? error.message : 'Unable to load the opportunity board.')
-    }
-  }, [])
-
-  const loadBrief = useCallback(async () => {
-    setBriefLoading(true)
-    setBriefError(null)
-    try {
-      const response = await fetch('/api/members/swing-sniper/brief', {
-        method: 'GET',
-        cache: 'no-store',
-      })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null
-        throw new Error(payload?.message || `Brief load failed (${response.status})`)
-      }
-
-      const payload = await parseJson<SwingSniperBriefPayload>(response)
-      setBrief(payload)
-    } catch (error) {
-      setBrief(null)
-      setBriefError(error instanceof Error ? error.message : 'Unable to load the Swing Sniper memo.')
     } finally {
-      setBriefLoading(false)
+      setBoardLoading(false)
+    }
+  }, [board])
+
+  const loadMemo = useCallback(async () => {
+    setMemoLoading(true)
+    try {
+      const payload = await loadJson<SwingSniperMemoPayload>('/api/members/swing-sniper/memo')
+      setMemo(payload)
+    } catch {
+      setMemo(null)
+    } finally {
+      setMemoLoading(false)
     }
   }, [])
 
   const loadMonitoring = useCallback(async () => {
     setMonitoringLoading(true)
-    setMonitoringError(null)
     try {
-      const response = await fetch('/api/members/swing-sniper/monitoring', {
-        method: 'GET',
-        cache: 'no-store',
-      })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null
-        throw new Error(payload?.message || `Monitoring load failed (${response.status})`)
-      }
-
-      const payload = await parseJson<SwingSniperMonitoringPayload>(response)
+      const payload = await loadJson<SwingSniperMonitoringPayload>('/api/members/swing-sniper/monitoring')
       setMonitoring(payload)
-    } catch (error) {
+    } catch {
       setMonitoring(null)
-      setMonitoringError(error instanceof Error ? error.message : 'Unable to load Risk Sentinel monitoring.')
     } finally {
       setMonitoringLoading(false)
     }
@@ -191,17 +120,7 @@ export function SwingSniperShell() {
 
   const loadWatchlist = useCallback(async () => {
     try {
-      const response = await fetch('/api/members/swing-sniper/watchlist', {
-        method: 'GET',
-        cache: 'no-store',
-      })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null
-        throw new Error(payload?.message || `Watchlist load failed (${response.status})`)
-      }
-
-      const payload = await parseJson<SwingSniperWatchlistPayload>(response)
+      const payload = await loadJson<SwingSniperWatchlistPayload>('/api/members/swing-sniper/watchlist')
       setWatchlist(payload)
       setFilters(payload.filters)
       if (payload.selectedSymbol) {
@@ -214,7 +133,7 @@ export function SwingSniperShell() {
 
   const loadDossier = useCallback(async (symbol: string) => {
     setDossierLoading(true)
-    setDossierError(null)
+    setDossierError(false)
 
     try {
       const response = await fetch(`/api/members/swing-sniper/dossier/${encodeURIComponent(symbol)}`, {
@@ -223,77 +142,52 @@ export function SwingSniperShell() {
       })
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null
-        throw new Error(payload?.message || `Dossier load failed (${response.status})`)
+        throw new Error('dossier_failed')
       }
 
-      const payload = await parseJson<SwingSniperDossierPayload>(response)
+      const payload = await response.json() as SwingSniperDossierPayload
       setDossier(payload)
-    } catch (error) {
+    } catch {
       setDossier(null)
-      setDossierError(error instanceof Error ? error.message : 'Unable to load the selected dossier.')
+      setDossierError(true)
     } finally {
       setDossierLoading(false)
     }
   }, [])
 
-  const loadBacktest = useCallback(async (symbol: string) => {
-    setBacktestLoading(true)
-    setBacktestError(null)
-
-    try {
-      const response = await fetch(`/api/members/swing-sniper/backtest/${encodeURIComponent(symbol)}`, {
-        method: 'GET',
-        cache: 'no-store',
-      })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null
-        throw new Error(payload?.message || `Backtest load failed (${response.status})`)
-      }
-
-      const payload = await parseJson<SwingSniperBacktestPayload>(response)
-      setBacktest(payload)
-    } catch (error) {
-      setBacktest(null)
-      setBacktestError(error instanceof Error ? error.message : 'Unable to load adaptive confidence context.')
-    } finally {
-      setBacktestLoading(false)
-    }
-  }, [])
-
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async (refreshBoard: boolean = false) => {
     await Promise.all([
-      loadHealth(),
-      loadUniverse(),
-      loadBrief(),
+      loadBoard(refreshBoard),
+      loadMemo(),
       loadMonitoring(),
       loadWatchlist(),
     ])
-  }, [loadBrief, loadHealth, loadMonitoring, loadUniverse, loadWatchlist])
+  }, [loadBoard, loadMemo, loadMonitoring, loadWatchlist])
 
   useEffect(() => {
-    void refreshAll()
+    void refreshAll(false)
   }, [refreshAll])
 
   useEffect(() => {
-    if (!activeSymbol && universe?.opportunities.length) {
-      setActiveSymbol(watchlist?.selectedSymbol || universe.opportunities[0].symbol)
+    if (board || boardFailureCount === 0 || boardFailureCount >= 3) return
+    const timeout = window.setTimeout(() => {
+      void loadBoard(false)
+    }, 10_000)
+    return () => window.clearTimeout(timeout)
+  }, [board, boardFailureCount, loadBoard])
+
+  useEffect(() => {
+    if (!activeSymbol && board?.ideas.length) {
+      const preferred = watchlist?.selectedSymbol
+      const preferredAvailable = preferred != null && board.ideas.some((idea) => idea.symbol === preferred)
+      setActiveSymbol(preferredAvailable ? preferred : board.ideas[0].symbol)
     }
-  }, [activeSymbol, universe, watchlist])
+  }, [activeSymbol, board, watchlist])
 
   useEffect(() => {
     if (!activeSymbol) return
-    void Promise.all([
-      loadDossier(activeSymbol),
-      loadBacktest(activeSymbol),
-    ])
-  }, [activeSymbol, loadBacktest, loadDossier])
-
-  const preflightTone = useMemo(
-    () => shellTone(healthState === 'ready' ? health?.status ?? 'degraded' : healthState),
-    [health, healthState],
-  )
+    void loadDossier(activeSymbol)
+  }, [activeSymbol, loadDossier])
 
   const handleSelectSymbol = (symbol: string) => {
     setActiveTab('Thesis')
@@ -302,7 +196,7 @@ export function SwingSniperShell() {
     })
   }
 
-  const handleSaveThesis = async () => {
+  const handleSaveThesis = useCallback(async () => {
     if (!dossier) return
 
     setSavePending(true)
@@ -313,14 +207,14 @@ export function SwingSniperShell() {
       filters,
       thesis: {
         symbol: dossier.symbol,
-        score: dossier.score,
-        setupLabel: dossier.setupLabel,
-        direction: dossier.direction,
-        thesis: dossier.thesis,
-        ivRankAtSave: dossier.volMap.ivRank,
-        catalystLabel: dossier.catalysts.events[0]?.title || null,
-        catalystDate: dossier.catalysts.events[0]?.date || null,
-        monitorNote: dossier.risk.watchItems[0] || 'Waiting for refreshed volatility context.',
+        score: dossier.orc_score,
+        setupLabel: `${dossier.view} · ${dossier.catalyst_label}`,
+        direction: toDirection(dossier.view),
+        thesis: dossier.headline,
+        ivRankAtSave: dossier.vol_map.iv_rank,
+        catalystLabel: dossier.catalyst_label,
+        catalystDate: dossier.catalysts[0]?.date || null,
+        monitorNote: dossier.risk.exit_framework,
       },
     }
 
@@ -334,141 +228,97 @@ export function SwingSniperShell() {
       })
 
       if (!response.ok) {
-        const errorPayload = await response.json().catch(() => null) as { message?: string } | null
-        throw new Error(errorPayload?.message || `Save thesis failed (${response.status})`)
+        throw new Error('save_failed')
       }
 
-      const saved = await parseJson<SaveWatchlistResponse>(response)
+      const saved = await response.json() as SaveWatchlistResponse
       setWatchlist(saved.data)
-      setDossier((current) => (current ? { ...current, saved: true } : current))
-      setUniverse((current) => current ? {
-        ...current,
-        opportunities: current.opportunities.map((item) => (
-          item.symbol === dossier.symbol ? { ...item, saved: true } : item
-        )),
-      } : current)
-      void loadBrief()
-    } catch (error) {
-      setBriefError(error instanceof Error ? error.message : 'Unable to save the current thesis.')
+      await Promise.all([
+        loadMemo(),
+        loadMonitoring(),
+      ])
     } finally {
       setSavePending(false)
     }
+  }, [dossier, filters, loadMemo, loadMonitoring, watchlist])
+
+  const stale = useMemo(() => staleLabel(board?.generated_at ?? null), [board])
+
+  if (!board && (boardLoading || boardFailureCount < 3)) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="glass-card-heavy rounded-2xl border border-white/10 px-6 py-5 text-center">
+          <div className="mx-auto h-5 w-5 animate-spin rounded-full border-2 border-emerald-500/30 border-t-emerald-300" />
+          <p className="mt-3 text-sm text-white/85">Market data is refreshing. This usually takes a few seconds.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!board && boardFailureCount >= 3) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="glass-card-heavy rounded-2xl border border-white/10 px-6 py-5 text-center">
+          <p className="text-sm text-white/85">Market data is temporarily offline. Check back shortly.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div data-testid="swing-sniper-shell" className="space-y-6">
+    <div data-testid="swing-sniper-shell" className="space-y-5">
       <PageHeader
         title="Swing Sniper"
-        subtitle="Options research workspace for volatility mispricing, catalyst convergence, and exact structure planning."
+        subtitle=""
         icon={<Radar className="h-5 w-5 text-emerald-300" strokeWidth={1.5} />}
         actions={(
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void refreshAll()}
-            className="border-white/10 bg-white/5 text-white hover:bg-white/10"
-          >
-            <RefreshCw className={cn('mr-2 h-4 w-4', healthState === 'checking' && 'animate-spin')} />
-            Refresh research
-          </Button>
+          <div className="flex items-center gap-2">
+            {stale ? (
+              <span className="text-xs text-muted-foreground">{stale}</span>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void refreshAll(true)}
+              className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+            >
+              <RefreshCw className={cn('mr-2 h-4 w-4', boardLoading && 'animate-spin')} />
+              Refresh
+            </Button>
+          </div>
         )}
       />
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.9fr)]">
-        <div className="glass-card-heavy rounded-2xl border border-white/10 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-2">
-              <span className={cn('inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]', preflightTone.badge)}>
-                {preflightTone.title}
-              </span>
-              <h2 className="text-xl font-semibold text-white">Research engine live inside the member center</h2>
-              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                {preflightTone.body}
-              </p>
-            </div>
-
-            <div className="grid min-w-[220px] gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Route status</span>
-                <span className="font-medium text-white">Risk Sentinel + Backtest live</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Launch universe target</span>
-                <span className="font-medium text-white">{health?.launchUniverseTarget ?? 150} symbols</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Board scanned</span>
-                <span className="font-medium text-white">{universe?.symbolsScanned ?? 0}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="glass-card-heavy rounded-2xl border border-white/10 p-5">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-champagne" strokeWidth={1.5} />
-            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/80">What landed</h2>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            {[
-              ['Exact contract picks', 'Structure cards now include concrete strikes, expiries, and leg-level quote quality for top setups.'],
-              ['Risk Sentinel', 'Saved theses now carry health scoring, exit bias, and portfolio-fit context in the same workspace.'],
-              ['Adaptive confidence', 'Backtest replay now reweights thesis confidence from archived setup outcomes and sample quality.'],
-              ['IV vs RV overlay', 'Vol Map now makes the premium gap visual instead of forcing users to infer it from stats.'],
-              ['Catalyst density strip', 'Event clustering is rendered as a timeline so compressed windows stand out immediately.'],
-              ['Scenario distributions', 'Each recommendation includes deterministic payoff scenarios with probability-weighted distribution bands.'],
-            ].map(([label, detail]) => (
-              <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-sm font-medium text-white">{label}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)_320px]">
+      <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_320px]">
         <OpportunityBoard
-          opportunities={universe?.opportunities || []}
+          ideas={board?.ideas || []}
+          loading={boardLoading}
           activeSymbol={activeSymbol}
-          filters={filters}
+          preset={filters.preset}
           onFilterChange={(preset) => setFilters((current) => ({ ...current, preset }))}
           onSelect={handleSelectSymbol}
-          notes={universe?.notes}
-          symbolsScanned={universe?.symbolsScanned}
         />
 
         <DossierPanel
           dossier={dossier}
           monitoring={monitoring}
-          monitoringLoading={monitoringLoading}
-          monitoringError={monitoringError}
-          backtest={backtest}
-          backtestLoading={backtestLoading}
-          backtestError={backtestError}
           loading={dossierLoading}
-          error={dossierError || universeError}
+          error={dossierError}
           activeTab={activeTab}
           onTabChange={setActiveTab}
           onSaveThesis={() => void handleSaveThesis()}
+          onAddToWatchlist={() => void handleSaveThesis()}
           savePending={savePending}
         />
 
-        <SwingSniperMemoRail
-          brief={brief}
-          briefLoading={briefLoading}
-          briefError={briefError}
-          monitoring={monitoring}
-          monitoringLoading={monitoringLoading}
-          monitoringError={monitoringError}
-          backtest={backtest}
-          backtestLoading={backtestLoading}
-          backtestError={backtestError}
-          health={health}
-          healthState={healthState}
-          healthError={healthError}
-        />
+        <div className="lg:col-span-2 xl:col-span-1">
+          <SwingSniperMemoRail
+            memo={memo}
+            memoLoading={memoLoading}
+            monitoring={monitoring}
+          />
+        </div>
       </div>
     </div>
   )

@@ -88,6 +88,18 @@ describe('buildSwingSniperStructureLab', () => {
     expect(result.recommendations[0].contracts.length).toBeGreaterThan(0);
     expect(result.recommendations[0].payoffDistribution).toHaveLength(5);
     expect(result.notes[0]).toContain('Evaluated');
+    expect(
+      result.recommendations.every((recommendation) => (
+        recommendation.strategy === 'call_debit_spread'
+        || recommendation.strategy === 'put_debit_spread'
+        || recommendation.strategy === 'call_calendar'
+        || recommendation.strategy === 'put_calendar'
+        || recommendation.strategy === 'call_diagonal'
+        || recommendation.strategy === 'put_diagonal'
+        || recommendation.strategy === 'call_butterfly'
+        || recommendation.strategy === 'put_butterfly'
+      )),
+    ).toBe(true);
   });
 
   it('returns a graceful fallback when no expirations are available', async () => {

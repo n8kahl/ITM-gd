@@ -1,33 +1,4 @@
-export type SwingSniperDependencyStatus = 'ready' | 'degraded' | 'blocked' | 'optional'
-
-export interface SwingSniperHealthDependency {
-  key: string
-  label: string
-  status: SwingSniperDependencyStatus
-  message: string
-  optional?: boolean
-}
-
-export interface SwingSniperHealthPayload {
-  ok: boolean
-  status: 'ready' | 'degraded' | 'blocked'
-  generatedAt: string
-  launchUniverseTarget: number
-  dependencies: SwingSniperHealthDependency[]
-  capabilities: {
-    routeShell: boolean
-    opportunityBoard: boolean
-    dossier: boolean
-    structureLab: boolean
-    monitoring: boolean
-    backtesting: boolean
-  }
-  notes: string[]
-}
-
 export type SwingSniperDirection = 'long_vol' | 'short_vol' | 'neutral'
-
-export type SwingSniperNarrativeMomentum = 'positive' | 'negative' | 'mixed' | 'quiet'
 
 export type SwingSniperEdgeState = 'improving' | 'stable' | 'narrowing' | 'invalidated'
 
@@ -35,222 +6,128 @@ export type SwingSniperMonitoringStatus = 'forming' | 'active' | 'degrading' | '
 
 export type SwingSniperExitBias = 'hold' | 'trim' | 'take_profit' | 'close' | 'roll'
 
-export interface SwingSniperOpportunity {
+export interface SwingSniperBoardIdea {
   symbol: string
-  score: number
-  direction: SwingSniperDirection
-  setupLabel: string
-  thesis: string
-  currentPrice: number | null
-  currentIV: number | null
-  realizedVol20: number | null
-  ivRank: number | null
-  ivPercentile: number | null
-  ivVsRvGap: number | null
-  skewDirection: 'put_heavy' | 'call_heavy' | 'balanced' | 'unknown'
-  termStructureShape: 'contango' | 'backwardation' | 'flat'
-  catalystLabel: string
-  catalystDate: string | null
-  catalystDaysUntil: number | null
-  catalystDensity: number
-  narrativeMomentum: SwingSniperNarrativeMomentum
-  expressionPreview: string
-  reasons: string[]
-  saved: boolean
-  asOf: string
-}
-
-export interface SwingSniperUniversePayload {
-  generatedAt: string
-  universeSize: number
-  symbolsScanned: number
-  opportunities: SwingSniperOpportunity[]
-  notes: string[]
-}
-
-export interface SwingSniperVolOverlayPoint {
-  date: string
-  label: string
-  iv: number | null
-  rv: number | null
-}
-
-export interface SwingSniperCatalystDensityPoint {
-  date: string
-  label: string
-  count: number
-  emphasis: 'high' | 'medium' | 'low'
-}
-
-export interface SwingSniperCatalystEvent {
-  id: string
-  type: 'earnings' | 'macro' | 'news'
-  title: string
-  date: string
-  daysUntil: number
-  impact: 'high' | 'medium' | 'low'
-  summary: string
-  timing?: string | null
-  expectedMovePct?: number | null
-  url?: string | null
-}
-
-export type SwingSniperStructureStrategy =
-  | 'long_call'
-  | 'long_put'
-  | 'call_debit_spread'
-  | 'put_debit_spread'
-  | 'call_credit_spread'
-  | 'put_credit_spread'
-  | 'long_straddle'
-  | 'long_strangle'
-  | 'call_calendar'
-  | 'put_calendar'
-  | 'call_diagonal'
-  | 'put_diagonal'
-  | 'call_butterfly'
-  | 'put_butterfly'
-
-export interface SwingSniperStructureLeg {
-  leg: string
-  side: 'buy' | 'sell'
-  optionType: 'call' | 'put'
-  expiry: string
-  strike: number
-  quantity: number
-  mark: number | null
-  bid: number | null
-  ask: number | null
-  spreadPct: number | null
-  delta: number | null
-  openInterest: number | null
-  volume: number | null
-}
-
-export interface SwingSniperStructureRecommendation {
-  id: string
-  strategy: SwingSniperStructureStrategy
-  strategyLabel: string
-  thesisFit: number
-  debitOrCredit: 'debit' | 'credit'
-  netPremium: number | null
-  maxLoss: number | null
-  maxProfit: number | null
-  breakevenLow: number | null
-  breakevenHigh: number | null
-  probabilityOfProfit: number | null
-  entryWindow: string
-  invalidation: string
-  contractSummary: string
-  spreadQuality: 'tight' | 'fair' | 'wide'
-  liquidityScore: number | null
-  contracts: SwingSniperStructureLeg[]
-  whyThisStructure: string[]
-  risks: string[]
-  scenarioSummary: {
-    bearCase: string
-    baseCase: string
-    bullCase: string
+  orc_score: number
+  view: 'Long vol' | 'Short vol' | 'Neutral'
+  catalyst_label: string
+  window_days: number | null
+  blurb: string
+  factors: {
+    volatility: number
+    catalyst: number
+    liquidity: number
   }
-  payoffDiagram: Array<{
-    price: number
-    pnl: number
-    returnPct: number | null
+}
+
+export interface SwingSniperBoardPayload {
+  generated_at: string
+  regime?: {
+    label: string
+    market_posture: string
+    bias: string
+  }
+  ideas: SwingSniperBoardIdea[]
+}
+
+export interface SwingSniperMemoPayload {
+  generated_at: string
+  regime?: {
+    label: string
+    market_posture: string
+  }
+  desk_note: string
+  themes: string[]
+  saved_theses: Array<{
+    symbol: string
+    label: string
+    saved_at: string
   }>
-  payoffDistribution: Array<{
+  action_queue?: string[]
+}
+
+export interface SwingSniperDossierStructureContract {
+  name: string
+  fit_score: number
+  rationale: string
+  entry_type: string
+  max_loss: string
+  pop: string
+  style: string
+  contracts: Array<{
+    leg: string
+    side: 'buy' | 'sell'
+    optionType: 'call' | 'put'
+    expiry: string
+    strike: number
+    quantity: number
+    mark: number | null
+    bid: number | null
+    ask: number | null
+    spreadPct: number | null
+    delta: number | null
+    openInterest: number | null
+    volume: number | null
+  }> | null
+  scenario_distribution: Array<{
     label: string
     probability: number
     expectedPnl: number
     expectedReturnPct: number | null
-  }>
+  }> | null
+  payoff_diagram: Array<{
+    price: number
+    pnl: number
+    returnPct: number | null
+  }> | null
 }
 
 export interface SwingSniperDossierPayload {
   symbol: string
-  companyName: string | null
-  currentPrice: number | null
-  score: number | null
-  direction: SwingSniperDirection
-  setupLabel: string
-  expressionPreview: string
-  thesis: string
-  summary: string
-  saved: boolean
-  asOf: string
-  reasoning: string[]
-  keyStats: Array<{
-    label: string
-    value: string
-    tone?: 'positive' | 'negative' | 'neutral'
-  }>
-  volMap: {
-    overlayMode: 'current_iv_benchmark'
-    overlayPoints: SwingSniperVolOverlayPoint[]
-    currentIV: number | null
-    realizedVol10: number | null
-    realizedVol20: number | null
-    realizedVol30: number | null
-    ivRank: number | null
-    ivPercentile: number | null
-    skewDirection: 'put_heavy' | 'call_heavy' | 'balanced' | 'unknown'
-    termStructureShape: 'contango' | 'backwardation' | 'flat'
-    termStructure: Array<{
-      date: string
-      dte: number
-      atmIV: number
+  orc_score: number
+  view: 'Long vol' | 'Short vol' | 'Neutral'
+  catalyst_label: string
+  headline: string
+  thesis: {
+    summary: string
+    risks: string[]
+    narrative_shifts: string[]
+    factors: {
+      volatility: number
+      catalyst: number
+      liquidity: number
+    }
+  }
+  vol_map: {
+    surface_read: string
+    iv_rank: number | null
+    iv_percentile: number | null
+    rv_20d: number | null
+    iv_now: number | null
+    skew: string
+    term_shape: string
+    term_structure: Array<{
+      label: string
+      iv: number
     }>
-    note: string
+    iv_rv_history: Array<{
+      date: string
+      iv: number | null
+      rv: number | null
+    }>
   }
-  catalysts: {
-    densityStrip: SwingSniperCatalystDensityPoint[]
-    events: SwingSniperCatalystEvent[]
-    narrative: string
-  }
-  risk: {
-    invalidation: string[]
-    watchItems: string[]
-    notes: string[]
-  }
-  news: Array<{
-    id: string
-    title: string
-    publishedAt: string
-    publisher: string
-    summary: string | null
-    url: string
-  }>
-  structureLab?: {
-    generatedAt: string
-    symbol: string
-    direction: SwingSniperDirection
-    recommendations: SwingSniperStructureRecommendation[]
-    notes: string[]
-  }
-}
-
-export interface SwingSniperSavedThesisSnapshot {
-  symbol: string
-  savedAt: string
-  score: number | null
-  setupLabel: string
-  direction: SwingSniperDirection
-  thesis: string
-  ivRankAtSave: number | null
-  ivRankNow: number | null
-  edgeState: SwingSniperEdgeState
-  monitorNote: string
-}
-
-export interface SwingSniperBriefPayload {
-  generatedAt: string
-  regime: {
+  catalysts: Array<{
+    days_out: number
+    date: string
     label: string
-    description: string
-    signals: string[]
+    context: string
+    severity: 'high' | 'medium' | 'low'
+  }>
+  structures: SwingSniperDossierStructureContract[]
+  risk: {
+    killers: string[]
+    exit_framework: string
   }
-  memo: string
-  actionQueue: string[]
-  savedTheses: SwingSniperSavedThesisSnapshot[]
 }
 
 export interface SwingSniperMonitoringSnapshot {
@@ -261,13 +138,28 @@ export interface SwingSniperMonitoringSnapshot {
   note: string
 }
 
-export interface SwingSniperSavedThesisMonitoringSnapshot extends SwingSniperSavedThesisSnapshot {
+export interface SwingSniperSavedThesisMonitoringSnapshot {
+  symbol: string
+  savedAt: string
+  score: number | null
+  setupLabel: string
+  direction: SwingSniperDirection
+  thesis: string
+  ivRankAtSave: number | null
+  ivRankNow: number | null
+  edgeState: SwingSniperEdgeState
+  monitorNote: string
   monitoring: SwingSniperMonitoringSnapshot
   currentPrice: number | null
 }
 
 export interface SwingSniperMonitoringPayload {
   generatedAt: string
+  cadence?: {
+    mode: 'on_demand_cached'
+    refreshIntervalMinutes: number
+    nextEvaluationAt: string
+  }
   savedTheses: SwingSniperSavedThesisMonitoringSnapshot[]
   portfolio: {
     openPositions: number
@@ -311,6 +203,44 @@ export interface SwingSniperMonitoringPayload {
   notes: string[]
 }
 
+export interface SwingSniperWatchlistPayload {
+  symbols: string[]
+  selectedSymbol: string | null
+  filters: {
+    preset: 'all' | 'long_vol' | 'short_vol' | 'catalyst_dense' | 'seven_day'
+    minScore: number
+  }
+  savedTheses: Array<{
+    symbol: string
+    savedAt: string
+    score: number | null
+    setupLabel: string
+    direction: SwingSniperDirection
+    thesis: string
+    ivRankAtSave: number | null
+    catalystLabel: string | null
+    catalystDate: string | null
+    monitorNote: string
+  }>
+}
+
+export interface SwingSniperWatchlistSavePayload {
+  selectedSymbol?: string | null
+  symbols?: string[]
+  filters?: Partial<SwingSniperWatchlistPayload['filters']>
+  thesis?: {
+    symbol: string
+    score: number | null
+    setupLabel: string
+    direction: SwingSniperDirection
+    thesis: string
+    ivRankAtSave: number | null
+    catalystLabel?: string | null
+    catalystDate?: string | null
+    monitorNote?: string | null
+  }
+}
+
 export interface SwingSniperBacktestOutcome {
   snapshotDate: string
   direction: SwingSniperDirection
@@ -351,42 +281,4 @@ export interface SwingSniperBacktestPayload {
   outcomes: SwingSniperBacktestOutcome[]
   caveats: string[]
   notes: string[]
-}
-
-export interface SwingSniperWatchlistPayload {
-  symbols: string[]
-  selectedSymbol: string | null
-  filters: {
-    preset: 'all' | 'long_vol' | 'short_vol' | 'catalyst_dense'
-    minScore: number
-  }
-  savedTheses: Array<{
-    symbol: string
-    savedAt: string
-    score: number | null
-    setupLabel: string
-    direction: SwingSniperDirection
-    thesis: string
-    ivRankAtSave: number | null
-    catalystLabel: string | null
-    catalystDate: string | null
-    monitorNote: string
-  }>
-}
-
-export interface SwingSniperWatchlistSavePayload {
-  selectedSymbol?: string | null
-  symbols?: string[]
-  filters?: Partial<SwingSniperWatchlistPayload['filters']>
-  thesis?: {
-    symbol: string
-    score: number | null
-    setupLabel: string
-    direction: SwingSniperDirection
-    thesis: string
-    ivRankAtSave: number | null
-    catalystLabel?: string | null
-    catalystDate?: string | null
-    monitorNote?: string | null
-  }
 }
