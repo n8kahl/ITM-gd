@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trade ITM - Floating CTA Bar</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      min-height: 100vh;
+      background: #0A0A0B;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Demo content background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(10, 10, 11, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+      z-index: -1;
+    }
+
+    /* Demo scroll content */
+    .demo-content {
+      padding: 60px 20px;
+      text-align: center;
+      color: #9CA3AF;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .demo-content h2 {
+      color: #10B981;
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+
+    .demo-content p {
+      margin-bottom: 12px;
+    }
+
+    /* Floating CTA Bar */
+    .floating-cta {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+      width: 100%;
+      max-width: 360px;
+      padding: 0 20px;
+      animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(120px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+
+    .cta-bar {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 20px 50px rgba(16, 185, 129, 0.15),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      border-left: 4px solid #10B981;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .cta-bar:hover {
+      border-color: rgba(16, 185, 129, 0.3);
+      background: rgba(15, 23, 42, 0.75);
+      box-shadow: 0 28px 60px rgba(16, 185, 129, 0.2),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    /* Background pattern */
+    .cta-bar::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80"><defs><pattern id="diagonal" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M-5,5 l10,-10 M0,20 l20,-20 M15,5 l10,-10" stroke="%23ffffff" stroke-width="0.5" opacity="0.03"/></pattern></defs><rect width="360" height="80" fill="url(%23diagonal)"/></svg>');
+      opacity: 0.4;
+    }
+
+    .cta-content {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .cta-emoji {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .cta-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      text-align: left;
+      min-width: 0;
+    }
+
+    .cta-main {
+      font-size: 13px;
+      font-weight: 600;
+      color: #FFFFFF;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+
+    .cta-stat {
+      font-size: 11px;
+      color: #F3E5AB;
+      font-weight: 500;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+    }
+
+    /* CTA Button */
+    .cta-button {
+      background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+      color: #0A0A0B;
+      border: none;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      border-radius: 6px;
+      letter-spacing: 0.3px;
+      transition: all 0.3s ease;
+      box-shadow: 0 6px 18px rgba(16, 185, 129, 0.3);
+      text-decoration: none;
+      display: inline-block;
+      white-space: nowrap;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 2;
+    }
+
+    .cta-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    }
+
+    .cta-button:active {
+      transform: translateY(0);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    /* Close button */
+    .close-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: none;
+      border: none;
+      color: #9CA3AF;
+      cursor: pointer;
+      font-size: 18px;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s ease;
+      z-index: 3;
+      opacity: 0;
+    }
+
+    .cta-bar:hover .close-btn {
+      opacity: 1;
+    }
+
+    .close-btn:hover {
+      color: #FFFFFF;
+    }
+
+    /* Mobile responsiveness */
+    @media (max-width: 640px) {
+      .floating-cta {
+        max-width: calc(100% - 40px);
+        bottom: 16px;
+        left: 20px;
+        right: 20px;
+        transform: translateX(0);
+      }
+
+      .cta-bar {
+        flex-wrap: wrap;
+        padding: 12px 14px;
+        gap: 12px;
+      }
+
+      .cta-content {
+        width: 100%;
+        margin-bottom: 4px;
+      }
+
+      .cta-main,
+      .cta-stat {
+        font-size: 12px;
+      }
+
+      .cta-button {
+        width: 100%;
+        text-align: center;
+        padding: 10px 16px;
+      }
+    }
+
+    /* Glow effect */
+    .cta-bar::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 100% 50%, rgba(16, 185, 129, 0.1), transparent 60%);
+      pointer-events: none;
+      border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-content">
+    <h2>Demo: Floating CTA Preview</h2>
+    <p>Scroll down to see the floating CTA bar at the bottom of the viewport.</p>
+    <p>This floating notification appears on the page to promote the 7-day trial offer.</p>
+    <br>
+    <p style="color: #10B981; font-weight: 500;">The floating bar will appear fixed at the bottom of your screen →</p>
+  </div>
+
+  <div class="floating-cta">
+    <div class="cta-bar">
+      <div class="cta-content">
+        <div class="cta-emoji">🎯</div>
+        <div class="cta-text">
+          <div class="cta-main">7-Day Trial — $49.99</div>
+          <div class="cta-stat">81% Win Rate in Feb</div>
+        </div>
+      </div>
+      <a href="https://whop.com/checkout/plan_NeOYhHAwtWczQ" class="cta-button">Try Now →</a>
+      <button class="close-btn" onclick="document.querySelector('.floating-cta').style.display='none'">×</button>
+    </div>
+  </div>
+</body>
+</html>
