@@ -507,8 +507,8 @@ export function SwingSniperShell() {
   }
 
   return (
-    <div data-testid="swing-sniper-shell" className="space-y-5">
-      <section className="glass-card-heavy rounded-[28px] border border-white/10 p-5">
+    <div data-testid="swing-sniper-shell" className="space-y-4">
+      <section className="glass-card-heavy rounded-[28px] border border-white/10 p-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-3">
@@ -577,22 +577,24 @@ export function SwingSniperShell() {
         </div>
       </section>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[312px_minmax(0,1fr)] xl:grid-cols-[312px_minmax(0,1fr)_304px]">
-        <OpportunityBoard
-          ideas={board?.ideas || []}
-          loading={boardLoading}
-          activeSymbol={activeSymbol}
-          filters={filters}
-          savedSymbols={savedSymbols}
-          savingSymbol={thesisPendingSymbol}
-          onPresetChange={(preset) => setFilters((current) => ({ ...current, preset }))}
-          onOpenMandate={() => setMandateOpen(true)}
-          onQuickSave={(idea) => {
-            if (savedSymbols.includes(idea.symbol)) return
-            void handleSaveThesis(buildBoardThesisPayload(idea))
-          }}
-          onSelect={handleSelectSymbol}
-        />
+      <div className="grid items-start gap-4 lg:grid-cols-[336px_minmax(0,1fr)] xl:grid-cols-[336px_minmax(0,1fr)_304px]">
+        <div className="xl:sticky xl:top-24 xl:self-start">
+          <OpportunityBoard
+            ideas={board?.ideas || []}
+            loading={boardLoading}
+            activeSymbol={activeSymbol}
+            filters={filters}
+            savedSymbols={savedSymbols}
+            savingSymbol={thesisPendingSymbol}
+            onPresetChange={(preset) => setFilters((current) => ({ ...current, preset }))}
+            onOpenMandate={() => setMandateOpen(true)}
+            onQuickSave={(idea) => {
+              if (savedSymbols.includes(idea.symbol)) return
+              void handleSaveThesis(buildBoardThesisPayload(idea))
+            }}
+            onSelect={handleSelectSymbol}
+          />
+        </div>
 
         <DossierPanel
           dossier={dossier}

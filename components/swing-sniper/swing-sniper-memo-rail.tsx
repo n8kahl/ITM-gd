@@ -33,6 +33,26 @@ function statusTone(status: string): string {
   return 'text-white/70'
 }
 
+function statusDotTone(status: string): string {
+  if (status === 'active') return 'bg-emerald-400'
+  if (status === 'degrading') return 'bg-champagne'
+  if (status === 'invalidated') return 'bg-red-400'
+  return 'bg-white/45'
+}
+
+function healthBarTone(score: number | null): string {
+  if (score == null) return 'bg-white/30'
+  if (score >= 75) return 'bg-emerald-400'
+  if (score >= 45) return 'bg-champagne'
+  return 'bg-red-400'
+}
+
+function severityTone(severity: 'low' | 'medium' | 'high'): string {
+  if (severity === 'high') return 'border-red-500/35 bg-red-500/12 text-red-100'
+  if (severity === 'medium') return 'border-champagne/35 bg-champagne/10 text-champagne'
+  return 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100'
+}
+
 export function SwingSniperMemoRail({
   memo,
   memoLoading,
@@ -45,6 +65,8 @@ export function SwingSniperMemoRail({
   const nextActions = memo?.action_queue?.length
     ? memo.action_queue
     : monitoring?.alerts.slice(0, 3).map((alert) => alert.suggestedAction || alert.title) || []
+  const highSeverityCount = monitoring?.alerts.filter((alert) => alert.severity === 'high').length ?? 0
+  const degradingCount = monitoring?.savedTheses.filter((item) => item.monitoring.status === 'degrading' || item.monitoring.status === 'invalidated').length ?? 0
 
   return (
     <aside className="glass-card-heavy rounded-[28px] border border-white/10 p-5 xl:sticky xl:top-24 xl:self-start">
@@ -53,7 +75,7 @@ export function SwingSniperMemoRail({
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-champagne">Strategic Rail</p>
       </div>
 
-      <div className="mt-4 space-y-4">
+      <div className="mt-4 space-y-3.5">
         {memoLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-24 w-full rounded-[24px]" />
@@ -71,6 +93,26 @@ export function SwingSniperMemoRail({
             ) : null}
             <p className="mt-4 text-sm font-semibold uppercase tracking-[0.18em] text-white/75">Regime snapshot</p>
             <p className="mt-2 text-sm leading-7 text-white/85">{memo.desk_note}</p>
+          </div>
+        ) : null}
+
+        {!memoLoading ? (
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-sm font-medium text-white">Risk pulse</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-2.5">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">High alerts</p>
+                <p className={cn('mt-1 font-mono text-sm', highSeverityCount > 0 ? 'text-red-100' : 'text-emerald-100')}>
+                  {highSeverityCount}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-2.5">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">At risk theses</p>
+                <p className={cn('mt-1 font-mono text-sm', degradingCount > 0 ? 'text-champagne' : 'text-emerald-100')}>
+                  {degradingCount}
+                </p>
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -137,15 +179,24 @@ export function SwingSniperMemoRail({
                     )}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-white">{item.symbol}</p>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className={cn('h-2 w-2 rounded-full', statusDotTone(status))} />
+                        <p className="truncate text-sm font-medium text-white">{item.symbol}</p>
+                      </div>
                       <span className={cn('text-[11px] uppercase tracking-[0.14em]', statusTone(status))}>
                         {status}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-white/75">{item.setupLabel}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
+                    <p className="mt-1 line-clamp-2 text-sm text-white/75">{item.setupLabel}</p>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
                       {ivDrift ? `${ivDrift} · ` : ''}{item.catalystLabel ?? 'Monitoring only'}
                     </p>
+                    <div className="mt-2 h-1.5 rounded-full bg-white/[0.08]">
+                      <div
+                        className={cn('h-full rounded-full transition-all', healthBarTone(snapshot?.monitoring.healthScore ?? null))}
+                        style={{ width: `${Math.max(8, Math.min(100, snapshot?.monitoring.healthScore ?? 20))}%` }}
+                      />
+                    </div>
                   </button>
                 )
               })}
@@ -161,8 +212,13 @@ export function SwingSniperMemoRail({
             <div className="mt-3 space-y-2">
               {monitoring.alerts.slice(0, 3).map((alert) => (
                 <div key={alert.id} className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-2 text-sm">
-                  <p className="font-medium text-white">{alert.title}</p>
-                  <p className="mt-1 text-muted-foreground">{alert.message}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-white">{alert.title}</p>
+                    <span className={cn('rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]', severityTone(alert.severity))}>
+                      {alert.severity}
+                    </span>
+                  </div>
+                  <p className="mt-1 line-clamp-3 text-muted-foreground">{alert.message}</p>
                 </div>
               ))}
             </div>

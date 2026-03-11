@@ -127,7 +127,7 @@ export function MandateDrawer({
 
             <section>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-white/55">Minimum ORC</p>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/55">Minimum TITM</p>
                 <p className="font-mono text-xs text-white/80">{filters.minScore}</p>
               </div>
               <input

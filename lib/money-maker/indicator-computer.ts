@@ -56,6 +56,10 @@ export function computeFibonacciLevels(prevDayHigh: number, prevDayLow: number) 
     const range = prevDayHigh - prevDayLow
 
     return {
+        // Generic retracement anchors used by Money Maker's current V1 engine.
+        fib0236: prevDayLow + range * 0.236,
+        fib0382: prevDayLow + range * 0.382,
+
         // Retracements from the high (applicable after an uptrend day)
         retracementFromHigh236: prevDayHigh - range * 0.236,
         retracementFromHigh382: prevDayHigh - range * 0.382,

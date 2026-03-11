@@ -36,7 +36,7 @@ export function SetupGrid() {
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div data-testid="money-maker-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
             {symbols.map(symbol => (
                 <SetupCard key={symbol} symbol={symbol} />
             ))}

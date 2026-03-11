@@ -18,7 +18,7 @@ export function MoneyMakerShell({ children }: { children: React.ReactNode }) {
         : 'Never'
 
     return (
-        <div className="flex flex-col h-full w-full space-y-4 pt-4">
+        <div data-testid="money-maker-shell" className="flex flex-col h-full w-full space-y-4 pt-4">
             {/* Header Panel */}
             <div className="flex flex-col md:flex-row md:items-center justify-between px-6 pb-2 gap-4">
                 <div>
@@ -51,17 +51,16 @@ export function MoneyMakerShell({ children }: { children: React.ReactNode }) {
             {/* Main Content Area */}
             <div className="flex-1 px-6 pb-6 overflow-y-auto">
                 {state.error ? (
-                    <Card className="border-destructive bg-destructive/10">
+                    <Card className="mb-4 border-destructive bg-destructive/10">
                         <CardHeader>
-                            <CardTitle className="text-destructive">Error Loading Strategy Data</CardTitle>
+                            <CardTitle className="text-destructive">Strategy Data Degraded</CardTitle>
                         </CardHeader>
                         <CardContent className="text-sm">
                             {state.error}
                         </CardContent>
                     </Card>
-                ) : (
-                    children
-                )}
+                ) : null}
+                {children}
             </div>
         </div>
     )

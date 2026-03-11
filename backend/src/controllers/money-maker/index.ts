@@ -2,11 +2,13 @@ import { Request, Response } from 'express'
 import { buildSnapshot } from '../../services/money-maker/snapshotBuilder'
 import { supabase } from '../../config/database'
 import { isValidSymbol, normalizeSymbol } from '../../lib/symbols'
+import { hasBackendAdminAccess } from '../../lib/adminAccess'
 
 const DEFAULT_WATCHLIST_SYMBOLS = ['SPY', 'TSLA', 'AAPL', 'NVDA', 'META']
 
 interface AuthenticatedUser {
     id: string
+    isAdmin: boolean
 }
 
 interface WatchlistRow {
@@ -33,7 +35,12 @@ async function getAuthenticatedUser(req: Request): Promise<AuthenticatedUser | n
         return null
     }
 
-    return { id: user.id }
+    const isAdmin = await hasBackendAdminAccess(user.id)
+
+    return {
+        id: user.id,
+        isAdmin,
+    }
 }
 
 async function listDefaultWatchlist(): Promise<WatchlistRow[]> {
@@ -96,6 +103,9 @@ export async function getSnapshot(req: Request, res: Response) {
         if (!user) {
             return res.status(401).json({ error: 'Unauthorized' })
         }
+        if (!user.isAdmin) {
+            return res.status(403).json({ error: 'Forbidden' })
+        }
 
         const watchlist = await listEffectiveWatchlist(user.id)
         const symbols = watchlist.map((row) => row.symbol)
@@ -116,6 +126,7 @@ export async function getWatchlist(req: Request, res: Response) {
     try {
         const user = await getAuthenticatedUser(req)
         if (!user) return res.status(401).json({ error: 'Unauthorized' })
+        if (!user.isAdmin) return res.status(403).json({ error: 'Forbidden' })
 
         const watchlists = await listEffectiveWatchlist(user.id)
 
@@ -141,6 +152,7 @@ export async function updateWatchlist(req: Request, res: Response) {
         const normalizedSymbols = sanitizeWatchlistSymbols(symbols)
         const user = await getAuthenticatedUser(req)
         if (!user) return res.status(401).json({ error: 'Unauthorized' })
+        if (!user.isAdmin) return res.status(403).json({ error: 'Forbidden' })
 
         const now = new Date().toISOString()
 
