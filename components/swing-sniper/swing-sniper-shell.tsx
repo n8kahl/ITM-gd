@@ -157,6 +157,10 @@ export function SwingSniperShell() {
   const boardRef = useRef<SwingSniperBoardPayload | null>(null)
   const activeSymbolRef = useRef<string | null>(null)
   const dossierRequestIdRef = useRef(0)
+  const activeDossier = useMemo(() => {
+    if (!dossier || !activeSymbol) return null
+    return dossier.symbol === activeSymbol ? dossier : null
+  }, [activeSymbol, dossier])
 
   const loadBoard = useCallback(async (refresh: boolean = false) => {
     if (!boardRef.current) setBoardLoading(true)
@@ -226,9 +230,14 @@ export function SwingSniperShell() {
     if (!options?.force) {
       const retryAt = dossierRateLimitRef.current.get(symbol)
       if (retryAt && retryAt > Date.now()) {
-        if (!options?.prefetch && cached) {
-          setDossier(cached)
-          setDossierError(false)
+        if (!options?.prefetch && activeSymbolRef.current === symbol) {
+          if (cached) {
+            setDossier(cached)
+            setDossierError(false)
+          } else {
+            setDossier(null)
+            setDossierError(true)
+          }
           setDossierLoading(false)
         }
         return cached ?? null
@@ -236,7 +245,7 @@ export function SwingSniperShell() {
     }
 
     if (cached && !options?.force) {
-      if (!options?.prefetch) {
+      if (!options?.prefetch && activeSymbolRef.current === symbol) {
         setDossier(cached)
         setDossierError(false)
         setDossierLoading(false)
@@ -440,21 +449,21 @@ export function SwingSniperShell() {
   }, [activeSymbol, persistWatchlistUpdate])
 
   const handleAddToWatchlist = useCallback(async () => {
-    if (!dossier) return
+    if (!activeDossier) return
 
-    setWatchlistPendingSymbol(dossier.symbol)
+    setWatchlistPendingSymbol(activeDossier.symbol)
 
     try {
       await persistWatchlistUpdate({
-        selectedSymbol: dossier.symbol,
-        symbols: Array.from(new Set([...(watchlist?.symbols || []), dossier.symbol])),
+        selectedSymbol: activeDossier.symbol,
+        symbols: Array.from(new Set([...(watchlist?.symbols || []), activeDossier.symbol])),
       })
     } catch {
       // Watchlist add should fail quietly and keep dossier visible.
     } finally {
       setWatchlistPendingSymbol(null)
     }
-  }, [dossier, persistWatchlistUpdate, watchlist])
+  }, [activeDossier, persistWatchlistUpdate, watchlist])
 
   const handleSavePreferences = useCallback(async () => {
     setPreferencesPending(true)
@@ -479,7 +488,7 @@ export function SwingSniperShell() {
     [watchlist],
   )
 
-  const activeIsSaved = dossier ? savedSymbols.includes(dossier.symbol) : false
+  const activeIsSaved = activeDossier ? savedSymbols.includes(activeDossier.symbol) : false
   const stale = useMemo(
     () => updatedLabel(board?.generated_at ?? memo?.generated_at ?? monitoring?.generatedAt ?? null),
     [board, memo, monitoring],
@@ -577,8 +586,8 @@ export function SwingSniperShell() {
         </div>
       </section>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[336px_minmax(0,1fr)] xl:grid-cols-[336px_minmax(0,1fr)_304px]">
-        <div className="xl:sticky xl:top-24 xl:self-start">
+      <div className="relative isolate grid items-start gap-5 lg:grid-cols-[336px_minmax(0,1fr)] xl:gap-5 xl:grid-cols-[336px_minmax(0,1fr)_304px] 2xl:gap-6">
+        <div className="relative z-20 xl:sticky xl:top-24 xl:self-start">
           <OpportunityBoard
             ideas={board?.ideas || []}
             loading={boardLoading}
@@ -596,29 +605,32 @@ export function SwingSniperShell() {
           />
         </div>
 
-        <DossierPanel
-          dossier={dossier}
-          selectedSymbol={activeSymbol}
-          monitoring={monitoring}
-          loading={dossierLoading}
-          error={dossierError}
-          activeTab={activeTab}
-          isSaved={activeIsSaved}
-          thesisPending={Boolean(dossier?.symbol && thesisPendingSymbol === dossier.symbol)}
-          watchlistPending={Boolean(dossier?.symbol && watchlistPendingSymbol === dossier.symbol)}
-          onTabChange={setActiveTab}
-          onSaveThesis={() => {
-            if (!dossier) return
-            void handleSaveThesis(buildDossierThesisPayload(dossier))
-          }}
-          onRemoveThesis={() => {
-            if (!dossier) return
-            void handleRemoveThesis(dossier.symbol)
-          }}
-          onAddToWatchlist={() => void handleAddToWatchlist()}
-        />
+        <div className="relative z-10 min-w-0">
+          <DossierPanel
+            key={activeSymbol ?? 'none'}
+            dossier={activeDossier}
+            selectedSymbol={activeSymbol}
+            monitoring={monitoring}
+            loading={dossierLoading}
+            error={dossierError}
+            activeTab={activeTab}
+            isSaved={activeIsSaved}
+            thesisPending={Boolean(activeDossier?.symbol && thesisPendingSymbol === activeDossier.symbol)}
+            watchlistPending={Boolean(activeDossier?.symbol && watchlistPendingSymbol === activeDossier.symbol)}
+            onTabChange={setActiveTab}
+            onSaveThesis={() => {
+              if (!activeDossier) return
+              void handleSaveThesis(buildDossierThesisPayload(activeDossier))
+            }}
+            onRemoveThesis={() => {
+              if (!activeDossier) return
+              void handleRemoveThesis(activeDossier.symbol)
+            }}
+            onAddToWatchlist={() => void handleAddToWatchlist()}
+          />
+        </div>
 
-        <div className="lg:col-span-2 xl:col-span-1">
+        <div className="relative z-10 lg:col-span-2 xl:col-span-1">
           <SwingSniperMemoRail
             memo={memo}
             memoLoading={memoLoading || monitoringLoading}

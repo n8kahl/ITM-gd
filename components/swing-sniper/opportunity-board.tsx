@@ -121,13 +121,13 @@ export function OpportunityBoard({
 
   return (
     <section className="glass-card-heavy rounded-[28px] border border-white/10 p-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-champagne">Top Opportunities</p>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">Execution queue ranked by mispricing, catalyst timing, and liquidity.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             onClick={onOpenMandate}
@@ -205,16 +205,25 @@ export function OpportunityBoard({
             return (
               <article
                 key={idea.symbol}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isActive}
+                onClick={() => onSelect(idea.symbol)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return
+                  event.preventDefault()
+                  onSelect(idea.symbol)
+                }}
                 className={cn(
-                  'rounded-[18px] border bg-white/[0.02] px-3 py-2.5 transition-all duration-150',
+                  'cursor-pointer rounded-[18px] border bg-white/[0.02] px-3 py-2.5 transition-all duration-150',
                   isActive
                     ? 'border-emerald-500/45 bg-emerald-500/[0.09] shadow-[0_0_0_1px_rgba(16,185,129,0.24)]'
                     : 'border-white/10 hover:border-emerald-500/25 hover:bg-white/[0.04]',
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <button type="button" onClick={() => onSelect(idea.symbol)} className="min-w-0 flex-1 text-left">
-                    <div className="flex items-center gap-1.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5 pr-1">
                       <span className={cn('h-2 w-2 rounded-full', viewTone(idea.view))} />
                       <h3 className="text-lg font-semibold tracking-tight text-white">{idea.symbol}</h3>
                       <span className={cn('rounded-full border px-2 py-0.5 font-mono text-[10px]', orcTone(idea.orc_score))}>
@@ -255,14 +264,17 @@ export function OpportunityBoard({
                         </div>
                       ))}
                     </div>
-                  </button>
+                  </div>
 
                   <button
                     type="button"
-                    onClick={() => onQuickSave(idea)}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onQuickSave(idea)
+                    }}
                     disabled={isSaved || savingSymbol === idea.symbol}
                     className={cn(
-                      'inline-flex shrink-0 items-center rounded-full border px-3 py-1 text-xs uppercase tracking-[0.14em] transition-colors',
+                      'inline-flex shrink-0 items-center self-start rounded-full border px-3 py-1 text-xs uppercase tracking-[0.14em] transition-colors',
                       isSaved
                         ? 'cursor-default border-emerald-500/30 bg-emerald-500/12 text-emerald-100'
                         : 'border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.08]',
