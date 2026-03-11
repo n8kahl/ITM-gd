@@ -136,6 +136,12 @@ function monitoringTone(status: string | null): string {
   return 'text-white/80'
 }
 
+function legSideTone(side: 'buy' | 'sell'): string {
+  return side === 'buy'
+    ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100'
+    : 'border-champagne/35 bg-champagne/10 text-champagne'
+}
+
 export function DossierPanel({
   dossier,
   selectedSymbol,
@@ -166,10 +172,10 @@ export function DossierPanel({
   const transitionSymbol = selectedSymbol ?? dossier?.symbol ?? 'Research'
 
   return (
-    <section className="glass-card-heavy rounded-[28px] border border-white/10 p-5" data-testid="swing-sniper-dossier">
+    <section className="glass-card-heavy rounded-[28px] border border-white/10 p-4" data-testid="swing-sniper-dossier">
       {loading ? (
         <div className="space-y-4">
-          <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
+          <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-4">
             <div className="flex flex-wrap items-center gap-2">
               <div className="rounded-full border border-champagne/35 bg-champagne/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-champagne">
                 Refreshing execution plan
@@ -224,7 +230,7 @@ export function DossierPanel({
                 <h2 className="mt-4 font-[family-name:var(--font-playfair)] text-[clamp(2.75rem,6vw,4rem)] tracking-[-0.045em] text-white">
                   {dossier.symbol}
                 </h2>
-                <p className="mt-3 max-w-4xl text-base leading-8 text-white/82">{dossier.headline}</p>
+                <p className="mt-3 line-clamp-2 max-w-4xl text-base leading-8 text-white/82">{dossier.headline}</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -262,6 +268,22 @@ export function DossierPanel({
               </div>
             </div>
 
+            {symbolMonitoring ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className={cn('rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.14em]', {
+                  'border-emerald-500/35 bg-emerald-500/10 text-emerald-100': symbolMonitoring.monitoring.status === 'active',
+                  'border-champagne/35 bg-champagne/10 text-champagne': symbolMonitoring.monitoring.status === 'degrading',
+                  'border-red-500/35 bg-red-500/10 text-red-100': symbolMonitoring.monitoring.status === 'invalidated',
+                  'border-white/10 bg-white/[0.04] text-white/75': !['active', 'degrading', 'invalidated'].includes(symbolMonitoring.monitoring.status),
+                })}>
+                  Thesis {symbolMonitoring.monitoring.status}
+                </span>
+                <span className="rounded-full border border-white/10 bg-[#050505] px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-white/75">
+                  Health {symbolMonitoring.monitoring.healthScore.toFixed(0)}
+                </span>
+              </div>
+            ) : null}
+
             <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {[
                 ['Best expression', topStructure?.name ?? dossier.view],
@@ -271,7 +293,7 @@ export function DossierPanel({
               ].map(([label, value]) => (
                 <div key={label} className="rounded-[22px] border border-white/10 bg-[#050505] px-4 py-3">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-white/45">{label}</p>
-                  <p className="mt-2 text-sm leading-6 text-white">{value}</p>
+                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-white">{value}</p>
                 </div>
               ))}
             </div>
@@ -294,7 +316,7 @@ export function DossierPanel({
                 ) : null}
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid gap-4 xl:grid-cols-2">
                 <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm font-medium text-white">Vol setup</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -322,7 +344,7 @@ export function DossierPanel({
                         </div>
                         <div>
                           <p className="text-sm font-medium text-white">{event.label}</p>
-                          <p className="mt-1 text-sm leading-6 text-muted-foreground">{event.context}</p>
+                          <p className="mt-1 line-clamp-3 text-sm leading-6 text-muted-foreground">{event.context}</p>
                         </div>
                       </div>
                     ))}
@@ -361,6 +383,12 @@ export function DossierPanel({
                           Fit {topStructure.fit_score.toFixed(1)}
                         </span>
                       </div>
+                      <div className="mt-3 h-1.5 rounded-full bg-white/[0.08]">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-emerald-300 to-champagne/85"
+                          style={{ width: `${Math.max(8, Math.min(100, topStructure.fit_score * 10))}%` }}
+                        />
+                      </div>
 
                       <div className="mt-4 grid gap-2 sm:grid-cols-4">
                         {[
@@ -385,6 +413,9 @@ export function DossierPanel({
                             <div key={`${topStructure.name}-${leg.leg}-${leg.expiry}-${leg.strike}`} className="rounded-2xl border border-white/10 px-3 py-3">
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div>
+                                  <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]', legSideTone(leg.side))}>
+                                    {leg.side}
+                                  </span>
                                   <p className="text-sm font-medium text-white">
                                     {leg.side.toUpperCase()} {formatStrike(leg.strike)}{leg.optionType === 'call' ? 'C' : 'P'}
                                   </p>
@@ -422,15 +453,29 @@ export function DossierPanel({
                     </div>
 
                     <div className="rounded-[22px] border border-white/10 bg-[#050505] p-4">
-                      <p className="text-xs uppercase tracking-[0.14em] text-white/55">Execution risk</p>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-[0.14em] text-white/55">Execution risk</p>
+                        <span
+                          className={cn(
+                            'rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]',
+                            dossier.view === 'Short vol'
+                              ? 'border-champagne/35 bg-champagne/10 text-champagne'
+                              : dossier.view === 'Long vol'
+                                ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100'
+                                : 'border-white/10 bg-white/[0.04] text-white/75',
+                          )}
+                        >
+                          {dossier.view} posture
+                        </span>
+                      </div>
                       <div className="mt-3 space-y-3">
                         <div>
                           <p className="text-[10px] uppercase tracking-[0.14em] text-white/40">Kill switch</p>
-                          <p className="mt-1 text-sm leading-6 text-white/85">{dossier.risk.killers[0] ?? 'Monitor catalyst drift'}</p>
+                          <p className="mt-1 line-clamp-4 text-sm leading-6 text-white/85">{dossier.risk.killers[0] ?? 'Monitor catalyst drift'}</p>
                         </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-[0.14em] text-white/40">Exit framework</p>
-                          <p className="mt-1 text-sm leading-6 text-white/85">{dossier.risk.exit_framework}</p>
+                          <p className="mt-1 line-clamp-4 text-sm leading-6 text-white/85">{dossier.risk.exit_framework}</p>
                         </div>
                       </div>
                     </div>
