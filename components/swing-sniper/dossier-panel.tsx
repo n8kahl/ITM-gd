@@ -214,7 +214,7 @@ export function DossierPanel({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={cn('rounded-full border px-3 py-1 font-mono text-xs', scoreTone(dossier.orc_score))}>
-                    ORC {dossier.orc_score}
+                    TITM {dossier.orc_score}
                   </span>
                   <span className="rounded-full border border-white/10 bg-[#050505] px-3 py-1 text-xs uppercase tracking-[0.16em] text-white/75">
                     {dossier.view}

@@ -218,7 +218,7 @@ export function OpportunityBoard({
                       <span className={cn('h-2 w-2 rounded-full', viewTone(idea.view))} />
                       <h3 className="text-lg font-semibold tracking-tight text-white">{idea.symbol}</h3>
                       <span className={cn('rounded-full border px-2 py-0.5 font-mono text-[10px]', orcTone(idea.orc_score))}>
-                        {idea.orc_score}
+                        TITM {idea.orc_score}
                       </span>
                       <span className={cn('rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em]', viewChipTone(idea.view))}>
                         {idea.view}
