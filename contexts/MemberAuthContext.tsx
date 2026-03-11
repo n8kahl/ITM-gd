@@ -286,6 +286,13 @@ const FALLBACK_TAB_CONFIGS: TabConfig[] = [
 
 const FALLBACK_TAB_CONFIG_MAP = new Map(FALLBACK_TAB_CONFIGS.map((tab) => [tab.tab_id, tab]))
 
+function readE2EBypassRoleOverride(): 'admin' | null {
+  if (typeof window === 'undefined') return null
+
+  const role = new URLSearchParams(window.location.search).get('e2eBypassRole')
+  return role === 'admin' ? 'admin' : null
+}
+
 function toFallbackTabLabel(tabId: string): string {
   return tabId
     .split('-')
@@ -320,6 +327,8 @@ function buildFallbackTabConfig(tabId: string, sortOrder: number): TabConfig {
 function createE2EBypassAuthState(): MemberAuthState {
   const nowIso = new Date().toISOString()
   const expiresIn = 60 * 60
+  const roleOverride = readE2EBypassRoleOverride()
+  const isAdmin = roleOverride === 'admin'
 
   const user = {
     id: E2E_BYPASS_USER_ID,
@@ -360,15 +369,36 @@ function createE2EBypassAuthState(): MemberAuthState {
         [SWING_SNIPER_LEAD_ROLE_ID]: 'Lead',
       },
       membership_tier: 'pro',
-      role: null,
+      role: isAdmin ? 'admin' : null,
     },
-    permissions: [{
-      id: 'e2e-access-ai-coach',
-      name: 'access_ai_coach',
-      description: 'Playwright E2E bypass permission',
-      granted_by_role: 'role-pro',
-    }],
-    allowedTabs: ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'swing-sniper', 'library', 'social', 'mentorship', 'profile'],
+    permissions: [
+      {
+        id: 'e2e-access-ai-coach',
+        name: 'access_ai_coach',
+        description: 'Playwright E2E bypass permission',
+        granted_by_role: 'role-pro',
+      },
+      ...(isAdmin
+        ? [{
+            id: 'e2e-admin-dashboard',
+            name: 'admin_dashboard',
+            description: 'Playwright E2E bypass admin permission',
+            granted_by_role: 'e2e-admin',
+          }]
+        : []),
+    ],
+    allowedTabs: [
+      'dashboard',
+      'journal',
+      'spx-command-center',
+      'ai-coach',
+      'swing-sniper',
+      'library',
+      'social',
+      'mentorship',
+      'profile',
+      ...(isAdmin ? ['money-maker'] : []),
+    ],
     tabConfigs: [],
     isLoading: false,
     isAuthenticated: true,

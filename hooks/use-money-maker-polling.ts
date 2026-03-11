@@ -36,6 +36,7 @@ export function useMoneyMakerPolling() {
         setLastUpdated,
     } = useMoneyMaker()
     const hasLoadedSnapshot = useRef(false)
+    const snapshotRequestRef = useRef<Promise<void> | null>(null)
 
     const fetchWatchlist = useCallback(async () => {
         if (!session?.access_token) return
@@ -67,45 +68,54 @@ export function useMoneyMakerPolling() {
 
     const fetchSnapshot = useCallback(async (mode: 'initial' | 'background' = 'background') => {
         if (!session?.access_token) return
-
-        const isInitialLoad = mode === 'initial' || !hasLoadedSnapshot.current
-        if (isInitialLoad) {
-            setIsLoading(true)
-        } else {
-            setIsRefreshing(true)
+        if (snapshotRequestRef.current) {
+            return snapshotRequestRef.current
         }
 
-        try {
-            const response = await fetch(SNAPSHOT_ENDPOINT, {
-                headers: { Authorization: `Bearer ${session.access_token}` },
-                cache: 'no-store',
-            })
-
-            if (!response.ok) {
-                throw new Error(await readErrorMessage(response, 'Failed to load market snapshot'))
+        const requestPromise = (async () => {
+            const isInitialLoad = mode === 'initial' || !hasLoadedSnapshot.current
+            if (isInitialLoad) {
+                setIsLoading(true)
+            } else {
+                setIsRefreshing(true)
             }
 
-            const data = await response.json()
-            const signals = Array.isArray(data.signals) ? data.signals : []
-            const symbolSnapshots = Array.isArray(data.symbolSnapshots) ? data.symbolSnapshots : []
-            const symbols = symbolSnapshots
-                .map((snapshot: { symbol?: unknown }) => snapshot?.symbol)
-                .filter((symbol: unknown): symbol is string => typeof symbol === 'string' && symbol.length > 0)
+            try {
+                const response = await fetch(SNAPSHOT_ENDPOINT, {
+                    headers: { Authorization: `Bearer ${session.access_token}` },
+                    cache: 'no-store',
+                })
 
-            setSignals(signals)
-            setSymbolSnapshots(symbolSnapshots)
-            if (symbols.length > 0) {
-                setSymbols(symbols)
+                if (!response.ok) {
+                    throw new Error(await readErrorMessage(response, 'Failed to load market snapshot'))
+                }
+
+                const data = await response.json()
+                const signals = Array.isArray(data.signals) ? data.signals : []
+                const symbolSnapshots = Array.isArray(data.symbolSnapshots) ? data.symbolSnapshots : []
+                const symbols = symbolSnapshots
+                    .map((snapshot: { symbol?: unknown }) => snapshot?.symbol)
+                    .filter((symbol: unknown): symbol is string => typeof symbol === 'string' && symbol.length > 0)
+
+                setSignals(signals)
+                setSymbolSnapshots(symbolSnapshots)
+                if (symbols.length > 0) {
+                    setSymbols(symbols)
+                }
+                setLastUpdated(typeof data.timestamp === 'number' ? data.timestamp : Date.now())
+                setError(null)
+                hasLoadedSnapshot.current = true
+            } catch (err: any) {
+                setError(err?.message || 'Unknown polling error')
+            } finally {
+                setIsLoading(false)
+                setIsRefreshing(false)
+                snapshotRequestRef.current = null
             }
-            setLastUpdated(typeof data.timestamp === 'number' ? data.timestamp : Date.now())
-            setError(null)
-            hasLoadedSnapshot.current = true
-        } catch (err: any) {
-            setError(err?.message || 'Unknown polling error')
-        } finally {
-            setIsLoading(false)
-            setIsRefreshing(false)
-        }
+        })()
+
+        snapshotRequestRef.current = requestPromise
+        return requestPromise
     }, [session?.access_token, setError, setIsLoading, setIsRefreshing, setLastUpdated, setSignals, setSymbolSnapshots, setSymbols])
 
     useEffect(() => {

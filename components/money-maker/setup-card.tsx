@@ -44,7 +44,10 @@ export function SetupCard({ symbol }: { symbol: string }) {
 
     return (
         <>
-            <Card className={`border-white/10 bg-black/40 backdrop-blur-md overflow-hidden relative group transition-colors hover:border-white/20 ${signal ? (signal.direction === 'long' ? 'ring-1 ring-emerald-500/50 shadow-[0_0_15px_-3px_rgba(16,185,129,0.3)]' : 'ring-1 ring-red-500/50 shadow-[0_0_15px_-3px_rgba(239,68,68,0.3)]') : ''}`}>
+            <Card
+                data-testid={`money-maker-card-${symbol}`}
+                className={`border-white/10 bg-black/40 backdrop-blur-md overflow-hidden relative group transition-colors hover:border-white/20 ${signal ? (signal.direction === 'long' ? 'ring-1 ring-emerald-500/50 shadow-[0_0_15px_-3px_rgba(16,185,129,0.3)]' : 'ring-1 ring-red-500/50 shadow-[0_0_15px_-3px_rgba(239,68,68,0.3)]') : ''}`}
+            >
                 {signal && (
                     <div className={`absolute top-0 left-0 w-full h-1 ${signal.direction === 'long' ? 'bg-gradient-to-r from-emerald-500 to-transparent' : 'bg-gradient-to-r from-red-500 to-transparent'}`} />
                 )}
