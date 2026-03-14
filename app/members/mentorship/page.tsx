@@ -33,7 +33,7 @@ const WEEKS = [
     theme: 'How to build a checklist that eliminates 80% of bad trades.',
     icon: Crosshair,
     href: '/members/mentorship/week-2',
-    active: false,
+    active: true,
     topics: ['A+ Setup Criteria', 'Entry Checklists', 'Watchlist Construction', 'Filter Discipline'],
   },
   {

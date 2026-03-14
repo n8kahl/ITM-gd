@@ -1,6 +1,6 @@
 'use client'
 
-import { BookOpen, Crosshair, GraduationCap, Target } from 'lucide-react'
+import { BookOpen, CheckSquare, Crosshair, GraduationCap, Target } from 'lucide-react'
 
 import { FeatureSubNav, type FeatureSubNavItem } from '@/components/members/feature-sub-nav'
 
@@ -23,6 +23,12 @@ const ITEMS: FeatureSubNavItem[] = [
     href: '/members/mentorship/week-1/journal-guide',
     label: 'Journal Guide',
     icon: BookOpen,
+  },
+  {
+    id: 'week-2',
+    href: '/members/mentorship/week-2',
+    label: 'Week 2',
+    icon: CheckSquare,
   },
   {
     id: 'resources',
