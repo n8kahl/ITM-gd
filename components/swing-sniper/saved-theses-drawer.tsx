@@ -65,6 +65,23 @@ export function SavedThesesDrawer({
 }: SavedThesesDrawerProps) {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<SavedFilter>('all')
+  const statusCounts = useMemo(() => {
+    const counts: Record<SavedFilter, number> = {
+      all: savedTheses.length,
+      active: 0,
+      degrading: 0,
+      invalidated: 0,
+    }
+
+    savedTheses.forEach((item) => {
+      const status = monitoring?.savedTheses.find((candidate) => candidate.symbol === item.symbol)?.monitoring.status ?? 'forming'
+      if (status === 'active') counts.active += 1
+      if (status === 'degrading') counts.degrading += 1
+      if (status === 'invalidated') counts.invalidated += 1
+    })
+
+    return counts
+  }, [monitoring, savedTheses])
 
   const rows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -100,6 +117,25 @@ export function SavedThesesDrawer({
           </DialogHeader>
 
           <div className="border-b border-white/10 px-6 py-4">
+            <div className="mb-3 grid grid-cols-3 gap-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">Saved</p>
+                <p className="mt-1 font-mono text-sm text-white">{statusCounts.all}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">At risk</p>
+                <p className={cn('mt-1 font-mono text-sm', statusCounts.degrading > 0 ? 'text-champagne' : 'text-emerald-100')}>
+                  {statusCounts.degrading}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">Invalidated</p>
+                <p className={cn('mt-1 font-mono text-sm', statusCounts.invalidated > 0 ? 'text-red-100' : 'text-emerald-100')}>
+                  {statusCounts.invalidated}
+                </p>
+              </div>
+            </div>
+
             <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
               <Search className="h-4 w-4 text-white/45" />
               <input
@@ -128,7 +164,7 @@ export function SavedThesesDrawer({
                       : 'border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.08]',
                   )}
                 >
-                  {label}
+                  {label} ({statusCounts[value as SavedFilter]})
                 </button>
               ))}
             </div>

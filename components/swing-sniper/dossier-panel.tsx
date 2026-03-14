@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -168,8 +169,25 @@ export function DossierPanel({
   const topStructure = dossier?.structures[0] ?? null
   const structureAlternatives = dossier?.structures.slice(1, 4) ?? []
   const narrativePreview = dossier?.thesis.narrative_shifts.slice(0, 2) ?? []
-  const leadCatalysts = dossier ? [...dossier.catalysts].sort((left, right) => left.days_out - right.days_out).slice(0, 3) : []
+  const sortedCatalysts = dossier
+    ? [...dossier.catalysts]
+      .sort((left, right) => {
+        const leftFuture = left.days_out >= 0 ? 0 : 1
+        const rightFuture = right.days_out >= 0 ? 0 : 1
+        if (leftFuture !== rightFuture) return leftFuture - rightFuture
+        if (left.days_out !== right.days_out) return left.days_out - right.days_out
+        const severityRank = { high: 0, medium: 1, low: 2 } as const
+        return severityRank[left.severity] - severityRank[right.severity]
+      })
+    : []
+  const highSignalCatalysts = sortedCatalysts.filter((event) => event.severity !== 'low')
+  const leadCatalysts = (
+    highSignalCatalysts.length >= 2
+      ? highSignalCatalysts
+      : sortedCatalysts
+  ).slice(0, 3)
   const transitionSymbol = selectedSymbol ?? dossier?.symbol ?? 'Research'
+  const [showDeepDive, setShowDeepDive] = useState(false)
 
   return (
     <section className="glass-card-heavy rounded-[28px] border border-white/10 p-4" data-testid="swing-sniper-dossier">
@@ -316,7 +334,7 @@ export function DossierPanel({
                 ) : null}
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-2">
+              <div className="space-y-4">
                 <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm font-medium text-white">Vol setup</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -336,18 +354,26 @@ export function DossierPanel({
 
                 <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm font-medium text-white">Catalyst clock</p>
-                  <div className="mt-4 space-y-3">
-                    {leadCatalysts.map((event) => (
-                      <div key={`${event.date}-${event.label}`} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
-                        <div className="font-mono text-xs uppercase tracking-[0.14em] text-champagne">
-                          {event.days_out <= 0 ? 'Now' : `${event.days_out}D`}
+                  <div className="mt-4 space-y-2.5">
+                    {leadCatalysts.length > 0 ? (
+                      leadCatalysts.map((event) => (
+                        <div key={`${event.date}-${event.label}`} className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-3">
+                          <div className="flex items-start gap-3">
+                            <div className="shrink-0 rounded-full border border-champagne/35 bg-champagne/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-champagne">
+                              {event.days_out <= 0 ? 'Now' : `${event.days_out}D`}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="line-clamp-2 break-words text-sm font-medium leading-6 text-white">{event.label}</p>
+                              <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">{event.context}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-white">{event.label}</p>
-                          <p className="mt-1 line-clamp-3 text-sm leading-6 text-muted-foreground">{event.context}</p>
-                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-white/10 bg-[#050505] px-3 py-3 text-sm leading-6 text-muted-foreground">
+                        No near-dated catalysts are currently available for this setup.
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               </div>
@@ -532,25 +558,50 @@ export function DossierPanel({
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <p className="mr-2 text-[11px] uppercase tracking-[0.16em] text-white/45">Deep dive</p>
-            {DOSSIER_TABS.map((tab) => (
+          <div className="mt-5 rounded-[22px] border border-white/10 bg-white/[0.03] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">Research depth</p>
               <button
-                key={tab}
                 type="button"
-                onClick={() => onTabChange(tab)}
+                onClick={() => setShowDeepDive((current) => !current)}
                 className={cn(
-                  'rounded-full border px-3 py-1 text-xs uppercase tracking-[0.16em] transition-colors',
-                  activeTab === tab
+                  'rounded-full border px-3 py-1 text-xs uppercase tracking-[0.14em] transition-colors',
+                  showDeepDive
                     ? 'border-champagne/35 bg-champagne/10 text-champagne'
-                    : 'border-white/10 bg-white/[0.03] text-muted-foreground hover:bg-white/[0.06]',
+                    : 'border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.06]',
                 )}
               >
-                {tab}
+                {showDeepDive ? 'Hide details' : 'Show details'}
               </button>
-            ))}
+            </div>
+
+            {showDeepDive ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {DOSSIER_TABS.map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => onTabChange(tab)}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs uppercase tracking-[0.16em] transition-colors',
+                      activeTab === tab
+                        ? 'border-champagne/35 bg-champagne/10 text-champagne'
+                        : 'border-white/10 bg-white/[0.03] text-muted-foreground hover:bg-white/[0.06]',
+                    )}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Keep this collapsed for an execution-first view. Expand to inspect thesis, vol surface, catalyst map, and structure analytics.
+              </p>
+            )}
           </div>
 
+          {showDeepDive ? (
+            <>
           {activeTab === 'Thesis' ? (
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
               <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
@@ -837,6 +888,8 @@ export function DossierPanel({
                 )}
               </div>
             </div>
+          ) : null}
+            </>
           ) : null}
         </>
       ) : null}

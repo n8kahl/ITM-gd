@@ -247,14 +247,48 @@ export function buildSwingSniperExpressionPreview(
 export function buildSwingSniperThesis(
   direction: SwingSniperDirection,
   catalystLabel: string,
+  context?: {
+    ivVsRvGap?: number | null;
+    ivRank?: number | null;
+    termStructureShape?: 'contango' | 'backwardation' | 'flat';
+  },
 ): string {
+  const normalizedCatalyst = catalystLabel.trim();
+  const catalystCore = normalizedCatalyst.split(/\s+with\s+/i)[0] || normalizedCatalyst;
+  const catalystPhrase = catalystCore.length > 72 ? `${catalystCore.slice(0, 69).trimEnd()}…` : catalystCore;
+  const ivVsRvGap = context?.ivVsRvGap ?? null;
+  const ivRank = context?.ivRank ?? null;
+  const termShape = context?.termStructureShape ?? null;
+
   if (direction === 'long_vol') {
-    return `Current IV sits below the recent realized tape while ${catalystLabel.toLowerCase()} can reprice premium quickly.`;
+    if (ivVsRvGap != null && ivVsRvGap <= -5) {
+      return `Front-month IV trades ${Math.abs(ivVsRvGap).toFixed(1)} points below 20D realized, leaving ${catalystPhrase.toLowerCase()} underpriced into the 7-14 day window.`;
+    }
+    if (ivVsRvGap != null && ivVsRvGap < 0) {
+      return `IV trails realized by ${Math.abs(ivVsRvGap).toFixed(1)} points while ${catalystPhrase.toLowerCase()} can force a fast premium catch-up.`;
+    }
+    if (ivRank != null && ivRank <= 40) {
+      return `IV rank near ${ivRank.toFixed(0)} keeps premium comparatively cheap as ${catalystPhrase.toLowerCase()} approaches.`;
+    }
+    return `Premium setup still leans long-vol into ${catalystPhrase.toLowerCase()}, with better edge when IV remains beneath realized behavior.`;
   }
+
   if (direction === 'short_vol') {
-    return `Premium is already elevated versus realized movement, so the cleaner edge is to wait for post-catalyst decay or defined-risk premium sale.`;
+    if (ivVsRvGap != null && ivVsRvGap >= 6) {
+      return `Front premium carries a +${ivVsRvGap.toFixed(1)} point lift versus 20D realized, favoring post-${catalystPhrase.toLowerCase()} decay structures.`;
+    }
+    if (ivRank != null && ivRank >= 65) {
+      return `IV rank near ${ivRank.toFixed(0)} signals rich premium, so defined-risk short-vol structures around ${catalystPhrase.toLowerCase()} have cleaner expectancy.`;
+    }
+    return `Premium is elevated relative to realized movement, so the cleaner edge is harvesting decay after ${catalystPhrase.toLowerCase()}.`;
   }
-  return `Volatility is not obviously mispriced yet, but the setup is close enough to keep on deck while ${catalystLabel.toLowerCase()} develops.`;
+
+  const termRead = termShape === 'backwardation'
+    ? 'front-term stress'
+    : termShape === 'contango'
+      ? 'orderly contango'
+      : 'flat term structure';
+  return `${termRead} is visible, but IV-vs-RV separation is not decisive yet. Keep ${catalystPhrase.toLowerCase()} on deck for confirmation.`;
 }
 
 function buildReasons(
@@ -328,7 +362,7 @@ function toCatalystLabel(
   if (earningsEvent?.date) {
     const earningsDays = daysUntil(earningsEvent.date);
     return {
-      label: `Earnings ${describeDaysUntilLabel(earningsDays)} with ${macroDensity} macro event${macroDensity === 1 ? '' : 's'} nearby`,
+      label: `Earnings ${describeDaysUntilLabel(earningsDays)}`,
       date: earningsEvent.date,
       daysUntil: earningsDays,
       density: macroDensity + 1,
@@ -338,7 +372,7 @@ function toCatalystLabel(
   if (macroEvent?.date) {
     const macroDays = daysUntil(macroEvent.date);
     return {
-      label: `${macroEvent.event} ${describeDaysUntilLabel(macroDays)} with a ${macroDensity}-event macro stack`,
+      label: `${macroEvent.event} ${describeDaysUntilLabel(macroDays)}`,
       date: macroEvent.date,
       daysUntil: macroDays,
       density: Math.max(1, macroDensity),
@@ -403,7 +437,11 @@ async function scanSymbol(
       orc,
       direction,
       setupLabel,
-      thesis: buildSwingSniperThesis(direction, catalyst.label),
+      thesis: buildSwingSniperThesis(direction, catalyst.label, {
+        ivVsRvGap,
+        ivRank: ivProfile.ivRank.ivRank,
+        termStructureShape: ivProfile.termStructure.shape,
+      }),
       currentPrice: ivProfile.currentPrice,
       currentIV,
       realizedVol20,

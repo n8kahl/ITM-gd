@@ -262,7 +262,8 @@ export function SwingSniperShell() {
 
     const requestPromise = (async () => {
       try {
-        const response = await fetch(`/api/members/swing-sniper/dossier/${encodeURIComponent(symbol)}`, {
+        const refreshQuery = options?.force ? '?refresh=1' : ''
+        const response = await fetch(`/api/members/swing-sniper/dossier/${encodeURIComponent(symbol)}${refreshQuery}`, {
           method: 'GET',
           cache: 'no-store',
         })
