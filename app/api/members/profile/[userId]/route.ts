@@ -110,7 +110,6 @@ export async function GET(
 
   if (isOwner) {
     responseProfile.whop_user_id = profileRow.whop_user_id
-    responseProfile.whop_affiliate_url = profileRow.whop_affiliate_url
     responseProfile.whop_membership_id = profileRow.whop_membership_id
     responseProfile.notification_preferences = profileRow.notification_preferences
     responseProfile.ai_preferences = profileRow.ai_preferences

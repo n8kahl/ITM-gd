@@ -38,7 +38,6 @@ export interface MemberProfile {
   avg_hold_minutes: number | null
   trading_style: TradingStyle | null
   whop_user_id: string | null
-  whop_affiliate_url: string | null
   whop_membership_id: string | null
   privacy_settings: PrivacySettings
   notification_preferences: NotificationPreferences
@@ -214,38 +213,6 @@ export interface LeaderboardResponse {
   entries: LeaderboardEntry[]
   user_entry: LeaderboardEntry | null
   snapshot_date: string
-}
-
-export type ReferralStatus = 'pending' | 'signed_up' | 'subscribed' | 'churned' | 'expired'
-
-export interface AffiliateReferral {
-  id: string
-  referrer_id: string
-  referred_email: string | null
-  referred_user_id: string | null
-  status: ReferralStatus
-  referral_code: string
-  whop_checkout_id: string | null
-  whop_membership_id: string | null
-  commission_amount: number
-  commission_currency: string
-  commission_paid: boolean
-  commission_paid_at: string | null
-  clicked_at: string
-  signed_up_at: string | null
-  subscribed_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface AffiliateStats {
-  total_referrals: number
-  active_referrals: number
-  total_earnings: number
-  unpaid_earnings: number
-  conversion_rate: number | null
-  referral_code: string
-  affiliate_url: string
 }
 
 export interface ProfileViewStats {

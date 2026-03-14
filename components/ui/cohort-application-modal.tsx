@@ -67,7 +67,7 @@ const STRUGGLE_OPTIONS = [
 export function CohortApplicationModal({
   isOpen,
   onClose,
-  redirectUrl = 'https://whop.com/checkout/plan_T4Ymve5JhqpY7',
+  redirectUrl = 'https://www.launchpass.com/tradeitm/cohort',
   programType = 'cohort',
   submissionType = 'cohort_application'
 }: CohortApplicationModalProps) {
@@ -132,7 +132,7 @@ export function CohortApplicationModal({
       });
 
       setIsSuccess(true);
-      // Redirect to Whop checkout after brief success message
+      // Redirect to checkout after a brief success message
       setTimeout(() => {
         window.location.href = redirectUrl;
       }, 2000);

@@ -136,7 +136,7 @@ export default function TermsOfService() {
                 <p className="mt-2">- Subscriptions are billed on a recurring basis according to your selected plan</p>
                 <p>- Precision Cohort is a fixed 90-day program and does not auto-renew unless explicitly stated at checkout</p>
                 <p>- Private 1-on-1 mentorship is a fixed 8-week program and does not auto-renew unless explicitly stated at checkout</p>
-                <p>- You may cancel your subscription at any time through your Whop account</p>
+                <p>- You may cancel a recurring subscription at any time through the billing platform used at signup or by contacting support</p>
                 <p>- Refund obligations are governed by our all-sales-final policy in the Refund Policy</p>
                 <p>- We reserve the right to modify pricing with 30 days notice</p>
               </section>

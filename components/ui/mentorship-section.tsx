@@ -24,7 +24,7 @@ export function MentorshipSection() {
 
   const handleApplyClick = () => {
     Analytics.trackCTAClick('Mentorship Join Now');
-    window.location.href = 'https://whop.com/checkout/plan_HFwzNjeWmthq2';
+    window.location.href = 'https://www.launchpass.com/tradeitm/1x1-mentorship';
   };
 
   return (

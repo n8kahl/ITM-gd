@@ -66,7 +66,7 @@ export default function PrivacyPolicy() {
                 <p>
                   We do not sell, trade, or rent your personal information to third parties. We may share your information with:
                 </p>
-                <p className="mt-2"><strong className="text-ivory">Service Providers:</strong> Third-party vendors who help us operate our business (e.g., payment processors like Stripe, platform providers like Whop).</p>
+                <p className="mt-2"><strong className="text-ivory">Service Providers:</strong> Third-party vendors who help us operate our business (e.g., payment processors like Stripe, checkout platform providers like LaunchPass).</p>
                 <p className="mt-2"><strong className="text-ivory">Legal Requirements:</strong> When required by law or to protect our rights and safety.</p>
               </section>
 

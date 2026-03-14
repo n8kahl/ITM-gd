@@ -8,7 +8,6 @@ import { TraderIdentityCard } from '@/components/profile/trader-identity-card'
 import { TradingTranscriptCard } from '@/components/profile/trading-transcript'
 import { AcademyProgressCard } from '@/components/profile/academy-progress-card'
 import { DiscordCommunityCard } from '@/components/profile/discord-community-card'
-import { WhopAffiliateCard } from '@/components/profile/whop-affiliate-card'
 import { ProfileSettingsSheet } from '@/components/profile/profile-settings-sheet'
 import { getRankForXP, getXPToNextRank } from '@/lib/academy/xp-utils'
 import type { MemberProfile, TradingTranscript } from '@/lib/types/social'
@@ -26,12 +25,8 @@ export default function ProfilePage() {
   const [memberProfile, setMemberProfile] = useState<MemberProfile | null>(null)
   const [transcript, setTranscript] = useState<TradingTranscript | null>(null)
   const [academyData, setAcademyData] = useState<AcademyData | null>(null)
-  const [affiliateStats, setAffiliateStats] = useState<{
-    stats: { total_referrals: number; active_referrals: number; total_earnings: number; unpaid_earnings: number; conversion_rate: number | null } | null
-  }>({ stats: null })
   const [loading, setLoading] = useState(true)
   const [transcriptLoading, setTranscriptLoading] = useState(true)
-  const [affiliateLoading, setAffiliateLoading] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const fetchAbortRef = useRef<AbortController | null>(null)
 
@@ -43,14 +38,12 @@ export default function ProfilePage() {
 
     setLoading(true)
     setTranscriptLoading(true)
-    setAffiliateLoading(true)
 
     try {
       // Fetch all data in parallel
-      const [profileRes, transcriptRes, affiliateRes] = await Promise.all([
+      const [profileRes, transcriptRes] = await Promise.all([
         fetch('/api/members/profile', { signal: controller.signal }),
         fetch('/api/members/profile/transcript', { signal: controller.signal }),
-        fetch('/api/members/affiliate', { signal: controller.signal }),
       ])
 
       if (profileRes.ok) {
@@ -63,12 +56,6 @@ export default function ProfilePage() {
         const transcriptData = await transcriptRes.json()
         if (controller.signal.aborted) return
         setTranscript(transcriptData.data)
-      }
-
-      if (affiliateRes.ok) {
-        const affiliateData = await affiliateRes.json()
-        if (controller.signal.aborted) return
-        setAffiliateStats({ stats: affiliateData.data?.stats ?? null })
       }
 
       // Derive academy profile metrics from v3 mastery data.
@@ -107,7 +94,6 @@ export default function ProfilePage() {
       if (!controller.signal.aborted) {
         setLoading(false)
         setTranscriptLoading(false)
-        setAffiliateLoading(false)
       }
     }
   }, [user])
@@ -199,13 +185,6 @@ export default function ProfilePage() {
         discordRoles={authProfile?.discord_roles}
         discordRoleTitles={authProfile?.discord_role_titles}
         onSyncRoles={syncDiscordRoles}
-      />
-
-      {/* Section 5: WHOP & Affiliate Hub */}
-      <WhopAffiliateCard
-        affiliateUrl={memberProfile?.whop_affiliate_url ?? undefined}
-        stats={affiliateStats.stats}
-        loading={affiliateLoading}
       />
 
       {/* Settings Sheet */}

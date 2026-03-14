@@ -84,7 +84,7 @@ All sales are final. Refunds are not required under our Refund Policy.`
     text: `Here's how to get started:
 
 1. Choose your tier at tradeitm.com
-2. Complete checkout via Whop
+2. Complete checkout via LaunchPass
 3. Join our Discord community (invite sent automatically)
 4. Start receiving alerts immediately!
 

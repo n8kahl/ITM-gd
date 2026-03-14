@@ -31,7 +31,7 @@ interface KBEntry {
   updated_at: string
 }
 
-const CATEGORIES = ['pricing', 'features', 'proof', 'faq', 'technical', 'escalation', 'mentorship', 'affiliate']
+const CATEGORIES = ['pricing', 'features', 'proof', 'faq', 'technical', 'escalation', 'mentorship']
 
 export default function KnowledgeBasePage() {
   const [entries, setEntries] = useState<KBEntry[]>([])
