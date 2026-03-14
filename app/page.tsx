@@ -66,6 +66,13 @@ const WinRateChart = dynamic(
   { ssr: false },
 );
 
+const PUBLIC_SIGNUP_LINKS = {
+  trial: "https://www.launchpass.com/tradeitm/7-day-trial",
+  core: "https://www.launchpass.com/tradeitm/core-sniper",
+  pro: "https://www.launchpass.com/tradeitm/pro-sniper",
+  executive: "https://www.launchpass.com/tradeitm/executive-sniper",
+} as const;
+
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
@@ -405,7 +412,7 @@ export default function Home() {
                   "💬 Community Access",
                   "📊 81% Win Rate Track Record",
                 ]}
-                whopLink="https://www.launchpass.com/tradeitm/7-day-trial"
+                whopLink={PUBLIC_SIGNUP_LINKS.trial}
                 tier="trial"
                 tagline="Limited Time"
                 isYearly={false}
@@ -425,7 +432,7 @@ export default function Home() {
                   "🔔 High-volume & momentum alerts",
                   "🧠 Educational commentary & trade rationale",
                 ]}
-                whopLink={pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://www.launchpass.com/tradeitm/core-sniper"}
+                whopLink={PUBLIC_SIGNUP_LINKS.core}
                 tier="core"
                 tagline={pricingTiers.find(t => t.id === 'core')?.tagline || "Execution focused education"}
                 isYearly={false}
@@ -447,7 +454,7 @@ export default function Home() {
                   "📊 Longer term market structure insight",
                   "🎯 Capital allocation education",
                 ]}
-                whopLink={pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://www.launchpass.com/tradeitm/pro-sniper"}
+                whopLink={PUBLIC_SIGNUP_LINKS.pro}
                 tier="pro"
                 tagline={pricingTiers.find(t => t.id === 'pro')?.tagline || "More patience & strategy, not just speed"}
                 isYearly={false}
@@ -468,7 +475,7 @@ export default function Home() {
                   "🎯 Higher-level trade commentary",
                   "🧠 Risk scaling & portfolio mindset",
                 ]}
-                whopLink={pricingTiers.find(t => t.id === 'executive')?.monthly_link || "https://www.launchpass.com/tradeitm/executive-sniper"}
+                whopLink={PUBLIC_SIGNUP_LINKS.executive}
                 tier="executive"
                 tagline={pricingTiers.find(t => t.id === 'executive')?.tagline || "Maximum conviction, maximum execution"}
                 isYearly={false}
