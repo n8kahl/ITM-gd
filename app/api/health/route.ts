@@ -3,9 +3,9 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
-function getSupabaseAdmin() {
+function getSupabaseHealthClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!url || !key) {
     throw new Error('Missing Supabase environment configuration')
@@ -19,9 +19,9 @@ export async function GET() {
   const version = process.env.npm_package_version ?? 'unknown'
 
   try {
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseHealthClient()
     const { error } = await supabase
-      .from('journal_entries')
+      .from('pricing_tiers')
       .select('id', { head: true, count: 'exact' })
       .limit(1)
 
@@ -36,7 +36,7 @@ export async function GET() {
         status: 'error',
         timestamp,
         version,
-        error: error instanceof Error ? error.message : 'Supabase connectivity check failed',
+        error: error instanceof Error ? error.message : 'Supabase readiness check failed',
       },
       { status: 503 },
     )
