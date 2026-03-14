@@ -160,7 +160,7 @@ export default function PackagesPage() {
               Package Management
             </h1>
             <p className="text-muted-foreground mt-1">
-              Manage pricing tiers and Whop checkout links
+              Manage pricing tiers and checkout links
             </p>
           </div>
 
@@ -326,7 +326,7 @@ export default function PackagesPage() {
                           <Input
                             value={editForm.monthly_link || ''}
                             onChange={(e) => setEditForm({ ...editForm, monthly_link: e.target.value })}
-                            placeholder="https://whop.com/..."
+                            placeholder="https://www.launchpass.com/..."
                             className="h-8 text-xs font-mono"
                           />
                         ) : (
@@ -360,7 +360,7 @@ export default function PackagesPage() {
                           <Input
                             value={editForm.yearly_link || ''}
                             onChange={(e) => setEditForm({ ...editForm, yearly_link: e.target.value })}
-                            placeholder="https://whop.com/..."
+                            placeholder="https://www.launchpass.com/..."
                             className="h-8 text-xs font-mono"
                           />
                         ) : (
@@ -441,7 +441,7 @@ export default function PackagesPage() {
           <CardContent className="py-4">
             <p className="text-sm text-muted-foreground">
               <strong className="text-champagne">How to add yearly links:</strong>{' '}
-              Create the annual product in Whop, copy the checkout URL, and paste it here.
+              Create the annual checkout in your billing platform, copy the checkout URL, and paste it here.
               The landing page will automatically use the correct link based on the billing toggle.
             </p>
           </CardContent>

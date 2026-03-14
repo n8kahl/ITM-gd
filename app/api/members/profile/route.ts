@@ -165,10 +165,6 @@ export async function PATCH(request: NextRequest) {
       updateData.trading_style = parsed.trading_style
     }
 
-    if (Object.prototype.hasOwnProperty.call(parsed, 'whop_affiliate_url')) {
-      updateData.whop_affiliate_url = parsed.whop_affiliate_url
-    }
-
     if (parsed.privacy_settings) {
       updateData.privacy_settings = {
         ...normalizePrivacySettings(profile.privacy_settings),

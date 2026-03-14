@@ -99,7 +99,7 @@ export function FloatingNavbar() {
             */}
 
             <a
-              href="https://whop.com/checkout/plan_7Mu2Es9z1CsUF"
+              href="https://www.launchpass.com/tradeitm/7-day-trial"
               className={cn(
                 "px-4 py-2 rounded-sm text-sm font-semibold tracking-wide",
                 "bg-gradient-to-r from-trial-blue to-trial-blue-deep text-white",
@@ -202,7 +202,7 @@ export function FloatingNavbar() {
               </Button>
 
               <a
-                href="https://whop.com/checkout/plan_7Mu2Es9z1CsUF"
+                href="https://www.launchpass.com/tradeitm/7-day-trial"
                 onClick={() => {
                   setIsMobileMenuOpen(false);
                   Analytics.trackCTAClick("Mobile Nav Trial CTA");

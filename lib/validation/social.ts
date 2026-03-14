@@ -31,7 +31,6 @@ export const memberProfileUpdateSchema = z.object({
   bio: z.string().trim().max(500).nullable().optional(),
   tagline: z.string().trim().max(120).nullable().optional(),
   trading_style: z.enum(['scalper', 'day_trader', 'swing_trader', 'position_trader']).nullable().optional(),
-  whop_affiliate_url: z.string().url().nullable().optional(),
   privacy_settings: privacySettingsSchema.partial().optional(),
   notification_preferences: notificationPreferencesSchema.partial().optional(),
   ai_preferences: aiPreferencesSchema.partial().optional(),

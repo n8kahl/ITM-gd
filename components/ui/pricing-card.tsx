@@ -242,7 +242,7 @@ export function PricingCard({
     setIsHovered(false);
   };
 
-  // Handle card click - navigate to Whop
+  // Handle card click - navigate to checkout
   const handleCardClick = () => {
     // Track pricing card click
     Analytics.trackPricingClick(name);
@@ -543,9 +543,8 @@ export function PricingCard({
 
               {/* Security Badge */}
               <p className="text-center text-xs text-muted-foreground/60">
-                Secure transaction powered by{" "}
-                <span className="text-muted-foreground/80">Whop</span> &{" "}
-                <span className="text-muted-foreground/80">Stripe</span>
+                Secure checkout via{" "}
+                <span className="text-muted-foreground/80">LaunchPass</span>
               </p>
             </div>
           </div>

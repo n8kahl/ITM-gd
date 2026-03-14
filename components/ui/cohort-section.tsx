@@ -51,7 +51,7 @@ export function CohortSection({ }: CohortSectionProps = {}) {
 
   const handleApplyClick = () => {
     Analytics.trackCTAClick('Cohort Join Today');
-    window.location.href = 'https://whop.com/checkout/plan_T4Ymve5JhqpY7';
+    window.location.href = 'https://www.launchpass.com/tradeitm/cohort';
   };
 
   return (

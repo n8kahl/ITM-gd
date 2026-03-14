@@ -405,7 +405,7 @@ export default function Home() {
                   "💬 Community Access",
                   "📊 81% Win Rate Track Record",
                 ]}
-                whopLink="https://whop.com/checkout/plan_7Mu2Es9z1CsUF"
+                whopLink="https://www.launchpass.com/tradeitm/7-day-trial"
                 tier="trial"
                 tagline="Limited Time"
                 isYearly={false}
@@ -425,7 +425,7 @@ export default function Home() {
                   "🔔 High-volume & momentum alerts",
                   "🧠 Educational commentary & trade rationale",
                 ]}
-                whopLink={pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-core-sniper-access-4SyQGbvEQmLlV7/app/"}
+                whopLink={pricingTiers.find(t => t.id === 'core')?.monthly_link || "https://www.launchpass.com/tradeitm/core-sniper"}
                 tier="core"
                 tagline={pricingTiers.find(t => t.id === 'core')?.tagline || "Execution focused education"}
                 isYearly={false}
@@ -447,7 +447,7 @@ export default function Home() {
                   "📊 Longer term market structure insight",
                   "🎯 Capital allocation education",
                 ]}
-                whopLink={pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-pro-sniper-access-N4FxB11gG2c5Zm/app/"}
+                whopLink={pricingTiers.find(t => t.id === 'pro')?.monthly_link || "https://www.launchpass.com/tradeitm/pro-sniper"}
                 tier="pro"
                 tagline={pricingTiers.find(t => t.id === 'pro')?.tagline || "More patience & strategy, not just speed"}
                 isYearly={false}
@@ -468,7 +468,7 @@ export default function Home() {
                   "🎯 Higher-level trade commentary",
                   "🧠 Risk scaling & portfolio mindset",
                 ]}
-                whopLink={pricingTiers.find(t => t.id === 'executive')?.monthly_link || "https://whop.com/joined/trade-in-the-money/trade-itm-executive-sniper-access-0AoRousnaGeJzN/app/"}
+                whopLink={pricingTiers.find(t => t.id === 'executive')?.monthly_link || "https://www.launchpass.com/tradeitm/executive-sniper"}
                 tier="executive"
                 tagline={pricingTiers.find(t => t.id === 'executive')?.tagline || "Maximum conviction, maximum execution"}
                 isYearly={false}
@@ -520,36 +520,6 @@ export default function Home() {
             </div>
           </RevealContent>
         </div>
-      </section>
-
-      {/* Affiliate Banner - Subtle CTA */}
-      <section className="container mx-auto px-4 py-8">
-        <RevealContent>
-          <div className="max-w-2xl mx-auto">
-            <a
-              href="https://whop.com/trade-in-the-money/affiliates"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-center justify-center gap-3 py-4 px-6 rounded-lg border border-champagne/20 bg-champagne/[0.03] hover:bg-champagne/[0.06] hover:border-champagne/30 transition-all duration-300"
-            >
-              <span className="text-sm text-platinum/70 group-hover:text-platinum/90 transition-colors">
-                Have an audience?
-              </span>
-              <span className="text-sm font-medium text-champagne group-hover:text-champagne/90 transition-colors">
-                Become a TITM Affiliate and earn 20%
-              </span>
-              <svg
-                className="w-4 h-4 text-champagne/60 group-hover:text-champagne group-hover:translate-x-0.5 transition-all duration-300"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </a>
-          </div>
-        </RevealContent>
       </section>
 
       {/* Precision Cohort Section - 90 Day Mentorship */}
@@ -680,7 +650,7 @@ export default function Home() {
                     {
                       step: "1",
                       title: "Complete Your Purchase",
-                      description: "Click any 'Get Started' button above to be redirected to our secure Whop checkout page."
+                      description: "Click any 'Get Started' button above to be redirected to our secure LaunchPass checkout page."
                     },
                     {
                       step: "2",
@@ -762,7 +732,7 @@ export default function Home() {
                 <>
                   <span className="text-sm text-muted-foreground/40 font-medium">or</span>
                   <a
-                    href="https://whop.com/checkout/plan_7Mu2Es9z1CsUF"
+                    href="https://www.launchpass.com/tradeitm/7-day-trial"
                     className={cn(
                       "inline-flex items-center justify-center min-w-[220px]",
                       "px-8 py-4 rounded-sm text-sm font-semibold tracking-wider uppercase",
@@ -808,7 +778,6 @@ export default function Home() {
               <a href="/privacy-policy" className="hover:text-champagne transition-colors duration-300">Privacy Policy</a>
               <a href="/terms-of-service" className="hover:text-champagne transition-colors duration-300">Terms of Service</a>
               <a href="/refund-policy" className="hover:text-champagne transition-colors duration-300">Refund Policy</a>
-              <a href="https://whop.com/trade-in-the-money/affiliates" target="_blank" rel="noopener noreferrer" className="hover:text-champagne transition-colors duration-300">Affiliates</a>
               <button onClick={() => setIsContactModalOpen(true)} className="hover:text-champagne transition-colors duration-300">Contact</button>
             </div>
           </div>
