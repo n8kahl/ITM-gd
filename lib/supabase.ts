@@ -57,17 +57,18 @@ export const supabase = createBrowserSupabase()
 // ============================================
 
 export async function addSubscriber(subscriber: Omit<Subscriber, 'id' | 'created_at' | 'updated_at'>) {
-  const { data, error } = await supabase
+  // Note: Do NOT chain .select() here. The anon/public role only has INSERT
+  // permission on subscribers (no SELECT). Chaining .select() would use
+  // RETURNING which requires SELECT access and causes an RLS error.
+  const { error } = await supabase
     .from('subscribers')
     .insert([subscriber])
-    .select()
-    .single()
 
   if (error) {
     throw error
   }
 
-  return data
+  return { success: true }
 }
 
 export async function getSubscribers(limit = 100, offset = 0) {
@@ -86,8 +87,13 @@ export async function getSubscribers(limit = 100, offset = 0) {
 // ============================================
 
 export async function addContactSubmission(contact: Omit<ContactSubmission, 'id' | 'created_at'>) {
-  // Prepare the insert data
+  // Generate the ID client-side so we can reference it in the cohort application
+  // and Discord notification without needing .select() (which requires SELECT
+  // permission that the anon/public role does not have).
+  const submissionId = crypto.randomUUID()
+
   const insertData = {
+    id: submissionId,
     name: contact.name,
     email: contact.email,
     message: contact.message,
@@ -96,11 +102,9 @@ export async function addContactSubmission(contact: Omit<ContactSubmission, 'id'
     metadata: contact.metadata || {},
   }
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('contact_submissions')
     .insert([insertData])
-    .select()
-    .single()
 
   if (error) throw error
 
@@ -121,7 +125,7 @@ export async function addContactSubmission(contact: Omit<ContactSubmission, 'id'
     const { error: cohortError } = await supabase
       .from('cohort_applications')
       .insert({
-        contact_submission_id: data.id,
+        contact_submission_id: submissionId,
         name: contact.name,
         email: contact.email,
         phone: contact.phone || null,
@@ -152,7 +156,7 @@ export async function addContactSubmission(contact: Omit<ContactSubmission, 'id'
           ? 'Application Wizard'
           : (isLegacyApplication ? 'Cohort Apply Button' : (contact.metadata?.source || 'Contact Form')),
         metadata: contact.metadata,
-        submission_id: data.id,
+        submission_id: submissionId,
       }),
     })
   } catch (notifyError) {
@@ -160,7 +164,7 @@ export async function addContactSubmission(contact: Omit<ContactSubmission, 'id'
     console.error('Failed to send Discord notification:', notifyError)
   }
 
-  return data
+  return { id: submissionId, success: true }
 }
 
 export async function getContactSubmissions(limit = 100, offset = 0) {
