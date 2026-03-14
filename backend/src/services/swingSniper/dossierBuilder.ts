@@ -35,6 +35,11 @@ function summarizeNewsNarrative(articles: MassiveNewsArticle[]): {
   momentum: SwingSniperNarrativeMomentum;
   summary: string;
 } {
+  const compactHeadline = (headline: string): string => {
+    const normalized = headline.replace(/\s+/g, ' ').trim();
+    return normalized.length > 78 ? `${normalized.slice(0, 75).trimEnd()}…` : normalized;
+  };
+
   if (articles.length === 0) {
     return {
       momentum: 'quiet',
@@ -51,23 +56,30 @@ function summarizeNewsNarrative(articles: MassiveNewsArticle[]): {
     negativeHits += NEGATIVE_NEWS_TERMS.filter((term) => haystack.includes(term)).length;
   }
 
+  const leadHeadline = compactHeadline(articles[0].title);
+  const secondHeadline = articles[1] ? compactHeadline(articles[1].title) : null;
+
   if (positiveHits > negativeHits + 1) {
     return {
       momentum: 'positive',
-      summary: 'Recent headlines skew constructive, with the tape leaning toward growth, margin, or product-expansion language.',
+      summary: secondHeadline
+        ? `Constructive tone is building: "${leadHeadline}" and "${secondHeadline}" both support a stronger risk narrative.`
+        : `Constructive tone is building, led by "${leadHeadline}".`,
     };
   }
 
   if (negativeHits > positiveHits + 1) {
     return {
       momentum: 'negative',
-      summary: 'Recent headlines lean defensive, with concern-driven language outweighing constructive follow-through.',
+      summary: secondHeadline
+        ? `Defensive tone is building: "${leadHeadline}" and "${secondHeadline}" both lean cautionary.`
+        : `Defensive tone is building, led by "${leadHeadline}".`,
     };
   }
 
   return {
     momentum: 'mixed',
-    summary: 'Headline tone is mixed. The cleaner edge still comes from the vol surface and the upcoming event stack.',
+    summary: `Headline tone is mixed around "${leadHeadline}". The cleaner edge still comes from surface dislocation and the event stack.`,
   };
 }
 
@@ -204,7 +216,7 @@ function toNewsEvent(article: MassiveNewsArticle): SwingSniperCatalystEvent {
     date,
     daysUntil: Math.max(0, daysUntil(date)),
     impact: 'low',
-    summary: article.description || 'Recent headline context',
+    summary: article.description || article.title,
     url: article.article_url,
   };
 }
@@ -274,7 +286,11 @@ export async function buildSwingSniperDossier(
     : economicEvents[0]
       ? `${economicEvents[0].event} ${describeDaysUntilLabel(daysUntil(economicEvents[0].date))}`
       : 'No near-dated catalyst';
-  const thesis = buildSwingSniperThesis(direction, catalystLabel);
+  const thesis = buildSwingSniperThesis(direction, catalystLabel, {
+    ivVsRvGap,
+    ivRank: ivProfile.ivRank.ivRank,
+    termStructureShape: ivProfile.termStructure.shape,
+  });
   const narrative = summarizeNewsNarrative(newsArticles);
   const savedSymbols = new Set(watchlistState.savedTheses.map((item) => item.symbol));
 

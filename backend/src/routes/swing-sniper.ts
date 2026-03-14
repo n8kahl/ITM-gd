@@ -923,10 +923,13 @@ router.get(
       const { symbol } = (req as unknown as { validatedParams: { symbol: string } }).validatedParams;
       const normalizedSymbol = sanitizeSymbols([symbol], 1)[0] || symbol.toUpperCase();
       const cacheKey = toCacheKey('dossier', `${req.user!.id}:${normalizedSymbol}`);
-      const cached = await cacheGet<SwingSniperDossierContract>(cacheKey);
-      if (cached) {
-        res.json(cached);
-        return;
+      const refreshRequested = req.query.refresh === '1';
+      if (!refreshRequested) {
+        const cached = await cacheGet<SwingSniperDossierContract>(cacheKey);
+        if (cached) {
+          res.json(cached);
+          return;
+        }
       }
 
       const legacyPayload = await buildSwingSniperDossier(req.user!.id, normalizedSymbol);
