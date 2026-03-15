@@ -11,7 +11,17 @@ export interface HealthPayload {
   version: string
   checks: {
     app: DependencyCheck
-    supabase: DependencyCheck
+    supabase?: DependencyCheck
+  }
+}
+
+function buildBaseHealthPayload(): Pick<HealthPayload, 'timestamp' | 'version' | 'checks'> {
+  return {
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version ?? 'unknown',
+    checks: {
+      app: { status: 'up' },
+    },
   }
 }
 
@@ -54,20 +64,25 @@ async function checkSupabase(): Promise<DependencyCheck> {
   }
 }
 
-export async function buildHealthPayload(): Promise<HealthPayload> {
-  const timestamp = new Date().toISOString()
-  const version = process.env.npm_package_version ?? 'unknown'
+export function buildLivenessPayload(): HealthPayload {
+  return {
+    status: 'ok',
+    ...buildBaseHealthPayload(),
+  }
+}
+
+export async function buildReadinessPayload(): Promise<HealthPayload> {
   const supabase = await checkSupabase()
   const degraded = supabase.status === 'down'
+  const base = buildBaseHealthPayload()
 
   return {
     status: degraded ? 'degraded' : 'ok',
-    timestamp,
-    version,
+    timestamp: base.timestamp,
+    version: base.version,
     checks: {
-      app: { status: 'up' },
+      ...base.checks,
       supabase,
     },
   }
 }
-

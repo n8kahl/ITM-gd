@@ -42,16 +42,47 @@ describe('/api/health route', () => {
     else process.env.npm_package_version = previousVersion
   })
 
-  it('returns 200 with ok status when supabase is reachable', async () => {
-    mockCreateClient.mockReturnValue(buildSupabaseClient())
+  it('returns 200 with ok status for the liveness probe without touching supabase', async () => {
+    const response = await getHealth()
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(mockCreateClient).not.toHaveBeenCalled()
+    expect(payload).toMatchObject({
+      status: 'ok',
+      version: '1.2.3',
+      checks: {
+        app: { status: 'up' },
+      },
+    })
+  })
+
+  it('returns 200 with ok status for liveness even when supabase env is missing', async () => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
     const response = await getHealth()
     const payload = await response.json()
 
     expect(response.status).toBe(200)
+    expect(mockCreateClient).not.toHaveBeenCalled()
     expect(payload).toMatchObject({
       status: 'ok',
-      version: '1.2.3',
+      checks: {
+        app: { status: 'up' },
+      },
+    })
+  })
+
+  it('returns 200 for the readiness endpoint when supabase is reachable', async () => {
+    mockCreateClient.mockReturnValue(buildSupabaseClient())
+
+    const response = await getReadyHealth()
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toMatchObject({
+      status: 'ok',
       checks: {
         app: { status: 'up' },
         supabase: { status: 'up' },
@@ -59,25 +90,7 @@ describe('/api/health route', () => {
     })
   })
 
-  it('returns 200 with degraded status for the default liveness probe when supabase is down', async () => {
-    mockCreateClient.mockReturnValue(buildSupabaseClient({ message: 'connection failed' }))
-
-    const response = await getHealth()
-    const payload = await response.json()
-
-    expect(response.status).toBe(200)
-    expect(payload).toMatchObject({
-      status: 'degraded',
-      checks: {
-        supabase: {
-          status: 'down',
-          message: 'connection failed',
-        },
-      },
-    })
-  })
-
-  it('returns 503 for the strict readiness endpoint when supabase is down', async () => {
+  it('returns 503 for the readiness endpoint when supabase is down', async () => {
     mockCreateClient.mockReturnValue(buildSupabaseClient({ message: 'connection failed' }))
 
     const response = await getReadyHealth()
@@ -95,14 +108,14 @@ describe('/api/health route', () => {
     })
   })
 
-  it('reports missing supabase env as degraded without failing liveness', async () => {
+  it('reports missing supabase env as degraded on the readiness endpoint', async () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL
     delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    const response = await getHealth()
+    const response = await getReadyHealth()
     const payload = await response.json()
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(503)
     expect(mockCreateClient).not.toHaveBeenCalled()
     expect(payload).toMatchObject({
       status: 'degraded',
@@ -110,24 +123,6 @@ describe('/api/health route', () => {
         supabase: {
           status: 'down',
           message: 'Missing Supabase environment configuration',
-        },
-      },
-    })
-  })
-
-  it('returns 200 for the liveness endpoint even when supabase is down', async () => {
-    mockCreateClient.mockReturnValue(buildSupabaseClient({ message: 'connection failed' }))
-
-    const response = await getHealth()
-    const payload = await response.json()
-
-    expect(response.status).toBe(200)
-    expect(payload).toMatchObject({
-      status: 'degraded',
-      checks: {
-        supabase: {
-          status: 'down',
-          message: 'connection failed',
         },
       },
     })
