@@ -623,7 +623,7 @@ async function fetchWithAuth(
 
   if (response.status === 401) {
     const refreshedToken = await refreshBrowserAccessToken()
-    if (refreshedToken && refreshedToken !== token) {
+    if (refreshedToken) {
       response = proxyUrl
         ? await fetchWithTransportFallback(url, proxyUrl, options, refreshedToken, signal)
         : await fetchWithAuthorization(url, options, refreshedToken, signal)

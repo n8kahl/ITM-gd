@@ -1008,7 +1008,24 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      let currentSession = session
+      let { data: { user }, error: userError } = await supabase.auth.getUser()
+
+      if ((userError || !user) && currentSession.refresh_token) {
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
+        if (!refreshError && refreshedSession) {
+          currentSession = refreshedSession
+          user = refreshedSession.user ?? user
+
+          if (!user) {
+            const { data: { user: refreshedUser }, error: refreshedUserError } = await supabase.auth.getUser()
+            user = refreshedUser ?? null
+            userError = refreshedUserError
+          } else {
+            userError = null
+          }
+        }
+      }
 
       if (userError || !user) {
         setState(prev => ({
@@ -1022,7 +1039,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       setState(prev => ({
         ...prev,
         user,
-        session,
+        session: currentSession,
         isAuthenticated: true,
       }))
       const isAdmin = await fetchIsAdminFromProfiles(user.id)
@@ -1121,7 +1138,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         // No cached profile - sync Discord roles immediately
-        setState(prev => ({ ...prev, session, user }))
+        setState(prev => ({ ...prev, session: currentSession, user }))
 
         // Validate Supabase URL is configured
         if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -1130,7 +1147,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
         try {
           const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`
-          let accessToken = session.access_token
+          let accessToken = currentSession.access_token
           const executeSync = async (token: string) => {
             const response = await fetchWithTimeout(
               edgeFunctionUrl,

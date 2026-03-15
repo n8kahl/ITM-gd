@@ -3,6 +3,7 @@
 
 import useSWR from 'swr';
 import { useMemberAuth } from '@/contexts/MemberAuthContext';
+import { refreshBrowserAccessToken } from '@/lib/browser-auth';
 
 type MarketKey = [url: string, token: string];
 
@@ -13,6 +14,15 @@ const MARKET_SWR_BASE_CONFIG = {
     shouldRetryOnError: false,
     revalidateOnFocus: false,
 } as const;
+
+async function fetchMarketWithToken(targetUrl: string, token: string): Promise<Response> {
+    return fetch(targetUrl, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store',
+    });
+}
 
 function resolveMarketUrl(url: string): string {
     // Keep same-origin /api/market by default so mobile + desktop share auth and transport behavior.
@@ -93,14 +103,20 @@ const fetcher = async (key: MarketKey) => {
 
     let res: Response;
     try {
-        res = await fetch(targetUrl, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-            cache: 'no-store',
-        });
+        res = await fetchMarketWithToken(targetUrl, token);
     } catch {
         return buildMarketFallback(url);
+    }
+
+    if (res.status === 401) {
+        const refreshedToken = await refreshBrowserAccessToken();
+        if (refreshedToken) {
+            try {
+                res = await fetchMarketWithToken(targetUrl, refreshedToken);
+            } catch {
+                return buildMarketFallback(url);
+            }
+        }
     }
 
     const fallbackHeader = res.headers.get('X-Market-Fallback');
