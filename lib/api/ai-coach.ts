@@ -5,6 +5,8 @@
  * Uses Supabase JWT for authentication.
  */
 
+import { refreshBrowserAccessToken } from '@/lib/browser-auth'
+
 function resolveApiBase(): string {
   const configured = (
     process.env.NEXT_PUBLIC_AI_COACH_API_URL ||
@@ -615,12 +617,20 @@ async function fetchWithAuth(
   signal?: AbortSignal
 ): Promise<Response> {
   const proxyUrl = resolveAICoachProxyUrl(url)
-  const response = proxyUrl
+  let response = proxyUrl
     ? await fetchWithTransportFallback(url, proxyUrl, options, token, signal)
     : await fetchWithAuthorization(url, options, token, signal)
 
   if (response.status === 401) {
-    // Token might be expired - throw specific error so hook can handle refresh
+    const refreshedToken = await refreshBrowserAccessToken()
+    if (refreshedToken && refreshedToken !== token) {
+      response = proxyUrl
+        ? await fetchWithTransportFallback(url, proxyUrl, options, refreshedToken, signal)
+        : await fetchWithAuthorization(url, options, refreshedToken, signal)
+    }
+  }
+
+  if (response.status === 401) {
     const error: APIError = await response.json().catch(() => ({
       error: 'Unauthorized',
       message: 'Session expired. Please sign in again.',

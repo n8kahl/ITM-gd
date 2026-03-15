@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 
+import { refreshBrowserAccessToken } from '@/lib/browser-auth'
+
 // ============================================
 // TYPES
 // ============================================
@@ -693,8 +695,6 @@ function ensureSocketConnection(): void {
     if (event.code === WS_CLOSE_UNAUTHORIZED || event.code === WS_CLOSE_FORBIDDEN) {
       sharedState.error = event.reason || 'Authentication required for live stream'
       sharedState.connectionStatus = 'degraded'
-      wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
-      wsNextConnectAt = wsRetryPausedUntil
       if (getPriceStreamDebugEnabled()) {
         console.warn('[price-stream] WebSocket auth close', {
           code: event.code,
@@ -702,11 +702,30 @@ function ensureSocketConnection(): void {
         })
       }
       notifyConsumers()
-      clearReconnectTimer()
-      wsReconnectTimer = setTimeout(() => {
-        wsReconnectTimer = null
-        ensureSocketConnection()
-      }, WS_RETRY_PAUSE_MS)
+
+      void (async () => {
+        const refreshedToken = await refreshBrowserAccessToken()
+        if (refreshedToken) {
+          wsRetryPausedUntil = 0
+          wsNextConnectAt = 0
+          wsReconnectAttempt = 0
+          wsConsecutiveConnectFailures = 0
+          clearReconnectTimer()
+          wsReconnectTimer = setTimeout(() => {
+            wsReconnectTimer = null
+            ensureSocketConnection()
+          }, 150)
+          return
+        }
+
+        wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
+        wsNextConnectAt = wsRetryPausedUntil
+        clearReconnectTimer()
+        wsReconnectTimer = setTimeout(() => {
+          wsReconnectTimer = null
+          ensureSocketConnection()
+        }, WS_RETRY_PAUSE_MS)
+      })()
       return
     }
 
