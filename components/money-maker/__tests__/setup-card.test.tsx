@@ -1,10 +1,11 @@
 /* @vitest-environment jsdom */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { mockUseMoneyMaker } = vi.hoisted(() => ({
+const { mockUseMoneyMaker, mockOpenWorkspace } = vi.hoisted(() => ({
   mockUseMoneyMaker: vi.fn(),
+  mockOpenWorkspace: vi.fn(),
 }))
 
 vi.mock('../money-maker-provider', () => ({
@@ -35,12 +36,12 @@ describe('SetupCard', () => {
             orbRegime: 'trending_up',
             strongestConfluence: {
               priceLow: 682.5,
-              priceHigh: 683.4,
-              score: 3.6,
-              label: 'strong',
+              priceHigh: 682.9,
+              score: 4.6,
+              label: 'fortress',
               levels: [
                 { source: 'VWAP', price: 682.9, weight: 1.5 },
-                { source: '8 EMA', price: 682.7, weight: 1.2 },
+                { source: 'Hourly Low 682.50', price: 682.5, weight: 1.4 },
               ],
               isKingQueen: true,
             },
@@ -49,13 +50,20 @@ describe('SetupCard', () => {
               ema8: 682.7,
               ema21: 681.8,
               ema34: 681.1,
-              sma200: 677.8,
+              sma200: null,
+            },
+            hourlyLevels: {
+              nearestSupport: 682.5,
+              nextSupport: 681.8,
+              nearestResistance: 684.2,
+              nextResistance: 685.1,
             },
             lastCandleAt: Date.UTC(2026, 2, 10, 17, 30),
           },
         ],
         isLoading: false,
       },
+      openWorkspace: mockOpenWorkspace,
     })
 
     render(<SetupCard symbol="SPY" />)
@@ -64,7 +72,16 @@ describe('SetupCard', () => {
     expect(screen.getByText('$683.10')).toBeInTheDocument()
     expect(screen.getByText('+0.18%')).toBeInTheDocument()
     expect(screen.getByText('Monitoring')).toBeInTheDocument()
-    expect(screen.getByText('Strongest zone:')).toBeInTheDocument()
+    expect(screen.getByText('Heavy support cluster')).toBeInTheDocument()
+    expect(screen.getByText('S1 682.50')).toBeInTheDocument()
+    expect(screen.getByText('R1 684.20')).toBeInTheDocument()
+    expect(screen.queryByText('Fortress')).not.toBeInTheDocument()
+    expect(screen.queryByText('Hourly Low 682.50 682.50')).not.toBeInTheDocument()
+    expect(screen.getAllByText('--')).not.toHaveLength(0)
     expect(screen.queryByText('Waiting for Patience Candle')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Plan' }))
+
+    expect(mockOpenWorkspace).toHaveBeenCalledWith('SPY')
   })
 })

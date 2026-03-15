@@ -59,6 +59,13 @@ export interface MoneyMakerIndicatorSnapshot {
     sma200: number | null
 }
 
+export interface MoneyMakerHourlyLevelSummary {
+    nearestSupport: number | null
+    nextSupport: number | null
+    nearestResistance: number | null
+    nextResistance: number | null
+}
+
 export interface MoneyMakerSymbolSnapshot {
     symbol: string
     price: number
@@ -66,6 +73,7 @@ export interface MoneyMakerSymbolSnapshot {
     priceChangePercent: number | null
     orbRegime: 'trending_up' | 'trending_down' | 'choppy'
     strongestConfluence: ConfluenceZone | null
+    hourlyLevels?: MoneyMakerHourlyLevelSummary | null
     indicators: MoneyMakerIndicatorSnapshot
     lastCandleAt: number
 }
@@ -107,6 +115,75 @@ export interface MoneyMakerSignal {
     status: 'forming' | 'ready' | 'expired'
     ttlSeconds: number             // Auto-expire after N seconds
     expiresAt: number
+}
+
+export type MoneyMakerExecutionState =
+    | 'watching'
+    | 'armed'
+    | 'triggered'
+    | 'extended'
+    | 'target1_hit'
+    | 'target2_in_play'
+    | 'failed'
+    | 'closed'
+
+export type MoneyMakerEntryQuality = 'ideal' | 'acceptable' | 'late'
+
+export type MoneyMakerTimeWarning = 'normal' | 'late_session' | 'avoid_new_entries'
+
+export interface MoneyMakerExecutionPlan {
+    symbol: string
+    signalId: string | null
+    executionState: MoneyMakerExecutionState
+    triggerDistance: number
+    triggerDistancePct: number
+    entry: number
+    stop: number
+    target1: number
+    target2: number | null
+    riskPerShare: number
+    rewardToTarget1: number
+    rewardToTarget2: number | null
+    riskRewardRatio: number
+    entryQuality: MoneyMakerEntryQuality
+    idealEntryLow: number
+    idealEntryHigh: number
+    chaseCutoff: number
+    timeWarning: MoneyMakerTimeWarning
+    invalidationReason: string
+    holdWhile: string[]
+    reduceWhen: string[]
+    exitImmediatelyWhen: string[]
+}
+
+export interface MoneyMakerContractCandidate {
+    label: 'primary' | 'conservative' | 'lower_cost'
+    optionSymbol: string
+    expiry: string
+    strike: number
+    type: 'call' | 'put'
+    bid: number
+    ask: number
+    mid: number
+    spreadPct: number
+    delta: number | null
+    theta: number | null
+    impliedVolatility: number | null
+    openInterest: number | null
+    volume: number | null
+    premiumPerContract: number
+    dte: number
+    quality: 'green' | 'amber'
+    explanation: string
+}
+
+export interface MoneyMakerWorkspaceResponse {
+    symbolSnapshot: MoneyMakerSymbolSnapshot
+    activeSignal: MoneyMakerSignal | null
+    executionPlan: MoneyMakerExecutionPlan | null
+    contracts: MoneyMakerContractCandidate[]
+    generatedAt: number
+    degradedReason: string | null
 }
 
 export interface MoneyMakerSnapshotResult {

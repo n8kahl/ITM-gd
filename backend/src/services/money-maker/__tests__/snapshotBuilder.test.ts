@@ -152,9 +152,31 @@ describe('buildSnapshot baseline contracts', () => {
         'Open Price',
         'Fib 0.236',
         'Fib 0.382',
+        'Hourly High',
+        'Hourly Low',
       ]),
     )
-    expect(sources.some((source) => source.startsWith('Hourly '))).toBe(true)
+    expect(sources.some((source) => /^Hourly (High|Low) \d/.test(source))).toBe(false)
+  })
+
+  it('returns a board-friendly hourly ladder and hides incomplete long-lookback indicators', async () => {
+    mockFetchAllSymbolData.mockResolvedValue(createMultiSessionFixture())
+
+    const snapshot = await buildSnapshot(['SPY'])
+
+    expect(snapshot.symbolSnapshots[0]).toEqual(
+      expect.objectContaining({
+        hourlyLevels: {
+          nearestSupport: 184,
+          nextSupport: 176,
+          nearestResistance: 205,
+          nextResistance: 210,
+        },
+        indicators: expect.objectContaining({
+          sma200: null,
+        }),
+      }),
+    )
   })
 
   it('uses the next hourly level when calculating risk-reward', async () => {
