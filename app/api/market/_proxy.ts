@@ -117,34 +117,48 @@ export async function proxyMarketGet(request: Request, endpoint: MarketEndpoint)
     const backendBase = resolveBackendBaseUrl(request).replace(/\/+$/, '');
     const upstream = `${backendBase}/api/market/${endpoint}${url.search}`;
 
-    let authHeader: string | undefined;
+    let incomingAuthHeader: string | undefined;
+    let sessionAuthHeader: string | undefined;
     const incomingAuth = request.headers.get('authorization') || request.headers.get('Authorization');
     if (incomingAuth && /^bearer\s+/i.test(incomingAuth)) {
-      authHeader = incomingAuth;
+      incomingAuthHeader = incomingAuth;
     }
 
     try {
-      if (!authHeader) {
-        const supabase = await createServerSupabaseClient();
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          authHeader = `Bearer ${session.access_token}`;
-        }
+      const supabase = await createServerSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        sessionAuthHeader = `Bearer ${session.access_token}`;
       }
     } catch {
       // Keep proxy public when no session is available.
     }
 
+    const primaryAuthHeader = incomingAuthHeader || sessionAuthHeader;
+    const fallbackAuthHeader =
+      incomingAuthHeader && sessionAuthHeader && incomingAuthHeader !== sessionAuthHeader
+        ? sessionAuthHeader
+        : undefined;
+
+    const fetchUpstream = (authHeader: string | undefined, signal: AbortSignal) =>
+      fetch(upstream, {
+        headers: {
+          ...(authHeader ? { Authorization: authHeader } : {}),
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+        signal,
+      });
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), MARKET_PROXY_TIMEOUT_MS);
-    const response = await fetch(upstream, {
-      headers: {
-        ...(authHeader ? { Authorization: authHeader } : {}),
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeoutId));
+    let response = await fetchUpstream(primaryAuthHeader, controller.signal).finally(() => clearTimeout(timeoutId));
+    if (response.status === 401 && fallbackAuthHeader) {
+      const retryController = new AbortController();
+      const retryTimeoutId = setTimeout(() => retryController.abort(), MARKET_PROXY_TIMEOUT_MS);
+      response = await fetchUpstream(fallbackAuthHeader, retryController.signal)
+        .finally(() => clearTimeout(retryTimeoutId));
+    }
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {

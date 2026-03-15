@@ -684,7 +684,10 @@ function shouldRetryViaAlternateTransport(error: unknown): boolean {
 }
 
 function shouldRetryStatusViaAlternateTransport(status: number): boolean {
-  return status === 401 || status === 403 || status === 404 || status >= 500
+  // Auth failures are handled by fetchWithAuth via Supabase session refresh.
+  // Falling straight through to the direct backend with the same bearer token
+  // just duplicates 401s and bypasses the recovery path.
+  return status === 404 || status === 408 || status === 429 || status >= 500
 }
 
 async function fetchWithTransportFallback(
