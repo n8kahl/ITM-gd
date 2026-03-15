@@ -168,17 +168,44 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const reveal = searchParams.get('reveal') === 'true'
 
-    const { data, error } = await supabase
-      .from('app_settings')
-      .select('*')
-      .order('key', { ascending: true })
+    const [{ data, error }, accessControlSettingsResult] = await Promise.all([
+      supabase
+        .from('app_settings')
+        .select('*')
+        .order('key', { ascending: true }),
+      supabase
+        .from('access_control_settings')
+        .select('members_allowed_role_ids')
+        .eq('singleton', true)
+        .maybeSingle(),
+    ])
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    const canonicalMembersRoleIds = normalizeRoleIds(
+      accessControlSettingsResult.data?.members_allowed_role_ids,
+    )
+
+    const appSettings = (data || []).filter((setting) => (
+      setting.key !== 'members_required_role_ids'
+      && setting.key !== 'members_required_role_id'
+    ))
+
+    const mergedSettings = [
+      ...appSettings,
+      {
+        key: 'members_required_role_ids',
+        value: JSON.stringify(canonicalMembersRoleIds),
+        description: 'Canonical members gate roles from access_control_settings',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]
+
     // Mask sensitive values unless reveal=true
-    const settings = (data || []).map(setting => {
+    const settings = mergedSettings.map(setting => {
       if (!reveal && SENSITIVE_KEYS.some(k => setting.key.includes(k))) {
         return {
           ...setting,
@@ -197,6 +224,61 @@ export async function GET(request: NextRequest) {
   }
 }
 
+async function updateCanonicalMembersAllowedRoles(params: {
+  supabase: ReturnType<typeof getSupabaseAdmin>
+  roleIds: string[]
+}) {
+  const { supabase, roleIds } = params
+
+  const { error } = await supabase
+    .from('access_control_settings')
+    .upsert({
+      singleton: true,
+      members_allowed_role_ids: roleIds,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'singleton' })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
+async function updateCanonicalRoleTierMapping(params: {
+  supabase: ReturnType<typeof getSupabaseAdmin>
+  rawValue: unknown
+}) {
+  const { supabase, rawValue } = params
+  const normalized = normalizeRoleTierMapping(rawValue)
+  if (normalized.error || !normalized.value) {
+    throw new Error(normalized.error || 'Invalid role_tier_mapping payload')
+  }
+
+  const parsed = JSON.parse(normalized.value) as Record<string, string>
+  const tierToRoleId: Record<string, string | null> = {
+    core: null,
+    pro: null,
+    executive: null,
+  }
+
+  for (const [roleId, tier] of Object.entries(parsed)) {
+    tierToRoleId[tier] = roleId
+  }
+
+  for (const [tierId, discordRoleId] of Object.entries(tierToRoleId)) {
+    const { error } = await supabase
+      .from('pricing_tiers')
+      .update({
+        discord_role_id: discordRoleId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', tierId)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+  }
+}
+
 // POST - Create new setting
 export async function POST(request: NextRequest) {
   if (!await isAdminUser()) {
@@ -211,27 +293,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 })
     }
 
-    const normalized = normalizeSettingValue({ key: String(key), value, forCreate: true })
+    const normalizedKey = String(key)
+    const supabase = getSupabaseAdmin()
+
+    if (normalizedKey === 'members_required_role_ids') {
+      const normalized = normalizeSettingValue({ key: normalizedKey, value, forCreate: true })
+      if (normalized.error || !normalized.value) {
+        return NextResponse.json({ error: normalized.error }, { status: 400 })
+      }
+      const roleIds = normalizeRoleIds(normalized.value)
+      await updateCanonicalMembersAllowedRoles({ supabase, roleIds })
+      return NextResponse.json({ success: true, data: { key: normalizedKey, value: JSON.stringify(roleIds) } })
+    }
+
+    if (normalizedKey === 'role_tier_mapping') {
+      await updateCanonicalRoleTierMapping({ supabase, rawValue: value })
+      return NextResponse.json({ success: true, data: { key: normalizedKey, value: JSON.stringify(value) } })
+    }
+
+    const normalized = normalizeSettingValue({ key: normalizedKey, value, forCreate: true })
     if (normalized.error) {
       return NextResponse.json({ error: normalized.error }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
-
-    const { data, error } = await supabase
+    const { data: inserted, error: insertError } = await supabase
       .from('app_settings')
-      .insert({ key, value: normalized.value })
+      .insert({ key: normalizedKey, value: normalized.value })
       .select()
       .single()
 
-    if (error) {
-      if (error.code === '23505') {
+    if (insertError) {
+      if (insertError.code === '23505') {
         return NextResponse.json({ error: 'Setting with this key already exists' }, { status: 409 })
       }
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data: inserted })
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Internal server error',
@@ -253,12 +351,44 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 })
     }
 
-    const normalized = normalizeSettingValue({ key: String(key), value })
+    const normalizedKey = String(key)
+    const supabase = getSupabaseAdmin()
+
+    if (normalizedKey === 'members_required_role_ids') {
+      const normalized = normalizeSettingValue({ key: normalizedKey, value })
+      if (normalized.error || !normalized.value) {
+        return NextResponse.json({ error: normalized.error }, { status: 400 })
+      }
+      const roleIds = normalizeRoleIds(normalized.value)
+      await updateCanonicalMembersAllowedRoles({ supabase, roleIds })
+
+      await logAdminActivity({
+        action: 'access_control_settings_updated',
+        targetType: 'access_control_settings',
+        targetId: 'members_allowed_role_ids',
+        details: { members_allowed_role_ids: roleIds },
+      })
+
+      return NextResponse.json({ success: true, data: { key: normalizedKey, value: JSON.stringify(roleIds) } })
+    }
+
+    if (normalizedKey === 'role_tier_mapping') {
+      await updateCanonicalRoleTierMapping({ supabase, rawValue: value })
+
+      await logAdminActivity({
+        action: 'pricing_tier_role_mapping_updated',
+        targetType: 'pricing_tiers',
+        targetId: 'discord_role_id',
+        details: { role_tier_mapping: value },
+      })
+
+      return NextResponse.json({ success: true, data: { key: normalizedKey, value } })
+    }
+
+    const normalized = normalizeSettingValue({ key: normalizedKey, value })
     if (normalized.error) {
       return NextResponse.json({ error: normalized.error }, { status: 400 })
     }
-
-    const supabase = getSupabaseAdmin()
 
     // Build update object
     const updates: Record<string, any> = {}

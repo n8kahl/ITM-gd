@@ -6,7 +6,6 @@ import {
 } from '@/lib/social/membership'
 
 function createSupabaseMock(config: {
-  roleTierSetting: unknown
   pricingTierRows?: any[]
   profiles?: any[]
   discordProfiles?: any[]
@@ -16,23 +15,12 @@ function createSupabaseMock(config: {
   return {
     from: vi.fn((table: string) => {
       if (table === 'pricing_tiers') {
-        const chain: any = {}
-        chain.not = vi.fn(async () => ({
-          data: config.pricingTierRows || [],
-          error: null,
-        }))
-        return {
-          select: vi.fn(() => chain),
+        const chain: any = {
+          order: vi.fn(async () => ({
+            data: config.pricingTierRows || [],
+            error: null,
+          })),
         }
-      }
-
-      if (table === 'app_settings') {
-        const chain: any = {}
-        chain.eq = vi.fn(() => chain)
-        chain.maybeSingle = vi.fn(async () => ({
-          data: { value: config.roleTierSetting },
-          error: null,
-        }))
         return {
           select: vi.fn(() => chain),
         }
@@ -88,12 +76,12 @@ function createSupabaseMock(config: {
 }
 
 describe('social membership metadata', () => {
-  it('parses role_tier_mapping from JSON string settings', async () => {
+  it('builds the role tier mapping from pricing_tiers.discord_role_id', async () => {
     const supabase = createSupabaseMock({
-      roleTierSetting: JSON.stringify({
-        role_core: 'core',
-        role_pro: 'pro',
-      }),
+      pricingTierRows: [
+        { id: 'core', name: 'Core', discord_role_id: 'role_core', is_active: true, display_order: 1 },
+        { id: 'pro', name: 'Pro', discord_role_id: 'role_pro', is_active: true, display_order: 2 },
+      ],
     })
 
     const mapping = await fetchRoleTierMapping(supabase)
@@ -106,7 +94,9 @@ describe('social membership metadata', () => {
   it('resolves role titles from guild catalog first, then permission mappings as fallback', async () => {
     const userId = '00000000-0000-4000-8000-000000000001'
     const supabase = createSupabaseMock({
-      roleTierSetting: { role_pro: 'pro' },
+      pricingTierRows: [
+        { id: 'pro', name: 'Pro', discord_role_id: 'role_pro', is_active: true, display_order: 2 },
+      ],
       profiles: [{ user_id: userId, display_name: 'Nate' }],
       discordProfiles: [{
         user_id: userId,

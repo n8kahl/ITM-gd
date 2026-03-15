@@ -275,7 +275,7 @@ export function TradeDayReplayShell() {
             Backend admin access not configured
           </h2>
           <p className="mt-2 text-sm text-amber-200/90">
-            Your account can view this page, but the backend admin check returned 403. Ask an administrator to set `profiles.role = admin`.
+            Your account can view this page, but the backend admin check returned 403. Ask an administrator to review your Discord admin role or a temporary admin override in the Member Access Control Center.
           </p>
         </section>
       ) : null}

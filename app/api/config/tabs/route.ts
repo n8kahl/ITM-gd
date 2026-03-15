@@ -1,119 +1,41 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-
-/**
- * Public endpoint: returns tab configurations ordered by sort_order.
- * Used by MemberAuthContext to dynamically render sidebar tabs.
- * Cached with 5-minute revalidation.
- */
-
-type TabConfigRecord = {
-  tab_id: string
-  label: string
-  icon: string
-  path: string
-  required_tier: 'core' | 'pro' | 'executive' | 'admin'
-  required_discord_role_ids?: string[] | null
-  sort_order: number
-  is_required: boolean
-  mobile_visible: boolean
-  is_active: boolean
-  badge_text?: string
-  badge_variant?: string
-  description?: string
-  [key: string]: unknown
-}
-
-const SWING_SNIPER_LEAD_ROLE_ID = '1465515598640447662'
-
-// Default fallback if database is unavailable
-const DEFAULT_TABS: TabConfigRecord[] = [
-  { tab_id: 'dashboard', label: 'Command Center', icon: 'LayoutDashboard', path: '/members', required_tier: 'core', sort_order: 0, is_required: true, mobile_visible: true, is_active: true },
-  { tab_id: 'journal', label: 'Trade Journal', icon: 'BookOpen', path: '/members/journal', required_tier: 'core', sort_order: 1, is_required: false, mobile_visible: true, is_active: true },
-  { tab_id: 'spx-command-center', label: 'SPX Command Center', icon: 'Target', path: '/members/spx-command-center', required_tier: 'pro', sort_order: 3, is_required: false, mobile_visible: true, is_active: true, badge_text: 'LIVE', badge_variant: 'emerald' },
-  { tab_id: 'ai-coach', label: 'AI Coach', icon: 'Bot', path: '/members/ai-coach', required_tier: 'pro', sort_order: 4, is_required: false, mobile_visible: true, is_active: true, badge_text: 'Beta', badge_variant: 'emerald' },
-  {
-    tab_id: 'swing-sniper',
-    label: 'Swing Sniper',
-    icon: 'Radar',
-    path: '/members/swing-sniper',
-    required_tier: 'core',
-    required_discord_role_ids: [SWING_SNIPER_LEAD_ROLE_ID],
-    sort_order: 5,
-    is_required: false,
-    mobile_visible: true,
-    is_active: true,
-    badge_text: 'New',
-    badge_variant: 'champagne',
-    description: 'Options research workspace for catalysts, contracts, and thesis monitoring',
-  },
-  { tab_id: 'library', label: 'Academy', icon: 'GraduationCap', path: '/members/academy', required_tier: 'core', sort_order: 6, is_required: false, mobile_visible: false, is_active: true },
-  { tab_id: 'social', label: 'Social', icon: 'Users', path: '/members/social', required_tier: 'core', sort_order: 7, is_required: false, mobile_visible: true, is_active: true },
-  { tab_id: 'studio', label: 'Trade Studio', icon: 'Palette', path: '/members/studio', required_tier: 'executive', sort_order: 8, is_required: false, mobile_visible: false, is_active: true },
-  { tab_id: 'profile', label: 'Profile', icon: 'UserCircle', path: '/members/profile', required_tier: 'core', sort_order: 99, is_required: true, mobile_visible: true, is_active: true },
-]
-
-type DynamicTabRecord = Record<string, unknown> & {
-  tab_id?: unknown
-  sort_order?: unknown
-  is_active?: unknown
-}
-
-function sortBySortOrder<T extends { sort_order?: unknown }>(rows: T[]): T[] {
-  return [...rows].sort((a, b) => {
-    const aSort = Number(a.sort_order ?? 0)
-    const bSort = Number(b.sort_order ?? 0)
-    return aSort - bSort
-  })
-}
+import { createServiceRoleSupabaseClient } from '@/lib/server-supabase'
 
 export async function GET() {
-  try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabase = createServiceRoleSupabaseClient()
+  if (!supabase) {
+    return NextResponse.json(
+      { success: false, error: 'Tab configuration unavailable' },
+      { status: 503 },
+    )
+  }
 
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      return NextResponse.json({
-        success: true,
-        data: DEFAULT_TABS,
-      })
-    }
+  const { data, error } = await supabase
+    .from('tab_configurations')
+    .select('*')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
 
-    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    })
+  if (error) {
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 },
+    )
+  }
 
-    const { data: tabs, error } = await supabase
-      .from('tab_configurations')
-      .select('*')
-      .order('sort_order', { ascending: true })
+  if (!Array.isArray(data) || data.length === 0) {
+    return NextResponse.json(
+      { success: false, error: 'No active tab configuration found' },
+      { status: 503 },
+    )
+  }
 
-    if (error || !tabs?.length) {
-      return NextResponse.json({
-        success: true,
-        data: sortBySortOrder(DEFAULT_TABS),
-      })
-    }
-
-    const allRows = (tabs || []) as DynamicTabRecord[]
-    const activeRows = allRows.filter((row) => row.is_active !== false)
-
-    return NextResponse.json({
-      success: true,
-      data: sortBySortOrder(activeRows),
-    }, {
+  return NextResponse.json(
+    { success: true, data },
+    {
       headers: {
         'Cache-Control': 'no-store',
       },
-    })
-  } catch (error) {
-    console.error('Error fetching tab configurations:', error)
-    return NextResponse.json({
-      success: true,
-      data: sortBySortOrder(DEFAULT_TABS),
-    })
-  }
+    },
+  )
 }

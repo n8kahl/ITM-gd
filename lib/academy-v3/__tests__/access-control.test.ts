@@ -7,6 +7,10 @@ import {
 } from '@/lib/academy-v3/access-control'
 import { DISCORD_MEMBERS_ROLE_ID, DISCORD_PRIVILEGED_ROLE_ID } from '@/lib/discord-role-access'
 
+vi.mock('@/lib/server-supabase', () => ({
+  createServiceRoleSupabaseClient: () => null,
+}))
+
 function createMaybeSingleChain(result: { data: any; error: any }) {
   const chain: any = {}
   chain.eq = vi.fn(() => chain)
@@ -28,12 +32,16 @@ describe('academy-v3 access control', () => {
             select: vi.fn(() => profileChain),
           }
         }
-        if (table === 'app_settings') {
+        if (table === 'access_control_settings') {
           return {
             select: vi.fn(() => ({
-              in: vi.fn(async () => ({
-                data: [{ key: 'members_required_role_ids', value: JSON.stringify([DISCORD_MEMBERS_ROLE_ID, DISCORD_PRIVILEGED_ROLE_ID]) }],
-                error: null,
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn(async () => ({
+                  data: {
+                    members_allowed_role_ids: [DISCORD_MEMBERS_ROLE_ID, DISCORD_PRIVILEGED_ROLE_ID],
+                  },
+                  error: null,
+                })),
               })),
             })),
           }
@@ -63,12 +71,16 @@ describe('academy-v3 access control', () => {
             select: vi.fn(() => profileChain),
           }
         }
-        if (table === 'app_settings') {
+        if (table === 'access_control_settings') {
           return {
             select: vi.fn(() => ({
-              in: vi.fn(async () => ({
-                data: [{ key: 'members_required_role_ids', value: JSON.stringify([DISCORD_MEMBERS_ROLE_ID, DISCORD_PRIVILEGED_ROLE_ID]) }],
-                error: null,
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn(async () => ({
+                  data: {
+                    members_allowed_role_ids: [DISCORD_MEMBERS_ROLE_ID, DISCORD_PRIVILEGED_ROLE_ID],
+                  },
+                  error: null,
+                })),
               })),
             })),
           }

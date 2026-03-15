@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient, isAdminUser } from '@/lib/supabase-server'
-import { normalizeDiscordRoleIds } from '@/lib/discord-role-access'
-
-const SWING_SNIPER_LEAD_ROLE_ID = '1465515598640447662'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { evaluateMemberAccess } from '@/lib/access-control/evaluate-member-access'
+import { createServiceRoleSupabaseClient } from '@/lib/server-supabase'
 
 function jsonNoStore(payload: Record<string, unknown>, status: number) {
   return NextResponse.json(payload, {
@@ -30,32 +29,19 @@ export async function authorizeSwingSniperMemberRequest(): Promise<NextResponse 
     )
   }
 
-  const isAdmin = await isAdminUser()
-  if (isAdmin) {
-    return null
+  const serviceRoleSupabase = createServiceRoleSupabaseClient()
+  if (!serviceRoleSupabase) {
+    return jsonNoStore(
+      {
+        success: false,
+        error: 'Access control unavailable',
+      },
+      500,
+    )
   }
 
-  const jwtRoleIds = normalizeDiscordRoleIds(
-    (user.app_metadata as { discord_roles?: unknown } | undefined)?.discord_roles,
-  )
-
-  let roleIds = jwtRoleIds
-  try {
-    const { data: profile } = await supabase
-      .from('user_discord_profiles')
-      .select('discord_roles')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (profile) {
-      roleIds = normalizeDiscordRoleIds((profile as { discord_roles?: unknown }).discord_roles)
-    }
-  } catch {
-    // Fall back to JWT role claims when profile lookup is unavailable.
-  }
-
-  const isLead = roleIds.includes(SWING_SNIPER_LEAD_ROLE_ID)
-  if (isLead) {
+  const evaluation = await evaluateMemberAccess(serviceRoleSupabase, { userId: user.id })
+  if (evaluation.isAdmin || evaluation.allowedTabs.includes('swing-sniper')) {
     return null
   }
 

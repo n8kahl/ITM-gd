@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { getSafeRedirect } from '@/lib/safe-redirect'
 import { getAbsoluteUrl } from '@/lib/url-helpers'
+import { evaluateMemberAccess } from '@/lib/access-control/evaluate-member-access'
 import {
   hasAdminRoleAccess,
   hasMembersAreaAccess,
@@ -252,6 +253,13 @@ export async function GET(request: NextRequest) {
       redirectUrl = '/join-discord'
     }
     else {
+      const canonicalAccess = supabaseAdmin
+        ? await evaluateMemberAccess(supabaseAdmin, { userId: currentSession.user.id }).catch((error) => {
+          console.warn('Canonical access evaluation failed during callback:', error)
+          return null
+        })
+        : null
+
       // Members and admin-area fallback checks are role-gated.
       let hasMembersRole = false
       let hasAdminRole = false
@@ -289,6 +297,11 @@ export async function GET(request: NextRequest) {
         } catch (err) {
           console.warn('Role lookup failed during callback (non-fatal):', err)
         }
+      }
+
+      if (canonicalAccess) {
+        hasMembersRole = canonicalAccess.hasMembersAccess
+        hasAdminRole = canonicalAccess.isAdmin
       }
 
       // User explicitly requested a destination

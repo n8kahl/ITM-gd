@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { evaluateMemberAccess } from '@/lib/access-control/evaluate-member-access'
 import { createMiddlewareClient, type AppMetadata } from '@/lib/supabase-middleware'
 import { getAbsoluteUrl } from '@/lib/url-helpers'
 import {
@@ -157,6 +159,36 @@ function jsonError(message: string, status: number): NextResponse {
   return NextResponse.json({ success: false, error: message }, { status })
 }
 
+function createProxyServiceRoleSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return null
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
+}
+
+async function resolveCanonicalAccessForUser(user: any) {
+  if (!user?.id) return null
+
+  const serviceRoleSupabase = createProxyServiceRoleSupabaseClient()
+  if (!serviceRoleSupabase) return null
+
+  try {
+    return await evaluateMemberAccess(serviceRoleSupabase, { userId: user.id })
+  } catch (error) {
+    console.warn('[Middleware] Canonical access evaluation failed:', error)
+    return null
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -256,7 +288,8 @@ export async function proxy(request: NextRequest) {
       return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
     }
 
-    let hasAdminAccess = isAdmin
+    const canonicalAccess = await resolveCanonicalAccessForUser(user)
+    let hasAdminAccess = canonicalAccess?.isAdmin === true || isAdmin
     if (!hasAdminAccess) {
       let roleIds = await resolveDiscordRoleIds(supabase, user)
       hasAdminAccess = hasAdminRoleAccess(roleIds)
@@ -294,9 +327,11 @@ export async function proxy(request: NextRequest) {
       return addSecurityHeaders(NextResponse.redirect(loginUrl), nonce)
     }
 
+    const canonicalAccess = await resolveCanonicalAccessForUser(user)
     const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({ supabase })
     let roleIds = await resolveDiscordRoleIds(supabase, user)
-    let hasMembersRole = hasMembersAreaAccess(roleIds, membersAllowedRoleIds)
+    let hasMembersRole = canonicalAccess?.hasMembersAccess === true
+      || hasMembersAreaAccess(roleIds, membersAllowedRoleIds)
     if (!hasMembersRole) {
       roleIds = await resolveDiscordRoleIds(supabase, user, true)
       hasMembersRole = hasMembersAreaAccess(roleIds, membersAllowedRoleIds)
@@ -346,7 +381,9 @@ export async function proxy(request: NextRequest) {
       }
 
       // Default: send admins to /admin, members to /members
-      let shouldRedirectToAdmin = isAdmin
+      const canonicalAccess = await resolveCanonicalAccessForUser(user)
+      let shouldRedirectToAdmin = canonicalAccess?.isAdmin === true || isAdmin
+      let shouldRedirectToMembers = canonicalAccess?.hasMembersAccess === true
       if (!shouldRedirectToAdmin) {
         let roleIds = await resolveDiscordRoleIds(supabase, user)
         shouldRedirectToAdmin = hasAdminRoleAccess(roleIds)
@@ -354,9 +391,18 @@ export async function proxy(request: NextRequest) {
           roleIds = await resolveDiscordRoleIds(supabase, user, true)
           shouldRedirectToAdmin = hasAdminRoleAccess(roleIds)
         }
+
+        if (!shouldRedirectToMembers) {
+          const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({ supabase })
+          shouldRedirectToMembers = hasMembersAreaAccess(roleIds, membersAllowedRoleIds)
+        }
       }
 
-      const defaultRedirect = shouldRedirectToAdmin ? '/admin' : '/members'
+      const defaultRedirect = shouldRedirectToAdmin
+        ? '/admin'
+        : shouldRedirectToMembers
+          ? '/members'
+          : '/access-denied?area=members'
       return addSecurityHeaders(NextResponse.redirect(getAbsoluteUrl(defaultRedirect, request)), nonce)
     }
 

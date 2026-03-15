@@ -41,13 +41,17 @@ describe('discord-role-access members role resolver', () => {
     ])
   })
 
-  it('resolves members role IDs from app_settings preferred key', async () => {
+  it('resolves members role IDs from access_control_settings', async () => {
     const supabase: any = {
       from: () => ({
         select: () => ({
-          in: async () => ({
-            data: [{ key: 'members_required_role_ids', value: '["33333333333333333","44444444444444444"]' }],
-            error: null,
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: {
+                members_allowed_role_ids: ['33333333333333333', '44444444444444444'],
+              },
+              error: null,
+            }),
           }),
         }),
       }),
@@ -59,20 +63,25 @@ describe('discord-role-access members role resolver', () => {
     ])
   })
 
-  it('falls back to legacy key when preferred key is missing', async () => {
+  it('falls back to defaults when access_control_settings is empty', async () => {
     const supabase: any = {
       from: () => ({
         select: () => ({
-          in: async () => ({
-            data: [{ key: 'members_required_role_id', value: '55555555555555555' }],
-            error: null,
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: {
+                members_allowed_role_ids: [],
+              },
+              error: null,
+            }),
           }),
         }),
       }),
     }
 
     await expect(resolveMembersAllowedRoleIds({ supabase })).resolves.toEqual([
-      '55555555555555555',
+      DISCORD_MEMBERS_ROLE_ID,
+      DISCORD_PRIVILEGED_ROLE_ID,
     ])
   })
 
@@ -80,9 +89,11 @@ describe('discord-role-access members role resolver', () => {
     const supabase: any = {
       from: () => ({
         select: () => ({
-          in: async () => ({
-            data: null,
-            error: { message: 'permission denied' },
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: null,
+              error: { message: 'permission denied' },
+            }),
           }),
         }),
       }),
