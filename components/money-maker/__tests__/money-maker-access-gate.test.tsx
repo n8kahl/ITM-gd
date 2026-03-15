@@ -8,7 +8,8 @@ const { mockUseMemberAuth } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/contexts/MemberAuthContext', () => ({
-  useMemberAuth: (...args: unknown[]) => mockUseMemberAuth(...args),
+  useMemberSession: (...args: unknown[]) => mockUseMemberAuth(...args),
+  useMemberAccess: (...args: unknown[]) => mockUseMemberAuth(...args),
 }))
 
 import { MoneyMakerAccessGate } from '../money-maker-access-gate'

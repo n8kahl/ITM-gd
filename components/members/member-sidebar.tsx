@@ -9,7 +9,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberAccess, useMemberAuthActions } from '@/contexts/MemberAuthContext'
 import { BRAND_LOGO_SRC, BRAND_NAME } from '@/lib/brand'
 import { useMemberNavHandler } from '@/hooks/use-member-nav-handler'
 import {
@@ -48,11 +48,8 @@ function TierBadge({ tier }: { tier: string | null }) {
 
 export function MemberSidebar() {
   const pathname = usePathname()
-  const {
-    profile,
-    getVisibleTabs,
-    signOut,
-  } = useMemberAuth()
+  const { profile, getVisibleTabs } = useMemberAccess()
+  const { signOut } = useMemberAuthActions()
   const { handleMemberNavClick } = useMemberNavHandler()
 
   const visibleTabs = getVisibleTabs()

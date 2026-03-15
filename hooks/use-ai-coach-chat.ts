@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import * as Sentry from '@sentry/nextjs'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import {
   sendMessage as apiSendMessage,
   streamMessage as apiStreamMessage,
@@ -52,7 +52,7 @@ interface AICoachChatState {
 }
 
 export function useAICoachChat() {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
 
   const [state, setState] = useState<AICoachChatState>({
     messages: [],

@@ -24,6 +24,7 @@ export type SPXDesktopSpatialCanvasProps = {
   spatialThrottled: boolean
   showSpatialGhostCards: boolean
   coordinatesRef: SPXCommandController['coordinatesRef']
+  coordinatesVersion: SPXCommandController['coordinatesVersion']
   showAllRelevantLevels: boolean
   onDisplayedLevelsChange: SPXCommandController['handleDisplayedLevelsChange']
   onChartReady: SPXCommandController['handleChartReady']
@@ -41,7 +42,6 @@ export type SPXDesktopSpatialCanvasProps = {
   onRequestSidebarOpen?: () => void
 }
 
-const OVERLAY_POLICY_REFRESH_INTERVAL_MS = 180
 const DESKTOP_TOP_SAFE_AREA_PX = 96
 
 export function SPXDesktopSpatialCanvas({
@@ -52,6 +52,7 @@ export function SPXDesktopSpatialCanvas({
   spatialThrottled,
   showSpatialGhostCards,
   coordinatesRef,
+  coordinatesVersion,
   showAllRelevantLevels,
   onDisplayedLevelsChange,
   onChartReady,
@@ -73,8 +74,7 @@ export function SPXDesktopSpatialCanvas({
   const ghostCardsEnabled = showSpatialGhostCards || runtimeGhostFlagEnabled
 
   useEffect(() => {
-    let rafId = 0
-    const refresh = () => {
+    const rafId = window.requestAnimationFrame(() => {
       const coordinates = coordinatesRef.current
       const width = coordinates?.chartDimensions.width || 0
       const height = coordinates?.chartDimensions.height || 0
@@ -82,17 +82,11 @@ export function SPXDesktopSpatialCanvas({
         if (previous.width === width && previous.height === height) return previous
         return { width, height }
       })
-    }
-    const tick = () => {
-      rafId = window.requestAnimationFrame(refresh)
-    }
-    tick()
-    const intervalId = window.setInterval(tick, OVERLAY_POLICY_REFRESH_INTERVAL_MS)
+    })
     return () => {
-      window.clearInterval(intervalId)
-      if (rafId) window.cancelAnimationFrame(rafId)
+      window.cancelAnimationFrame(rafId)
     }
-  }, [coordinatesRef])
+  }, [coordinatesRef, coordinatesVersion])
 
   const overlayPolicy = useMemo(() => resolveSPXOverlayPriorityPolicy({
     viewportWidth: viewport.width,
@@ -154,7 +148,9 @@ export function SPXDesktopSpatialCanvas({
             style={{ boxShadow: 'inset 0 0 120px rgba(0,0,0,0.7)' }}
           />
           {showGEXGlow && <GEXAmbientGlow intensity="boosted" />}
-          {showGEXGlow && !spatialThrottled && <GammaTopographyOverlay coordinatesRef={coordinatesRef} />}
+          {showGEXGlow && !spatialThrottled && (
+            <GammaTopographyOverlay coordinatesRef={coordinatesRef} coordinatesVersion={coordinatesVersion} />
+          )}
           <FlowRibbon className="absolute left-4 top-3 z-[24] w-[320px] max-w-[46vw]" />
           <SpatialMarkerLegend
             className="absolute left-4 top-[58px] z-[24]"
@@ -177,27 +173,36 @@ export function SPXDesktopSpatialCanvas({
             levelVisibilityBudget={overlayPolicy.levelVisibilityBudget}
             className="h-full w-full"
           />
-          {showTopographicLadder && <TopographicPriceLadder coordinatesRef={coordinatesRef} />}
-          {showRiskShadow && <RiskRewardShadowOverlay coordinatesRef={coordinatesRef} />}
-          {showSetupLock && <SetupLockOverlay coordinatesRef={coordinatesRef} />}
+          {showTopographicLadder && (
+            <TopographicPriceLadder coordinatesRef={coordinatesRef} coordinatesVersion={coordinatesVersion} />
+          )}
+          {showRiskShadow && (
+            <RiskRewardShadowOverlay coordinatesRef={coordinatesRef} coordinatesVersion={coordinatesVersion} />
+          )}
+          {showSetupLock && (
+            <SetupLockOverlay coordinatesRef={coordinatesRef} coordinatesVersion={coordinatesVersion} />
+          )}
           {showConeOverlay && (
             <ProbabilityConeSVG
               coordinatesRef={coordinatesRef}
+              coordinatesVersion={coordinatesVersion}
               anchorTimestampSec={latestChartBarTimeSec}
             />
           )}
           {overlayPolicy.allowGhostCards && !spatialThrottled && (
-            <SpatialCoachGhostLayer coordinatesRef={coordinatesRef} />
+            <SpatialCoachGhostLayer coordinatesRef={coordinatesRef} coordinatesVersion={coordinatesVersion} />
           )}
           {showCoachOverlay && (
             <SpatialCoachLayer
               coordinatesRef={coordinatesRef}
+              coordinatesVersion={coordinatesVersion}
               onRequestSidebarOpen={onRequestSidebarOpen}
             />
           )}
           {showPriorityLevels && (
             <PriorityLevelOverlay
               coordinatesRef={coordinatesRef}
+              coordinatesVersion={coordinatesVersion}
               showAllRelevantLevels={showAllRelevantLevels}
               focusMode={focusMode}
               onDisplayedLevelsChange={handlePriorityLevelCountsChange}

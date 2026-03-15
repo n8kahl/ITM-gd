@@ -2,7 +2,7 @@
 
 import useSWR, { type SWRConfiguration } from 'swr'
 import { createBrowserSupabase } from '@/lib/supabase-browser'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import type { TradeStreamSnapshot } from '@/lib/types/spx-command-center'
 
 type SPXKey = [url: string, token: string]
@@ -258,7 +258,7 @@ export function useSPXQuery<T>(
   endpoint: string | null,
   config?: SWRConfiguration<T, Error>,
 ) {
-  const { session, isLoading: authLoading } = useMemberAuth()
+  const { session, isLoading: authLoading } = useMemberSession()
   const token = session?.access_token
 
   const { data, error, isLoading, mutate } = useSWR<T, Error>(

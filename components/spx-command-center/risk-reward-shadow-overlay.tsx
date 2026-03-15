@@ -8,6 +8,7 @@ import { buildRiskRewardShadowGeometry } from '@/lib/spx/spatial-hud'
 
 interface RiskRewardShadowOverlayProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
+  coordinatesVersion: number
 }
 
 interface RenderBand {
@@ -28,7 +29,6 @@ interface ShadowRenderState {
   badgeTop: number
 }
 
-const RR_REFRESH_INTERVAL_MS = 140
 const RR_BADGE_WIDTH_PX = 164
 const RR_BADGE_HEIGHT_PX = 26
 const RR_RIGHT_GUTTER_PX = 14
@@ -65,7 +65,7 @@ function formatRatio(value: number | null): string {
   return value.toFixed(2)
 }
 
-export function RiskRewardShadowOverlay({ coordinatesRef }: RiskRewardShadowOverlayProps) {
+export function RiskRewardShadowOverlay({ coordinatesRef, coordinatesVersion }: RiskRewardShadowOverlayProps) {
   const {
     selectedSetup,
     selectedSetupContract,
@@ -134,19 +134,11 @@ export function RiskRewardShadowOverlay({ coordinatesRef }: RiskRewardShadowOver
   }, [coordinatesRef, geometry])
 
   useEffect(() => {
-    let rafId = 0
-    const tick = () => {
-      rafId = window.requestAnimationFrame(refreshRenderState)
-    }
-    tick()
-    const intervalId = window.setInterval(tick, RR_REFRESH_INTERVAL_MS)
+    const rafId = window.requestAnimationFrame(refreshRenderState)
     return () => {
-      window.clearInterval(intervalId)
-      if (rafId) {
-        window.cancelAnimationFrame(rafId)
-      }
+      window.cancelAnimationFrame(rafId)
     }
-  }, [refreshRenderState])
+  }, [coordinatesVersion, refreshRenderState])
 
   useEffect(() => {
     if (!focusSetup || !geometry) {

@@ -9,13 +9,13 @@ import { SPX_TELEMETRY_EVENT, trackSPXTelemetryEvent } from '@/lib/spx/telemetry
 
 interface ProbabilityConeSVGProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
+  coordinatesVersion: number
   anchorTimestampSec?: number | null
 }
 
-const CONE_REFRESH_INTERVAL_MS = 120
 const CONE_CLEAR_AFTER_MISSES = 6
 
-export function ProbabilityConeSVG({ coordinatesRef, anchorTimestampSec }: ProbabilityConeSVGProps) {
+export function ProbabilityConeSVG({ coordinatesRef, coordinatesVersion, anchorTimestampSec }: ProbabilityConeSVGProps) {
   const { prediction } = useSPXAnalyticsContext()
   const { spxPrice, spxTickTimestamp } = useSPXPriceContext()
   const [coneState, setConeState] = useState<ProbabilityConeGeometry | null>(null)
@@ -84,23 +84,17 @@ export function ProbabilityConeSVG({ coordinatesRef, anchorTimestampSec }: Proba
       })
     }
 
-    const scheduleUpdate = () => {
-      if (rafRef.current != null) {
-        window.cancelAnimationFrame(rafRef.current)
-      }
-      rafRef.current = window.requestAnimationFrame(updatePath)
+    if (rafRef.current != null) {
+      window.cancelAnimationFrame(rafRef.current)
     }
-
-    scheduleUpdate()
-    const intervalId = window.setInterval(scheduleUpdate, CONE_REFRESH_INTERVAL_MS)
+    rafRef.current = window.requestAnimationFrame(updatePath)
 
     return () => {
       if (rafRef.current != null) {
         window.cancelAnimationFrame(rafRef.current)
       }
-      window.clearInterval(intervalId)
     }
-  }, [anchorTimestampSec, coordinatesRef, prediction?.direction.bearish, prediction?.direction.bullish, prediction?.probabilityCone, spxPrice, spxTickTimestamp])
+  }, [anchorTimestampSec, coordinatesRef, coordinatesVersion, prediction?.direction.bearish, prediction?.direction.bullish, prediction?.probabilityCone, spxPrice, spxTickTimestamp])
 
   useEffect(() => {
     const visible = coneState != null

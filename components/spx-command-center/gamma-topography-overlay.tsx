@@ -8,6 +8,7 @@ import { buildGammaTopographyEntries, buildGammaVacuumZones } from '@/lib/spx/sp
 
 interface GammaTopographyOverlayProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
+  coordinatesVersion: number
 }
 
 interface GammaBandRender {
@@ -29,8 +30,6 @@ interface GammaRenderState {
     opacity: number
   }>
 }
-
-const GAMMA_REFRESH_INTERVAL_MS = 160
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -67,7 +66,7 @@ function renderStateEquals(left: GammaRenderState | null, right: GammaRenderStat
   return true
 }
 
-export function GammaTopographyOverlay({ coordinatesRef }: GammaTopographyOverlayProps) {
+export function GammaTopographyOverlay({ coordinatesRef, coordinatesVersion }: GammaTopographyOverlayProps) {
   const { gexProfile } = useSPXAnalyticsContext()
   const { spxPrice } = useSPXPriceContext()
   const [renderState, setRenderState] = useState<GammaRenderState | null>(null)
@@ -137,20 +136,11 @@ export function GammaTopographyOverlay({ coordinatesRef }: GammaTopographyOverla
   }, [coordinatesRef, gammaEntries, gammaVacuumZones])
 
   useEffect(() => {
-    let rafId = 0
-    const tick = () => {
-      rafId = window.requestAnimationFrame(refreshRenderState)
-    }
-
-    tick()
-    const intervalId = window.setInterval(tick, GAMMA_REFRESH_INTERVAL_MS)
+    const rafId = window.requestAnimationFrame(refreshRenderState)
     return () => {
-      window.clearInterval(intervalId)
-      if (rafId) {
-        window.cancelAnimationFrame(rafId)
-      }
+      window.cancelAnimationFrame(rafId)
     }
-  }, [refreshRenderState])
+  }, [coordinatesVersion, refreshRenderState])
 
   if (!renderState || (renderState.bands.length === 0 && renderState.vacuumZones.length === 0)) return null
 

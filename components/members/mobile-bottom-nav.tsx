@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberAccess } from '@/contexts/MemberAuthContext'
 import {
   getMemberTabHref,
   getMemberTabIcon,
@@ -71,7 +71,7 @@ function getHrefPathname(href: string): string {
 
 export function MemberBottomNav() {
   const pathname = usePathname()
-  const { getMobileTabs } = useMemberAuth()
+  const { getMobileTabs } = useMemberAccess()
   const {
     handleMemberNavClick,
     isNavigationPending,

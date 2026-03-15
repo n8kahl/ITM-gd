@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Settings, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberAccess, useMemberAuthActions, useMemberSession } from '@/contexts/MemberAuthContext'
 import { TraderIdentityCard } from '@/components/profile/trader-identity-card'
 import { TradingTranscriptCard } from '@/components/profile/trading-transcript'
 import { AcademyProgressCard } from '@/components/profile/academy-progress-card'
@@ -20,7 +20,9 @@ interface AcademyData {
 }
 
 export default function ProfilePage() {
-  const { user, profile: authProfile, syncDiscordRoles } = useMemberAuth()
+  const { user } = useMemberSession()
+  const { profile: authProfile } = useMemberAccess()
+  const { syncDiscordRoles } = useMemberAuthActions()
 
   const [memberProfile, setMemberProfile] = useState<MemberProfile | null>(null)
   const [transcript, setTranscript] = useState<TradingTranscript | null>(null)

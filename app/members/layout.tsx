@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { motion, useReducedMotion } from 'framer-motion'
 import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MemberAuthProvider, useMemberAuth } from '@/contexts/MemberAuthContext'
+import { MemberAuthProvider, useMemberSession } from '@/contexts/MemberAuthContext'
 import { MemberSidebar } from '@/components/members/member-sidebar'
 import { MobileTopBar } from '@/components/members/mobile-top-bar'
 import { MemberBottomNav } from '@/components/members/mobile-bottom-nav'
@@ -36,14 +36,6 @@ export default function MembersLayout({
 // LAYOUT CONTENT
 // ============================================
 
-const WARM_MEMBER_ROUTES = [
-  '/members',
-  '/members/journal',
-  '/members/ai-coach',
-  '/members/swing-sniper',
-  '/members/academy',
-]
-
 function MembersLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -56,7 +48,7 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     isLoading,
     isAuthenticated,
     isNotMember,
-  } = useMemberAuth()
+  } = useMemberSession()
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -80,31 +72,6 @@ function MembersLayoutContent({ children }: { children: React.ReactNode }) {
     }
     previousSectionPathRef.current = currentSectionPath
   }, [pathname])
-
-  // Warm a small set of high-frequency member routes after shell mount.
-  useEffect(() => {
-    if (isLoading || !isAuthenticated) return
-    if (typeof window === 'undefined') return
-
-    const timeoutIds: number[] = []
-    const queueRouteWarmup = window.setTimeout(() => {
-      WARM_MEMBER_ROUTES.forEach((route, index) => {
-        const routeTimeout = window.setTimeout(() => {
-          try {
-            router.prefetch(route)
-          } catch (error) {
-            console.error('Failed to prefetch member route:', error)
-          }
-        }, index * 160)
-        timeoutIds.push(routeTimeout)
-      })
-    }, 350)
-
-    timeoutIds.push(queueRouteWarmup)
-    return () => {
-      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId))
-    }
-  }, [isAuthenticated, isLoading, router])
 
   // Loading state — pulsing logo
   if (isLoading) {

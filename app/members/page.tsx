@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { motion } from 'framer-motion'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberAccess } from '@/contexts/MemberAuthContext'
 import { WelcomeHeader } from '@/components/dashboard/welcome-header'
 import { LiveMarketTicker } from '@/components/dashboard/live-market-ticker'
 import { DashboardStatCards } from '@/components/dashboard/dashboard-stat-cards'
@@ -29,7 +29,7 @@ const TICKER_VARIANT = {
 }
 
 export default function MemberDashboard() {
-  const { profile } = useMemberAuth()
+  const { profile } = useMemberAccess()
 
   return (
     <motion.div

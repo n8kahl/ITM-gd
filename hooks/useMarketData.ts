@@ -2,7 +2,7 @@
 'use client'
 
 import useSWR from 'swr';
-import { useMemberAuth } from '@/contexts/MemberAuthContext';
+import { useMemberSession } from '@/contexts/MemberAuthContext';
 import { refreshBrowserAccessToken } from '@/lib/browser-auth';
 
 type MarketKey = [url: string, token: string];
@@ -188,7 +188,7 @@ export interface StockSplit {
 }
 
 export function useMarketIndices() {
-    const { session } = useMemberAuth();
+    const { session } = useMemberSession();
     const token = session?.access_token;
 
     const { data, error, isLoading } = useSWR<MarketIndicesResponse>(token ? ['/api/market/indices', token] : null, fetcher, {
@@ -206,7 +206,7 @@ export function useMarketIndices() {
 }
 
 export function useMarketStatus() {
-    const { session } = useMemberAuth();
+    const { session } = useMemberSession();
     const token = session?.access_token;
 
     const { data, error, isLoading } = useSWR<MarketStatusResponse>(token ? ['/api/market/status', token] : null, fetcher, {
@@ -222,7 +222,7 @@ export function useMarketStatus() {
 }
 
 export function useMarketMovers(limit: number = 5) {
-    const { session } = useMemberAuth();
+    const { session } = useMemberSession();
     const token = session?.access_token;
     const url = `/api/market/movers?limit=${limit}`;
 
@@ -240,7 +240,7 @@ export function useMarketMovers(limit: number = 5) {
 }
 
 export function useUpcomingSplits() {
-    const { session } = useMemberAuth();
+    const { session } = useMemberSession();
     const token = session?.access_token;
 
     const { data, error, isLoading } = useSWR<StockSplit[]>(token ? ['/api/market/splits', token] : null, fetcher, {
@@ -283,7 +283,7 @@ export interface MarketHealthSnapshot {
 }
 
 export function useMarketAnalytics() {
-    const { session } = useMemberAuth();
+    const { session } = useMemberSession();
     const token = session?.access_token;
 
     const { data, error, isLoading } = useSWR<MarketHealthSnapshot>(token ? ['/api/market/analytics', token] : null, fetcher, {

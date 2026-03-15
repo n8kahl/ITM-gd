@@ -8,7 +8,7 @@ import {
   type LevelAnnotation,
   type TradingChartCrosshairSnapshot,
 } from '@/components/ai-coach/trading-chart'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { useSPXAnalyticsContext } from '@/contexts/spx/SPXAnalyticsContext'
 import { useSPXPriceContext } from '@/contexts/spx/SPXPriceContext'
 import { useSPXSetupContext } from '@/contexts/spx/SPXSetupContext'
@@ -189,7 +189,7 @@ export function SPXChart({
   onChartReady,
   onLatestBarTimeChange,
 }: SPXChartProps) {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const { levels } = useSPXAnalyticsContext()
   const { selectedSetup, chartAnnotations, tradeMode } = useSPXSetupContext()
   const {

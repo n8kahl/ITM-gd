@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, Lock } from 'lucide-react'
 
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberAccess, useMemberSession } from '@/contexts/MemberAuthContext'
 import { hasMoneyMakerTabAccess } from '@/lib/money-maker/access'
 
 interface MoneyMakerAccessGateProps {
@@ -12,7 +12,8 @@ interface MoneyMakerAccessGateProps {
 }
 
 export function MoneyMakerAccessGate({ children }: MoneyMakerAccessGateProps) {
-  const { isLoading, getVisibleTabs } = useMemberAuth()
+  const { isLoading } = useMemberSession()
+  const { getVisibleTabs } = useMemberAccess()
   const hasAccess = hasMoneyMakerTabAccess(getVisibleTabs())
 
   if (isLoading) {

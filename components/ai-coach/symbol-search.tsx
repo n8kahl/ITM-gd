@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import {
   searchSymbols,
   AICoachAPIError,
@@ -82,7 +82,7 @@ function findPopularSymbol(symbol: string): SymbolSearchItem {
 }
 
 export function SymbolSearch({ value, onChange, className }: SymbolSearchProps) {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const token = session?.access_token
 
   const [inputValue, setInputValue] = useState(value.toUpperCase())

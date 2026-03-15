@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { sanitizeContent } from '@/lib/sanitize'
 import { type ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChartRequest } from '@/components/ai-coach/center-panel'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { WidgetCard, extractWidgets } from './widget-cards'
 import { FollowUpChips } from './follow-up-chips'
 import { InlineMiniChart } from './inline-mini-chart'
@@ -26,7 +26,7 @@ interface ChatMessageProps {
  */
 export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSendPrompt, onExpandChart }: ChatMessageProps) {
   const isUser = message.role === 'user'
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const [isHighlighted, setIsHighlighted] = useState(false)
 
   const widgets = useMemo(() => {

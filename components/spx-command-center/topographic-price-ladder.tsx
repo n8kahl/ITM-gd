@@ -8,14 +8,13 @@ import { buildTopographicLadderEntries } from '@/lib/spx/spatial-hud'
 
 interface TopographicPriceLadderProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
+  coordinatesVersion: number
 }
 
 const MAX_LADDER_ENTRIES = 14
 const LADDER_BLOCK_MIN_WIDTH = 20
 const LADDER_BLOCK_MAX_WIDTH = 58
 const LADDER_BLOCK_HEIGHT = 11
-const LADDER_REFRESH_INTERVAL_MS = 120
-
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
@@ -59,7 +58,7 @@ function renderStateEquals(left: LadderRenderState | null, right: LadderRenderSt
   return true
 }
 
-export function TopographicPriceLadder({ coordinatesRef }: TopographicPriceLadderProps) {
+export function TopographicPriceLadder({ coordinatesRef, coordinatesVersion }: TopographicPriceLadderProps) {
   const { levels } = useSPXAnalyticsContext()
   const { spxPrice } = useSPXPriceContext()
   const [renderState, setRenderState] = useState<LadderRenderState | null>(null)
@@ -120,21 +119,11 @@ export function TopographicPriceLadder({ coordinatesRef }: TopographicPriceLadde
   }, [coordinatesRef, ladderEntries, spxPrice])
 
   useEffect(() => {
-    let rafId = 0
-    const tick = () => {
-      rafId = window.requestAnimationFrame(refreshRenderState)
-    }
-
-    tick()
-    const intervalId = window.setInterval(tick, LADDER_REFRESH_INTERVAL_MS)
-
+    const rafId = window.requestAnimationFrame(refreshRenderState)
     return () => {
-      window.clearInterval(intervalId)
-      if (rafId) {
-        window.cancelAnimationFrame(rafId)
-      }
+      window.cancelAnimationFrame(rafId)
     }
-  }, [refreshRenderState])
+  }, [coordinatesVersion, refreshRenderState])
 
   if (!renderState || renderState.entries.length === 0) return null
 

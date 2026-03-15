@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react'
 import { useMoneyMaker } from '@/components/money-maker/money-maker-provider'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 
 const WATCHLIST_ENDPOINT = '/api/members/money-maker/watchlist'
 const SNAPSHOT_ENDPOINT = '/api/members/money-maker/snapshot'
@@ -25,7 +25,7 @@ async function readErrorMessage(response: Response, fallback: string): Promise<s
 }
 
 export function useMoneyMakerPolling() {
-    const { session } = useMemberAuth()
+    const { session } = useMemberSession()
     const {
         setSymbols,
         setSignals,
