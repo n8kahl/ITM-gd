@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 
+import { refreshBrowserAccessToken } from '@/lib/browser-auth'
+
 // ============================================
 // TYPES
 // ============================================
@@ -125,6 +127,8 @@ let wsConsecutiveConnectFailures = 0
 let wsRetryPausedUntil = 0
 let wsNextConnectAt = 0
 let activeStreamToken: string | null = null
+let preferredStreamToken: string | null = null
+let wsAuthRecoveryToken: string | null = null
 let subscribedSymbols = new Set<string>()
 let subscribedChannels = new Set<string>()
 const WS_CLOSE_UNAUTHORIZED = 4401
@@ -274,7 +278,11 @@ function getDesiredChannels(): Set<string> {
 
 function getActiveToken(): string | null {
   const active = getActiveConsumers().find((consumer) => typeof consumer.token === 'string' && consumer.token.length > 0)
-  return active?.token || null
+  const activeToken = active?.token || null
+  if (preferredStreamToken && activeToken === preferredStreamToken) {
+    preferredStreamToken = null
+  }
+  return preferredStreamToken || activeToken
 }
 
 function hasEnabledConsumerWithoutToken(): boolean {
@@ -436,6 +444,57 @@ function scheduleReconnect(): void {
   }, delay)
 }
 
+function recoverSocketAuth(options?: { pauseOnFailureMs?: number }): void {
+  const tokenToRecover = activeStreamToken
+  const pauseOnFailureMs = options?.pauseOnFailureMs ?? 0
+
+  if (!tokenToRecover || wsAuthRecoveryToken === tokenToRecover) {
+    if (pauseOnFailureMs > 0) {
+      wsRetryPausedUntil = Date.now() + pauseOnFailureMs
+      wsNextConnectAt = wsRetryPausedUntil
+      ensureRetryTimer(pauseOnFailureMs)
+      return
+    }
+
+    scheduleReconnect()
+    return
+  }
+
+  wsAuthRecoveryToken = tokenToRecover
+  clearReconnectTimer()
+
+  void (async () => {
+    const refreshedToken = await refreshBrowserAccessToken()
+    if (refreshedToken) {
+      preferredStreamToken = refreshedToken
+      wsAuthRecoveryToken = null
+      wsRetryPausedUntil = 0
+      wsNextConnectAt = 0
+      wsReconnectAttempt = 0
+      wsConsecutiveConnectFailures = 0
+      clearReconnectTimer()
+      wsReconnectTimer = setTimeout(() => {
+        wsReconnectTimer = null
+        ensureSocketConnection()
+      }, 150)
+      return
+    }
+
+    if (wsAuthRecoveryToken === tokenToRecover) {
+      wsAuthRecoveryToken = null
+    }
+
+    if (pauseOnFailureMs > 0) {
+      wsRetryPausedUntil = Date.now() + pauseOnFailureMs
+      wsNextConnectAt = wsRetryPausedUntil
+      ensureRetryTimer(pauseOnFailureMs)
+      return
+    }
+
+    scheduleReconnect()
+  })()
+}
+
 function disconnectSocket(): void {
   clearReconnectTimer()
   if (ws) {
@@ -448,6 +507,11 @@ function disconnectSocket(): void {
   }
   subscribedSymbols = new Set()
   subscribedChannels = new Set()
+  if (!shouldMaintainConnection()) {
+    activeStreamToken = null
+    preferredStreamToken = null
+    wsAuthRecoveryToken = null
+  }
   sharedState.isConnected = false
   sharedState.connectionStatus = 'disconnected'
 }
@@ -583,6 +647,9 @@ function reconcileChannelSubscriptions(previousDesiredChannels: Set<string>, nex
 function ensureSocketConnection(): void {
   if (!shouldMaintainConnection()) {
     disconnectSocket()
+    activeStreamToken = null
+    preferredStreamToken = null
+    wsAuthRecoveryToken = null
     sharedState.error = hasEnabledConsumerWithoutToken()
       ? 'Authentication required for live stream'
       : null
@@ -594,6 +661,9 @@ function ensureSocketConnection(): void {
   const token = getActiveToken()
   if (!token) {
     disconnectSocket()
+    activeStreamToken = null
+    preferredStreamToken = null
+    wsAuthRecoveryToken = null
     sharedState.error = 'Authentication required for live stream'
     sharedState.connectionStatus = 'disconnected'
     notifyConsumers()
@@ -627,6 +697,7 @@ function ensureSocketConnection(): void {
     wsConsecutiveConnectFailures = 0
     wsRetryPausedUntil = 0
     wsNextConnectAt = 0
+    wsAuthRecoveryToken = null
   }
   activeStreamToken = token
 
@@ -650,6 +721,7 @@ function ensureSocketConnection(): void {
     wsReconnectAttempt = 0
     wsConsecutiveConnectFailures = 0
     wsRetryPausedUntil = 0
+    wsAuthRecoveryToken = null
     sharedState.isConnected = true
     sharedState.connectionStatus = 'connected'
     sharedState.error = null
@@ -693,8 +765,6 @@ function ensureSocketConnection(): void {
     if (event.code === WS_CLOSE_UNAUTHORIZED || event.code === WS_CLOSE_FORBIDDEN) {
       sharedState.error = event.reason || 'Authentication required for live stream'
       sharedState.connectionStatus = 'degraded'
-      wsRetryPausedUntil = Date.now() + WS_RETRY_PAUSE_MS
-      wsNextConnectAt = wsRetryPausedUntil
       if (getPriceStreamDebugEnabled()) {
         console.warn('[price-stream] WebSocket auth close', {
           code: event.code,
@@ -702,11 +772,22 @@ function ensureSocketConnection(): void {
         })
       }
       notifyConsumers()
-      clearReconnectTimer()
-      wsReconnectTimer = setTimeout(() => {
-        wsReconnectTimer = null
-        ensureSocketConnection()
-      }, WS_RETRY_PAUSE_MS)
+
+      recoverSocketAuth({ pauseOnFailureMs: WS_RETRY_PAUSE_MS })
+      return
+    }
+
+    if (!socketOpened && event.code !== 1000) {
+      sharedState.error = 'Refreshing session for live stream'
+      sharedState.connectionStatus = 'reconnecting'
+      if (getPriceStreamDebugEnabled()) {
+        console.warn('[price-stream] WebSocket closed before open', {
+          code: event.code,
+          reason: event.reason || '',
+        })
+      }
+      notifyConsumers()
+      recoverSocketAuth()
       return
     }
 
