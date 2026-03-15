@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Clock } from 'lucide-react'
+import { formatMoneyMakerEasternTime } from '@/lib/money-maker/presentation'
 
 interface StrategyTimeWindow {
     id: string
@@ -45,7 +46,7 @@ export function ActiveStrategiesClock() {
             <div className="flex items-center space-x-2 border-r border-white/10 pr-4">
                 <Clock className="h-4 w-4 text-emerald-500" />
                 <span className="font-mono text-sm text-ivory">
-                    {nyTime.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit' })} EST
+                    {formatMoneyMakerEasternTime(nyTime, { withSeconds: true })}
                 </span>
             </div>
 

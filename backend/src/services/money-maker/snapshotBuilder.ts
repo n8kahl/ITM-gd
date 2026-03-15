@@ -1,5 +1,12 @@
 import { fetchAllSymbolData } from './symbolDataFetcher'
-import { ConfluenceLevel, MoneyMakerSignal, MoneyMakerSnapshotResult, MoneyMakerSymbolSnapshot, DEFAULT_CONFIG } from '../../lib/money-maker/types'
+import {
+    ConfluenceLevel,
+    MoneyMakerHourlyLevelSummary,
+    MoneyMakerSignal,
+    MoneyMakerSnapshotResult,
+    MoneyMakerSymbolSnapshot,
+    DEFAULT_CONFIG,
+} from '../../lib/money-maker/types'
 import { computeVWAP, computeEMA, computeSMA, computeFibonacciLevels } from '../../lib/money-maker/indicator-computer'
 import { computeORB, determineRegime } from '../../lib/money-maker/orb-calculator'
 import { detectPatienceCandle } from '../../lib/money-maker/patience-candle-detector'
@@ -30,9 +37,45 @@ function buildHourlyLevels(bars: Array<{ high: number; low: number }>): Confluen
     const recentBars = bars.slice(-35)
 
     return recentBars.flatMap((bar) => ([
-        { source: `Hourly High ${bar.high.toFixed(2)}`, price: bar.high, weight: 1.4 },
-        { source: `Hourly Low ${bar.low.toFixed(2)}`, price: bar.low, weight: 1.4 },
+        { source: 'Hourly High', price: bar.high, weight: 1.4 },
+        { source: 'Hourly Low', price: bar.low, weight: 1.4 },
     ]))
+}
+
+function dedupeRoundedLevels(levels: number[], direction: 'asc' | 'desc'): number[] {
+    const sorted = [...levels].sort((left, right) => direction === 'asc' ? left - right : right - left)
+    const seen = new Set<string>()
+
+    return sorted.filter((level) => {
+        const key = level.toFixed(2)
+        if (seen.has(key)) {
+            return false
+        }
+        seen.add(key)
+        return true
+    }).map((level) => Number(level.toFixed(2)))
+}
+
+function summarizeHourlyLevels(
+    bars: Array<{ high: number; low: number }>,
+    currentPrice: number,
+): MoneyMakerHourlyLevelSummary {
+    const recentBars = bars.slice(-35)
+    const supports = dedupeRoundedLevels(
+        recentBars.map((bar) => bar.low).filter((price) => price < currentPrice),
+        'desc',
+    )
+    const resistances = dedupeRoundedLevels(
+        recentBars.map((bar) => bar.high).filter((price) => price > currentPrice),
+        'asc',
+    )
+
+    return {
+        nearestSupport: supports[0] ?? null,
+        nextSupport: supports[1] ?? null,
+        nearestResistance: resistances[0] ?? null,
+        nextResistance: resistances[1] ?? null,
+    }
 }
 
 function selectNextHourlyLevel(
@@ -87,10 +130,10 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
 
         // 2. Compute Indicators
         const vwap = computeVWAP(sessionBars5m)
-        const ema8 = computeEMA(bars5m, 8)
-        const ema21 = computeEMA(bars5m, 21)
-        const ema34 = computeEMA(bars5m, 34)
-        const sma200 = computeSMA(bars5m, 200)
+        const ema8 = bars5m.length >= 8 ? computeEMA(bars5m, 8) : null
+        const ema21 = bars5m.length >= 21 ? computeEMA(bars5m, 21) : null
+        const ema34 = bars5m.length >= 34 ? computeEMA(bars5m, 34) : null
+        const sma200 = bars5m.length >= 200 ? computeSMA(bars5m, 200) : null
 
         let fibLevels: Record<string, number> | null = null
         if (bars1D.length >= 2) {
@@ -156,6 +199,7 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
             priceChangePercent,
             orbRegime: regime,
             strongestConfluence,
+            hourlyLevels: summarizeHourlyLevels(bars1H, currentBar.close),
             indicators: {
                 vwap,
                 ema8,

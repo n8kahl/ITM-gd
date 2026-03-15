@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { buildSnapshot } from '../../services/money-maker/snapshotBuilder'
+import { buildWorkspace } from '../../services/money-maker/workspaceBuilder'
 import { supabase } from '../../config/database'
 import { isValidSymbol, normalizeSymbol } from '../../lib/symbols'
 import { hasBackendAdminAccess } from '../../lib/adminAccess'
@@ -96,6 +97,20 @@ function sanitizeWatchlistSymbols(symbols: unknown[]): string[] {
     return uniqueSymbols.slice(0, 5)
 }
 
+function resolveRequestedSymbol(req: Request): string | null {
+    const rawSymbol = typeof req.query?.symbol === 'string' ? req.query.symbol : null
+    if (!rawSymbol) {
+        return null
+    }
+
+    const normalizedSymbol = normalizeSymbol(rawSymbol)
+    if (!normalizedSymbol || !isValidSymbol(normalizedSymbol)) {
+        return null
+    }
+
+    return normalizedSymbol
+}
+
 // GET /api/money-maker/snapshot
 export async function getSnapshot(req: Request, res: Response) {
     try {
@@ -133,6 +148,88 @@ export async function getWatchlist(req: Request, res: Response) {
         return res.status(200).json({ watchlists })
     } catch (err: any) {
         return res.status(500).json({ error: err.message })
+    }
+}
+
+// GET /api/money-maker/workspace?symbol=SPY
+export async function getWorkspace(req: Request, res: Response) {
+    try {
+        const user = await getAuthenticatedUser(req)
+        if (!user) return res.status(401).json({ error: 'Unauthorized' })
+        if (!user.isAdmin) return res.status(403).json({ error: 'Forbidden' })
+
+        const symbol = resolveRequestedSymbol(req)
+        if (!symbol) {
+            return res.status(400).json({ error: 'symbol query parameter is required and must be valid' })
+        }
+
+        const workspace = await buildWorkspace({
+            symbol,
+            userId: user.id,
+        })
+
+        return res.status(200).json(workspace)
+    } catch (err: any) {
+        return res.status(500).json({ error: err.message || 'Failed to build workspace' })
+    }
+}
+
+// GET /api/money-maker/plan?symbol=SPY
+export async function getPlan(req: Request, res: Response) {
+    try {
+        const user = await getAuthenticatedUser(req)
+        if (!user) return res.status(401).json({ error: 'Unauthorized' })
+        if (!user.isAdmin) return res.status(403).json({ error: 'Forbidden' })
+
+        const symbol = resolveRequestedSymbol(req)
+        if (!symbol) {
+            return res.status(400).json({ error: 'symbol query parameter is required and must be valid' })
+        }
+
+        const workspace = await buildWorkspace({
+            symbol,
+            userId: user.id,
+        })
+
+        return res.status(200).json({
+            symbolSnapshot: workspace.symbolSnapshot,
+            activeSignal: workspace.activeSignal,
+            executionPlan: workspace.executionPlan,
+            generatedAt: workspace.generatedAt,
+            degradedReason: workspace.degradedReason,
+        })
+    } catch (err: any) {
+        return res.status(500).json({ error: err.message || 'Failed to build execution plan' })
+    }
+}
+
+// GET /api/money-maker/contracts?symbol=SPY
+export async function getContracts(req: Request, res: Response) {
+    try {
+        const user = await getAuthenticatedUser(req)
+        if (!user) return res.status(401).json({ error: 'Unauthorized' })
+        if (!user.isAdmin) return res.status(403).json({ error: 'Forbidden' })
+
+        const symbol = resolveRequestedSymbol(req)
+        if (!symbol) {
+            return res.status(400).json({ error: 'symbol query parameter is required and must be valid' })
+        }
+
+        const workspace = await buildWorkspace({
+            symbol,
+            userId: user.id,
+        })
+
+        return res.status(200).json({
+            symbolSnapshot: workspace.symbolSnapshot,
+            activeSignal: workspace.activeSignal,
+            executionPlan: workspace.executionPlan,
+            contracts: workspace.contracts,
+            generatedAt: workspace.generatedAt,
+            degradedReason: workspace.degradedReason,
+        })
+    } catch (err: any) {
+        return res.status(500).json({ error: err.message || 'Failed to build contract guidance' })
     }
 }
 

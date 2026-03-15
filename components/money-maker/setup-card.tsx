@@ -3,12 +3,19 @@
 import { useState } from 'react'
 import { Activity, Info, Target } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useMoneyMaker } from './money-maker-provider'
 import { SignalWhyPanel } from './signal-why-panel'
+import { describeMoneyMakerZone, formatMoneyMakerEasternTime, normalizeMoneyMakerLevelSource } from '@/lib/money-maker/presentation'
+import { summarizeMoneyMakerExecution } from '@/lib/money-maker/execution-summary'
 
 function formatPrice(value: number | null | undefined) {
     return typeof value === 'number' ? value.toFixed(2) : '--'
+}
+
+function formatIndicatorValue(value: number | null | undefined) {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value.toFixed(2) : '--'
 }
 
 function formatPercent(value: number | null | undefined) {
@@ -16,11 +23,25 @@ function formatPercent(value: number | null | undefined) {
     return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
 }
 
+function executionStateClass(value: string) {
+    if (value === 'triggered' || value === 'target1_hit' || value === 'target2_in_play') {
+        return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+    }
+    if (value === 'extended') {
+        return 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+    }
+    if (value === 'failed') {
+        return 'border-red-500/40 bg-red-500/10 text-red-300'
+    }
+    return 'border-white/15 bg-white/5 text-white/70'
+}
+
 export function SetupCard({ symbol }: { symbol: string }) {
-    const { state } = useMoneyMaker()
+    const { state, openWorkspace } = useMoneyMaker()
     const signal = state.signals.find((entry) => entry.symbol === symbol)
     const symbolSnapshot = state.symbolSnapshots.find((entry) => entry.symbol === symbol)
     const [isWhyPanelOpen, setIsWhyPanelOpen] = useState(false)
+    const executionSummary = summarizeMoneyMakerExecution(signal, symbolSnapshot)
 
     const priceChangePercent = formatPercent(symbolSnapshot?.priceChangePercent)
     const priceToneClass = typeof symbolSnapshot?.priceChangePercent === 'number'
@@ -41,6 +62,15 @@ export function SetupCard({ symbol }: { symbol: string }) {
         { label: '200 SMA', value: symbolSnapshot?.indicators.sma200 ?? null },
     ]
     const strongestZone = signal?.confluenceZone || symbolSnapshot?.strongestConfluence || null
+    const zoneSummary = describeMoneyMakerZone(strongestZone, symbolSnapshot?.price ?? null)
+    const hourlyChips = symbolSnapshot?.hourlyLevels
+        ? [
+            ['S1', symbolSnapshot.hourlyLevels.nearestSupport],
+            ['S2', symbolSnapshot.hourlyLevels.nextSupport],
+            ['R1', symbolSnapshot.hourlyLevels.nearestResistance],
+            ['R2', symbolSnapshot.hourlyLevels.nextResistance],
+        ].filter((entry): entry is [string, number] => typeof entry[1] === 'number')
+        : []
 
     return (
         <>
@@ -75,7 +105,7 @@ export function SetupCard({ symbol }: { symbol: string }) {
                         {indicators.map((indicator) => (
                             <div key={indicator.label} className="rounded-md bg-white/5 p-2 flex flex-col items-center justify-center">
                                 <span className="text-muted-foreground mb-1 block truncate w-full text-center">{indicator.label}</span>
-                                <span className="font-medium">{formatPrice(indicator.value)}</span>
+                                <span className="font-medium">{formatIndicatorValue(indicator.value)}</span>
                             </div>
                         ))}
                     </div>
@@ -115,6 +145,41 @@ export function SetupCard({ symbol }: { symbol: string }) {
                                     <div className="font-mono text-white">{signal.target.toFixed(2)}</div>
                                 </div>
                             </div>
+                            {executionSummary ? (
+                                <div className="mt-3 space-y-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Badge variant="outline" className={executionStateClass(executionSummary.executionState)}>
+                                            {executionSummary.executionState.replace(/_/g, ' ')}
+                                        </Badge>
+                                        <Badge variant="outline" className="border-white/15 bg-white/5 capitalize text-white/70">
+                                            {executionSummary.entryQuality}
+                                        </Badge>
+                                        <span className="text-[11px] text-white/60">{executionSummary.targetProgress}</span>
+                                    </div>
+                                    <div className="text-[11px] text-white/60">
+                                        Trigger distance {executionSummary.triggerDistance > 0 ? '+' : ''}{executionSummary.triggerDistance.toFixed(2)} ({executionSummary.triggerDistancePct.toFixed(2)}%)
+                                    </div>
+                                    {executionSummary.timeWarning !== 'normal' ? (
+                                        <div className="text-[11px] text-amber-200/80">
+                                            {executionSummary.timeWarning === 'late_session'
+                                                ? 'Late session: tighten expectations and avoid chasing fresh entries.'
+                                                : 'Avoid new entries outside the regular session. Manage existing risk only.'}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="mt-3 w-full"
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    openWorkspace(symbol)
+                                }}
+                            >
+                                Open Plan
+                            </Button>
                         </div>
                     ) : symbolSnapshot ? (
                         <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 space-y-3">
@@ -132,13 +197,27 @@ export function SetupCard({ symbol }: { symbol: string }) {
 
                             {strongestZone ? (
                                 <>
-                                    <div className="text-sm text-white/90">
-                                        Strongest zone: <span className="capitalize">{strongestZone.label}</span>
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium text-white/90">
+                                            {zoneSummary?.title ?? 'Active confluence zone'}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground/80">
+                                            {zoneSummary?.description ?? 'Monitoring for a cleaner pullback or breakout confirmation.'}
+                                        </div>
                                     </div>
+                                    {hourlyChips.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {hourlyChips.map(([label, value]) => (
+                                                <span key={label} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-muted-foreground">
+                                                    {label} {value.toFixed(2)}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : null}
                                     <div className="flex flex-wrap gap-1.5">
-                                        {strongestZone.levels.slice(0, 3).map((level, index) => (
+                                        {strongestZone.levels.slice(0, 2).map((level, index) => (
                                             <span key={`${level.source}-${index}`} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-muted-foreground">
-                                                {level.source} {level.price.toFixed(2)}
+                                                {normalizeMoneyMakerLevelSource(level.source)} {level.price.toFixed(2)}
                                             </span>
                                         ))}
                                     </div>
@@ -150,8 +229,17 @@ export function SetupCard({ symbol }: { symbol: string }) {
                             )}
 
                             <div className="text-[11px] text-muted-foreground/70">
-                                Last candle: {new Date(symbolSnapshot.lastCandleAt).toLocaleTimeString('en-US', { timeStyle: 'short' })}
+                                Last candle: {formatMoneyMakerEasternTime(symbolSnapshot.lastCandleAt)}
                             </div>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => openWorkspace(symbol)}
+                            >
+                                Open Plan
+                            </Button>
                         </div>
                     ) : (
                         <div className="rounded-lg border border-dashed border-white/20 p-4 bg-white/[0.01] flex flex-col justify-center items-center h-[90px]">

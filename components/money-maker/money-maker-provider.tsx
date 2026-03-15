@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, ReactNode, useState, useCallback } from 'react'
-import { MoneyMakerSignal, MoneyMakerSymbolSnapshot } from '@/lib/money-maker/types'
+import { MoneyMakerSignal, MoneyMakerSymbolSnapshot, MoneyMakerWorkspaceResponse } from '@/lib/money-maker/types'
 
 const DEFAULT_SYMBOLS = ['SPY', 'TSLA', 'AAPL', 'NVDA', 'META']
 
@@ -13,6 +13,11 @@ export interface MoneyMakerState {
     isRefreshing: boolean
     lastUpdated: number | null
     error: string | null
+    isWorkspaceOpen: boolean
+    workspaceSymbol: string | null
+    workspace: MoneyMakerWorkspaceResponse | null
+    isWorkspaceLoading: boolean
+    workspaceError: string | null
 }
 
 export interface MoneyMakerContextType {
@@ -24,6 +29,11 @@ export interface MoneyMakerContextType {
     setIsRefreshing: (refreshing: boolean) => void
     setError: (error: string | null) => void
     setLastUpdated: (timestamp: number) => void
+    openWorkspace: (symbol: string) => void
+    closeWorkspace: () => void
+    setWorkspace: (workspace: MoneyMakerWorkspaceResponse | null) => void
+    setIsWorkspaceLoading: (loading: boolean) => void
+    setWorkspaceError: (error: string | null) => void
 }
 
 const MoneyMakerContext = createContext<MoneyMakerContextType | undefined>(undefined)
@@ -37,6 +47,11 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
         isRefreshing: false,
         lastUpdated: null,
         error: null,
+        isWorkspaceOpen: false,
+        workspaceSymbol: null,
+        workspace: null,
+        isWorkspaceLoading: false,
+        workspaceError: null,
     })
 
     const setSymbols = useCallback((symbols: string[]) => {
@@ -67,6 +82,39 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
         setState(prev => ({ ...prev, lastUpdated }))
     }, [])
 
+    const openWorkspace = useCallback((symbol: string) => {
+        setState(prev => ({
+            ...prev,
+            isWorkspaceOpen: true,
+            workspaceSymbol: symbol,
+            workspaceError: null,
+        }))
+    }, [])
+
+    const closeWorkspace = useCallback(() => {
+        setState(prev => ({
+            ...prev,
+            isWorkspaceOpen: false,
+            workspaceError: null,
+        }))
+    }, [])
+
+    const setWorkspace = useCallback((workspace: MoneyMakerWorkspaceResponse | null) => {
+        setState(prev => ({
+            ...prev,
+            workspace,
+            workspaceSymbol: workspace?.symbolSnapshot.symbol ?? prev.workspaceSymbol,
+        }))
+    }, [])
+
+    const setIsWorkspaceLoading = useCallback((isWorkspaceLoading: boolean) => {
+        setState(prev => ({ ...prev, isWorkspaceLoading }))
+    }, [])
+
+    const setWorkspaceError = useCallback((workspaceError: string | null) => {
+        setState(prev => ({ ...prev, workspaceError }))
+    }, [])
+
     return (
         <MoneyMakerContext.Provider
             value={{
@@ -78,6 +126,11 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
                 setIsRefreshing,
                 setError,
                 setLastUpdated,
+                openWorkspace,
+                closeWorkspace,
+                setWorkspace,
+                setIsWorkspaceLoading,
+                setWorkspaceError,
             }}
         >
             {children}

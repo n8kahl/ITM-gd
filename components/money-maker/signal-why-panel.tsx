@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { MoneyMakerSignal } from '@/lib/money-maker/types'
+import { describeMoneyMakerZone, formatMoneyMakerEasternTime, normalizeMoneyMakerLevelSource } from '@/lib/money-maker/presentation'
 
 interface SignalWhyPanelProps {
     signal: MoneyMakerSignal | null
@@ -20,6 +21,7 @@ export function SignalWhyPanel({ signal, isOpen, onClose }: SignalWhyPanelProps)
     const isLong = signal.direction === 'long'
     const colorClass = isLong ? 'text-emerald-400' : 'text-red-400'
     const bgClass = isLong ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'
+    const zoneSummary = describeMoneyMakerZone(signal.confluenceZone, signal.entry)
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -34,7 +36,7 @@ export function SignalWhyPanel({ signal, isOpen, onClose }: SignalWhyPanelProps)
                         </Badge>
                     </div>
                     <DialogDescription className="text-muted-foreground mt-2">
-                        Generated at {new Date(signal.timestamp).toLocaleTimeString()}
+                        Generated at {formatMoneyMakerEasternTime(signal.timestamp, { withSeconds: true })}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -73,7 +75,7 @@ export function SignalWhyPanel({ signal, isOpen, onClose }: SignalWhyPanelProps)
                                 </li>
                                 <li className="flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                    Score: {signal.confluenceZone.score.toFixed(1)} Pts ({signal.confluenceZone.label})
+                                    Zone: {zoneSummary?.title ?? 'Confluence cluster'} ({signal.confluenceZone.score.toFixed(1)} pts)
                                 </li>
                                 <li className="flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
@@ -104,10 +106,13 @@ export function SignalWhyPanel({ signal, isOpen, onClose }: SignalWhyPanelProps)
                                     <span className="text-muted-foreground">Zone Range</span>
                                     <span className="font-mono text-xs">${signal.confluenceZone.priceLow.toFixed(2)} - ${signal.confluenceZone.priceHigh.toFixed(2)}</span>
                                 </div>
+                                {zoneSummary ? (
+                                    <p className="mb-2 text-xs text-muted-foreground/80">{zoneSummary.description}</p>
+                                ) : null}
                                 <ul className="space-y-1 mt-2">
                                     {signal.confluenceZone.levels.map((lvl, idx) => (
                                         <li key={idx} className="flex justify-between items-center text-xs">
-                                            <span className="text-muted-foreground/80">{lvl.source}</span>
+                                            <span className="text-muted-foreground/80">{normalizeMoneyMakerLevelSource(lvl.source)}</span>
                                             <span className="font-mono text-white/90">{lvl.price.toFixed(2)}</span>
                                         </li>
                                     ))}
