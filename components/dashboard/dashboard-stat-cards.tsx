@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { SpotlightCard } from '@/components/ui/spotlight-card'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton-loader'
 
@@ -33,7 +33,7 @@ type StatCardTrendDirection = 'up' | 'down' | 'neutral'
 export function DashboardStatCards() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const { session, isLoading: isAuthLoading } = useMemberAuth()
+  const { session, isLoading: isAuthLoading } = useMemberSession()
 
   useEffect(() => {
     const accessToken = session?.access_token

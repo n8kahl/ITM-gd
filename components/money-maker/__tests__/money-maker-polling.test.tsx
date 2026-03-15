@@ -16,7 +16,7 @@ vi.mock('@/components/money-maker/money-maker-provider', () => ({
 }))
 
 vi.mock('@/contexts/MemberAuthContext', () => ({
-  useMemberAuth: (...args: unknown[]) => mockUseMemberAuth(...args),
+  useMemberSession: (...args: unknown[]) => mockUseMemberAuth(...args),
 }))
 
 import { useMoneyMakerPolling } from '@/hooks/use-money-maker-polling'

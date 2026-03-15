@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Calendar, CalendarDays, Star, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 
 type HeatmapView = 'month' | 'quarter' | 'year'
 
@@ -144,7 +144,7 @@ export function CalendarHeatmap() {
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<HeatmapView>('quarter')
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
-  const { session, isLoading: isAuthLoading } = useMemberAuth()
+  const { session, isLoading: isAuthLoading } = useMemberSession()
 
   useEffect(() => {
     const accessToken = session?.access_token

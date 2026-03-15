@@ -10,7 +10,7 @@ import {
   Target,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import {
   getOptionsChain,
@@ -63,7 +63,7 @@ function isExpiryAvailable(expiry: string | null | undefined, expirations: strin
 // ============================================
 
 export function OptionsChain({ initialSymbol = 'SPY', initialExpiry, preferences }: OptionsChainProps) {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const {
     activeSymbol,
     activeExpiry,

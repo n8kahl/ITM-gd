@@ -11,7 +11,7 @@ import {
   ReferenceLine,
 } from 'recharts'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { Counter } from '@/components/ui/counter'
 
 // ============================================
@@ -65,7 +65,7 @@ export function EquityCurve() {
   const [data, setData] = useState<EquityPoint[]>([])
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState<TimeRange>('30d')
-  const { session, isLoading: isAuthLoading } = useMemberAuth()
+  const { session, isLoading: isAuthLoading } = useMemberSession()
 
   useEffect(() => {
     const accessToken = session?.access_token

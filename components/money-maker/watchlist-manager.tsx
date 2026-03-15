@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Plus, X, Search, Settings2 } from 'lucide-react'
 import { useMoneyMaker } from './money-maker-provider'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 
 const WATCHLIST_ENDPOINT = '/api/members/money-maker/watchlist'
 const SYMBOL_REGEX = /^[A-Z0-9._:-]{1,10}$/
 
 export function WatchlistManager() {
-    const { session } = useMemberAuth()
+    const { session } = useMemberSession()
     const { state, setSymbols } = useMoneyMaker()
     const { symbols } = state
     const [isOpen, setIsOpen] = useState(false)

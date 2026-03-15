@@ -8,6 +8,7 @@ import { buildSetupLockGeometry, parseIsoToUnixSeconds, resolveSetupLockState, t
 
 interface SetupLockOverlayProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
+  coordinatesVersion: number
 }
 
 interface SetupBandRender {
@@ -26,8 +27,6 @@ interface SetupLockRenderState {
   confluenceRings: number
   direction: 'bullish' | 'bearish'
 }
-
-const SETUP_LOCK_REFRESH_INTERVAL_MS = 120
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -59,7 +58,7 @@ function renderStateEquals(left: SetupLockRenderState | null, right: SetupLockRe
   return true
 }
 
-export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
+export function SetupLockOverlay({ coordinatesRef, coordinatesVersion }: SetupLockOverlayProps) {
   const { selectedSetup, tradeMode } = useSPXSetupContext()
   const [renderState, setRenderState] = useState<SetupLockRenderState | null>(null)
   const [showPulse, setShowPulse] = useState(false)
@@ -134,20 +133,11 @@ export function SetupLockOverlay({ coordinatesRef }: SetupLockOverlayProps) {
   }, [coordinatesRef, lockAnchorTimeSec, lockGeometry, selectedSetup])
 
   useEffect(() => {
-    let rafId = 0
-    const tick = () => {
-      rafId = window.requestAnimationFrame(refreshRenderState)
-    }
-
-    tick()
-    const intervalId = window.setInterval(tick, SETUP_LOCK_REFRESH_INTERVAL_MS)
+    const rafId = window.requestAnimationFrame(refreshRenderState)
     return () => {
-      window.clearInterval(intervalId)
-      if (rafId) {
-        window.cancelAnimationFrame(rafId)
-      }
+      window.cancelAnimationFrame(rafId)
     }
-  }, [refreshRenderState])
+  }, [coordinatesVersion, refreshRenderState])
 
   useEffect(() => {
     const previous = previousStateRef.current

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { postSPX, SPXRequestError, useSPXQuery } from '@/hooks/use-spx-api'
 
 export interface SPXOptimizerConfidenceInterval {
@@ -330,7 +330,7 @@ function getYearStartDateEt(now: Date = new Date()): string {
 }
 
 export function useSPXOptimizer() {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const [scanError, setScanError] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [revertError, setRevertError] = useState<string | null>(null)

@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberAccess } from '@/contexts/MemberAuthContext'
 import { getMemberFallbackTitle, getMemberTabHref, isMemberTabActive, resolveMemberTabLabel } from '@/lib/member-navigation'
 
 function isTabRootPath(pathname: string, tabPath: string): boolean {
@@ -23,7 +23,7 @@ function isTabRootPath(pathname: string, tabPath: string): boolean {
 export function MobileTopBar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { profile, getVisibleTabs } = useMemberAuth()
+  const { profile, getVisibleTabs } = useMemberAccess()
 
   const visibleTabs = getVisibleTabs()
   const activeTab = visibleTabs.find((tab) => isMemberTabActive(pathname, tab))

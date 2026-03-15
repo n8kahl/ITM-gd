@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import {
   SPXAnalyticsProvider,
   type SPXAnalyticsContextState,
@@ -591,7 +591,7 @@ function sourceLabel(source: ExecutionFillSource): string {
 const SPXCommandCenterContext = createContext<SPXCommandCenterState | null>(null)
 
 export function SPXCommandCenterProvider({ children }: { children: React.ReactNode }) {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const {
     snapshot: snapshotData,
     isDegraded: snapshotIsDegraded,
@@ -850,28 +850,35 @@ export function SPXCommandCenterProvider({ children }: { children: React.ReactNo
     [realtimeFlowEvents, snapshotData?.flow],
   )
   const currentSpxPriceForSetupValidation = stream.prices.get('SPX')?.price ?? snapshotData?.basis?.spxPrice ?? 0
-  const activeSetups = useMemo(() => {
-    const nowMs = toEpoch(snapshotData?.generatedAt) || Date.now()
-    const enriched = realtimeSetups.map((setup) => enrichSPXSetupWithDecisionEngine(setup, {
-      regime: snapshotData?.regime?.regime || null,
-      prediction: snapshotData?.prediction || null,
-      basis: snapshotData?.basis || null,
-      gex: snapshotData?.gex?.combined || null,
-      flowEvents,
-      nowMs,
-    }))
-    const filtered = enriched.filter((setup) => !hasSetupPriceProgressionConflict(setup, currentSpxPriceForSetupValidation))
-    return rankSetups(filtered)
-  }, [
-    currentSpxPriceForSetupValidation,
+  const setupEnrichmentContext = useMemo(() => ({
+    nowMs: toEpoch(snapshotData?.generatedAt) || Date.now(),
+    regime: snapshotData?.regime?.regime || null,
+    prediction: snapshotData?.prediction || null,
+    basis: snapshotData?.basis || null,
+    gex: snapshotData?.gex?.combined || null,
     flowEvents,
-    realtimeSetups,
+  }), [
+    flowEvents,
     snapshotData?.basis,
     snapshotData?.generatedAt,
     snapshotData?.gex?.combined,
     snapshotData?.prediction,
     snapshotData?.regime?.regime,
   ])
+  const enrichedRankedSetups = useMemo(() => {
+    const enriched = realtimeSetups.map((setup) => enrichSPXSetupWithDecisionEngine(setup, {
+      regime: setupEnrichmentContext.regime,
+      prediction: setupEnrichmentContext.prediction,
+      basis: setupEnrichmentContext.basis,
+      gex: setupEnrichmentContext.gex,
+      flowEvents: setupEnrichmentContext.flowEvents,
+      nowMs: setupEnrichmentContext.nowMs,
+    }))
+    return rankSetups(enriched)
+  }, [realtimeSetups, setupEnrichmentContext])
+  const activeSetups = useMemo(() => {
+    return enrichedRankedSetups.filter((setup) => !hasSetupPriceProgressionConflict(setup, currentSpxPriceForSetupValidation))
+  }, [currentSpxPriceForSetupValidation, enrichedRankedSetups])
   const allLevels = useMemo(() => snapshotData?.levels || [], [snapshotData?.levels])
   const inTradeSetup = useMemo(
     () => (inTradeSetupId ? activeSetups.find((setup) => setup.id === inTradeSetupId) || null : null),

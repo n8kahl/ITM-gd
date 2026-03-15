@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays } from 'lucide-react'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { AICoachAPIError, getEarningsCalendar, type EarningsCalendarEvent } from '@/lib/api/ai-coach'
 import { buildAICoachPromptHref, buildSymbolAICoachHref, normalizeAICoachSymbol } from '@/lib/ai-coach-links'
 
@@ -54,7 +54,7 @@ function formatEtDate(value: string): string {
 }
 
 export function EarningsRadarCard() {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const token = session?.access_token
 
   const [events, setEvents] = useState<EarningsCalendarEvent[]>([])

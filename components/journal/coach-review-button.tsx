@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberAccess } from '@/contexts/MemberAuthContext'
 import type { JournalEntry } from '@/lib/types/journal'
 
 interface CoachReviewButtonProps {
@@ -19,7 +19,7 @@ export function CoachReviewButton({
   onStatusChange,
   disabled = false,
 }: CoachReviewButtonProps) {
-  const { hasPermission } = useMemberAuth()
+  const { hasPermission } = useMemberAccess()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Sunrise } from 'lucide-react'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { AICoachAPIError, getMorningBrief, type MorningBrief } from '@/lib/api/ai-coach'
 import { buildAICoachPromptHref, buildSymbolAICoachHref } from '@/lib/ai-coach-links'
 import { cn } from '@/lib/utils'
@@ -169,7 +169,7 @@ function pnlTone(pnlPct: number | null): string {
 }
 
 export function MarketBriefCard() {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const token = session?.access_token
 
   const [brief, setBrief] = useState<MorningBrief | null>(null)

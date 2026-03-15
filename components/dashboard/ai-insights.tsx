@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Bot, ArrowRight } from 'lucide-react'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { getMorningBrief, type MorningBrief } from '@/lib/api/ai-coach'
 import { buildAICoachPromptHref, normalizeAICoachSymbol } from '@/lib/ai-coach-links'
 
@@ -134,7 +134,7 @@ export function AIInsights() {
   const [insights, setInsights] = useState<InsightData | null>(null)
   const [hasTrades, setHasTrades] = useState(false)
   const [loading, setLoading] = useState(true)
-  const { session, isLoading: isAuthLoading } = useMemberAuth()
+  const { session, isLoading: isAuthLoading } = useMemberSession()
 
   useEffect(() => {
     const accessToken = session?.access_token

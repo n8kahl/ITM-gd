@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { postSPX, SPXRequestError, useSPXQuery } from '@/hooks/use-spx-api'
 
 export type TradierExecutionMode = 'off' | 'manual' | 'auto'
@@ -81,7 +81,7 @@ function clearTradierStatusFailureState(): void {
 }
 
 export function useTradierBroker() {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const [modeError, setModeError] = useState<string | null>(null)
   const [isSettingMode, setIsSettingMode] = useState(false)
   const [killError, setKillError] = useState<string | null>(null)

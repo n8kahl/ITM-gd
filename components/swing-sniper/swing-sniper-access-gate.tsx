@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, Lock } from 'lucide-react'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberAccess, useMemberSession } from '@/contexts/MemberAuthContext'
 import { hasSwingSniperTabAccess } from '@/lib/swing-sniper/access'
 
 interface SwingSniperAccessGateProps {
@@ -11,7 +11,8 @@ interface SwingSniperAccessGateProps {
 }
 
 export function SwingSniperAccessGate({ children }: SwingSniperAccessGateProps) {
-  const { isLoading, getVisibleTabs } = useMemberAuth()
+  const { isLoading } = useMemberSession()
+  const { getVisibleTabs } = useMemberAccess()
   const hasAccess = hasSwingSniperTabAccess(getVisibleTabs())
 
   if (isLoading) {

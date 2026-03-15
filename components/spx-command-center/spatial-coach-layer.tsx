@@ -20,6 +20,7 @@ import {
 
 interface SpatialCoachLayerProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
+  coordinatesVersion: number
   onRequestSidebarOpen?: () => void
 }
 
@@ -30,9 +31,8 @@ interface SpatialAnchorMessage {
 }
 
 const NODE_COLLISION_MIN_GAP_PX = 34
-const NODE_REFRESH_INTERVAL_MS = 140
 
-export function SpatialCoachLayer({ coordinatesRef, onRequestSidebarOpen }: SpatialCoachLayerProps) {
+export function SpatialCoachLayer({ coordinatesRef, coordinatesVersion, onRequestSidebarOpen }: SpatialCoachLayerProps) {
   const { blockTradeEntryByFeedTrust, feedFallbackReasonCode } = useSPXAnalyticsContext()
   const { coachMessages } = useSPXCoachContext()
   const { spxPrice } = useSPXPriceContext()
@@ -134,17 +134,11 @@ export function SpatialCoachLayer({ coordinatesRef, onRequestSidebarOpen }: Spat
       setNodeLayout((previous) => (mapsEqual(previous, next) ? previous : next))
     }
 
-    let rafId = 0
-    const schedule = () => {
-      rafId = window.requestAnimationFrame(computeLayout)
-    }
-    schedule()
-    const intervalId = window.setInterval(schedule, NODE_REFRESH_INTERVAL_MS)
+    const rafId = window.requestAnimationFrame(computeLayout)
     return () => {
-      window.clearInterval(intervalId)
-      if (rafId) window.cancelAnimationFrame(rafId)
+      window.cancelAnimationFrame(rafId)
     }
-  }, [coordinatesRef, spatialMessages])
+  }, [coordinatesRef, coordinatesVersion, spatialMessages])
 
   const handleDismiss = useCallback((id: string) => {
     setDismissedIds((previous) => {

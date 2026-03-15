@@ -10,6 +10,7 @@ import { resolveVisibleChartLevels } from '@/lib/spx/spatial-hud'
 
 interface PriorityLevelOverlayProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
+  coordinatesVersion: number
   showAllRelevantLevels: boolean
   focusMode: 'decision' | 'execution' | 'risk_only'
   onDisplayedLevelsChange?: (displayed: number, total: number) => void
@@ -51,7 +52,6 @@ interface RenderState {
   zones: RenderZone[]
 }
 
-const REFRESH_INTERVAL_MS = 120
 const MAX_LABELS = 10
 const PIXEL_COLLISION_GAP = 16
 
@@ -125,6 +125,7 @@ function renderStateEquals(left: RenderState | null, right: RenderState | null):
 
 export function PriorityLevelOverlay({
   coordinatesRef,
+  coordinatesVersion,
   showAllRelevantLevels,
   focusMode,
   onDisplayedLevelsChange,
@@ -368,17 +369,11 @@ export function PriorityLevelOverlay({
   }, [coordinatesRef, entryZones, focusMode, showAllRelevantLevels, visibleLevels])
 
   useEffect(() => {
-    let rafId = 0
-    const tick = () => {
-      rafId = window.requestAnimationFrame(refreshRenderState)
-    }
-    tick()
-    const intervalId = window.setInterval(tick, REFRESH_INTERVAL_MS)
+    const rafId = window.requestAnimationFrame(refreshRenderState)
     return () => {
-      window.clearInterval(intervalId)
-      if (rafId) window.cancelAnimationFrame(rafId)
+      window.cancelAnimationFrame(rafId)
     }
-  }, [refreshRenderState])
+  }, [coordinatesVersion, refreshRenderState])
 
   useEffect(() => {
     onDisplayedLevelsChange?.(renderState?.lines.length || 0, candidateLevels.length)

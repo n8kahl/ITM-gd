@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { postSPX, useSPXQuery } from '@/hooks/use-spx-api'
 import type { CoachMessage } from '@/lib/types/spx-command-center'
 
@@ -11,7 +11,7 @@ interface CoachStateResponse {
 }
 
 export function useSPXCoach() {
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const [isSending, setIsSending] = useState(false)
 
   const query = useSPXQuery<CoachStateResponse>('/api/spx/coach/state', {

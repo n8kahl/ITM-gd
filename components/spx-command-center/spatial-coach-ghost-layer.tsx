@@ -22,6 +22,7 @@ import type { CoachMessage } from '@/lib/types/spx-command-center'
 
 interface SpatialCoachGhostLayerProps {
   coordinatesRef: RefObject<ChartCoordinateAPI>
+  coordinatesVersion: number
 }
 
 interface GhostRenderItem {
@@ -44,7 +45,6 @@ interface GhostRenderState {
   items: GhostRenderItem[]
 }
 
-const GHOST_REFRESH_INTERVAL_MS = 180
 const GHOST_LIFECYCLE_TICK_MS = 240
 const MAX_GHOST_ITEMS = 3
 const MAX_RENDER_ITEMS = 1
@@ -164,7 +164,7 @@ function dedupeGhostAnchors(
   return deduped
 }
 
-export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLayerProps) {
+export function SpatialCoachGhostLayer({ coordinatesRef, coordinatesVersion }: SpatialCoachGhostLayerProps) {
   const { coachMessages } = useSPXCoachContext()
   const { spxPrice } = useSPXPriceContext()
   const { activeSetups, inTradeSetup, selectedSetup } = useSPXSetupContext()
@@ -357,20 +357,11 @@ export function SpatialCoachGhostLayer({ coordinatesRef }: SpatialCoachGhostLaye
   }, [coordinatesRef, lifecycleMap])
 
   useEffect(() => {
-    let rafId = 0
-    const tick = () => {
-      rafId = window.requestAnimationFrame(refreshRenderState)
-    }
-
-    tick()
-    const intervalId = window.setInterval(tick, GHOST_REFRESH_INTERVAL_MS)
+    const rafId = window.requestAnimationFrame(refreshRenderState)
     return () => {
-      window.clearInterval(intervalId)
-      if (rafId) {
-        window.cancelAnimationFrame(rafId)
-      }
+      window.cancelAnimationFrame(rafId)
     }
-  }, [refreshRenderState])
+  }, [coordinatesVersion, refreshRenderState])
 
   if (!renderState || renderState.items.length === 0) return null
 

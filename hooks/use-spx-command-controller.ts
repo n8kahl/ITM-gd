@@ -128,7 +128,7 @@ export function useSPXCommandController() {
   const chartCanvasRef = useRef<HTMLDivElement | null>(null)
   const rootVariants = prefersReducedMotion ? undefined : STAGGER_CHILDREN
   const itemVariants = prefersReducedMotion ? undefined : FADE_UP_VARIANT
-  const { coordinatesRef, invalidate: invalidateChartCoordinates } = useChartCoordinates(
+  const { coordinatesRef, coordinatesVersion, invalidate: invalidateChartCoordinates } = useChartCoordinates(
     chartRef,
     candlestickSeriesRef,
     chartCanvasRef,
@@ -802,6 +802,7 @@ export function useSPXCommandController() {
     rootVariants,
     itemVariants,
     coordinatesRef,
+    coordinatesVersion,
     chartCanvasRef,
     sidebarWidth,
     sidebarOpen,

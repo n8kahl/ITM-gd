@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 
 export interface ChartCoordinateAPI {
@@ -13,7 +13,38 @@ export interface ChartCoordinateAPI {
 
 interface UseChartCoordinatesResult {
   coordinatesRef: MutableRefObject<ChartCoordinateAPI>
+  coordinatesVersion: number
   invalidate: () => void
+}
+
+interface CoordinateSnapshot {
+  width: number
+  height: number
+  ready: boolean
+  priceRangeMin: number | null
+  priceRangeMax: number | null
+  logicalRangeFrom: number | null
+  logicalRangeTo: number | null
+}
+
+const EMPTY_COORDINATE_SNAPSHOT: CoordinateSnapshot = {
+  width: 0,
+  height: 0,
+  ready: false,
+  priceRangeMin: null,
+  priceRangeMax: null,
+  logicalRangeFrom: null,
+  logicalRangeTo: null,
+}
+
+function snapshotsEqual(left: CoordinateSnapshot, right: CoordinateSnapshot): boolean {
+  return left.width === right.width
+    && left.height === right.height
+    && left.ready === right.ready
+    && left.priceRangeMin === right.priceRangeMin
+    && left.priceRangeMax === right.priceRangeMax
+    && left.logicalRangeFrom === right.logicalRangeFrom
+    && left.logicalRangeTo === right.logicalRangeTo
 }
 
 function resolveChartElement(
@@ -30,6 +61,7 @@ export function useChartCoordinates(
   seriesRef: RefObject<ISeriesApi<'Candlestick'> | null>,
   fallbackContainerRef?: RefObject<HTMLElement | null>,
 ): UseChartCoordinatesResult {
+  const [coordinatesVersion, setCoordinatesVersion] = useState(0)
   const coordinatesRef = useRef<ChartCoordinateAPI>({
     priceToPixel: () => null,
     timeToPixel: () => null,
@@ -37,6 +69,7 @@ export function useChartCoordinates(
     chartDimensions: { width: 0, height: 0 },
     ready: false,
   })
+  const snapshotRef = useRef<CoordinateSnapshot>(EMPTY_COORDINATE_SNAPSHOT)
 
   const recalculate = useCallback(() => {
     const chart = chartRef.current
@@ -49,6 +82,10 @@ export function useChartCoordinates(
         chartDimensions: { width: 0, height: 0 },
         ready: false,
       }
+      if (!snapshotsEqual(snapshotRef.current, EMPTY_COORDINATE_SNAPSHOT)) {
+        snapshotRef.current = EMPTY_COORDINATE_SNAPSHOT
+        setCoordinatesVersion((previous) => previous + 1)
+      }
       return
     }
 
@@ -56,6 +93,21 @@ export function useChartCoordinates(
     const chartElement = resolveChartElement(chart, fallbackContainerRef)
     const width = chartElement?.clientWidth || 0
     const height = chartElement?.clientHeight || 0
+    const visiblePriceRange = (() => {
+      try {
+        const range = series.priceScale().getVisibleRange()
+        return range ? { min: range.from, max: range.to } : null
+      } catch {
+        return null
+      }
+    })()
+    const visibleLogicalRange = (() => {
+      try {
+        return timeScale.getVisibleLogicalRange()
+      } catch {
+        return null
+      }
+    })()
 
     coordinatesRef.current = {
       priceToPixel: (price: number) => {
@@ -74,28 +126,38 @@ export function useChartCoordinates(
           return null
         }
       },
-      visiblePriceRange: (() => {
-        try {
-          const range = series.priceScale().getVisibleRange()
-          return range ? { min: range.from, max: range.to } : null
-        } catch {
-          return null
-        }
-      })(),
+      visiblePriceRange,
       chartDimensions: { width, height },
       ready: width > 0 && height > 0,
+    }
+    const nextSnapshot: CoordinateSnapshot = {
+      width,
+      height,
+      ready: width > 0 && height > 0,
+      priceRangeMin: visiblePriceRange?.min ?? null,
+      priceRangeMax: visiblePriceRange?.max ?? null,
+      logicalRangeFrom: visibleLogicalRange?.from ?? null,
+      logicalRangeTo: visibleLogicalRange?.to ?? null,
+    }
+    if (!snapshotsEqual(snapshotRef.current, nextSnapshot)) {
+      snapshotRef.current = nextSnapshot
+      setCoordinatesVersion((previous) => previous + 1)
     }
   }, [chartRef, fallbackContainerRef, seriesRef])
 
   useEffect(() => {
     let detached = false
     let attachRafId: number | null = null
-    let interactionIntervalId: number | null = null
+    let scheduledRafId: number | null = null
     let resizeObserver: ResizeObserver | null = null
     let cleanupAttachedListeners: (() => void) | null = null
 
     const scheduleRecalculate = () => {
-      window.requestAnimationFrame(recalculate)
+      if (scheduledRafId != null) return
+      scheduledRafId = window.requestAnimationFrame(() => {
+        scheduledRafId = null
+        recalculate()
+      })
     }
 
     const tryAttach = () => {
@@ -113,15 +175,13 @@ export function useChartCoordinates(
 
       timeScale.subscribeVisibleLogicalRangeChange(scheduleRecalculate)
       timeScale.subscribeVisibleTimeRangeChange(scheduleRecalculate)
-      chart.subscribeCrosshairMove(scheduleRecalculate)
 
       const chartElement = resolveChartElement(chart, fallbackContainerRef)
       if (chartElement) {
         resizeObserver = new ResizeObserver(() => {
-          window.requestAnimationFrame(recalculate)
+          scheduleRecalculate()
         })
         resizeObserver.observe(chartElement)
-        chartElement.addEventListener('pointermove', handleChartInteraction, { passive: true })
         chartElement.addEventListener('pointerdown', handleChartInteraction, { passive: true })
         chartElement.addEventListener('pointerup', handleChartInteraction, { passive: true })
         chartElement.addEventListener('pointercancel', handleChartInteraction, { passive: true })
@@ -130,8 +190,6 @@ export function useChartCoordinates(
         chartElement.addEventListener('touchmove', handleChartInteraction, { passive: true })
       }
 
-      // Fallback sampler for interactions that may skip visible-range callbacks.
-      interactionIntervalId = window.setInterval(scheduleRecalculate, 180)
       scheduleRecalculate()
 
       cleanupAttachedListeners = () => {
@@ -146,21 +204,16 @@ export function useChartCoordinates(
           // no-op
         }
         try {
-          chart.unsubscribeCrosshairMove(scheduleRecalculate)
+          if (chartElement) {
+            chartElement.removeEventListener('pointerdown', handleChartInteraction)
+            chartElement.removeEventListener('pointerup', handleChartInteraction)
+            chartElement.removeEventListener('pointercancel', handleChartInteraction)
+            chartElement.removeEventListener('wheel', handleChartInteraction)
+            chartElement.removeEventListener('touchstart', handleChartInteraction)
+            chartElement.removeEventListener('touchmove', handleChartInteraction)
+          }
         } catch {
           // no-op
-        }
-        if (interactionIntervalId != null) {
-          window.clearInterval(interactionIntervalId)
-        }
-        if (chartElement) {
-          chartElement.removeEventListener('pointermove', handleChartInteraction)
-          chartElement.removeEventListener('pointerdown', handleChartInteraction)
-          chartElement.removeEventListener('pointerup', handleChartInteraction)
-          chartElement.removeEventListener('pointercancel', handleChartInteraction)
-          chartElement.removeEventListener('wheel', handleChartInteraction)
-          chartElement.removeEventListener('touchstart', handleChartInteraction)
-          chartElement.removeEventListener('touchmove', handleChartInteraction)
         }
         resizeObserver?.disconnect()
       }
@@ -173,9 +226,12 @@ export function useChartCoordinates(
       if (attachRafId != null) {
         window.cancelAnimationFrame(attachRafId)
       }
+      if (scheduledRafId != null) {
+        window.cancelAnimationFrame(scheduledRafId)
+      }
       cleanupAttachedListeners?.()
     }
   }, [chartRef, recalculate, fallbackContainerRef])
 
-  return { coordinatesRef, invalidate: recalculate }
+  return { coordinatesRef, coordinatesVersion, invalidate: recalculate }
 }

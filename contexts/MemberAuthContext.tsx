@@ -8,6 +8,7 @@ import {
   useCallback,
   useRef,
   useMemo,
+  type Context,
   type ReactNode
 } from 'react'
 import { useRouter } from 'next/navigation'
@@ -96,6 +97,32 @@ interface MemberAuthContextValue extends MemberAuthState {
   getVisibleTabs: () => TabConfig[]
   /** V3: Get mobile-visible tab configs filtered by user's tier */
   getMobileTabs: () => TabConfig[]
+}
+
+interface MemberSessionContextValue {
+  user: User | null
+  session: Session | null
+  isLoading: boolean
+  isAuthenticated: boolean
+  error: string | null
+  errorCode: SyncErrorCode | null
+  isNotMember: boolean
+}
+
+interface MemberAccessContextValue {
+  profile: MemberProfile | null
+  permissions: MemberPermission[]
+  allowedTabs: string[]
+  tabConfigs: TabConfig[]
+  hasPermission: (permissionName: string) => boolean
+  getVisibleTabs: () => TabConfig[]
+  getMobileTabs: () => TabConfig[]
+}
+
+interface MemberAuthActionsContextValue {
+  signOut: () => Promise<void>
+  syncDiscordRoles: () => Promise<DiscordSyncResult | null>
+  refresh: () => Promise<void>
 }
 
 interface AdminStatusResponse {
@@ -411,7 +438,9 @@ function createE2EBypassAuthState(): MemberAuthState {
 // CONTEXT
 // ============================================
 
-const MemberAuthContext = createContext<MemberAuthContextValue | null>(null)
+const MemberSessionContext = createContext<MemberSessionContextValue | null>(null)
+const MemberAccessContext = createContext<MemberAccessContextValue | null>(null)
+const MemberAuthActionsContext = createContext<MemberAuthActionsContextValue | null>(null)
 
 // ============================================
 // PROVIDER
@@ -1504,7 +1533,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const isNotMember = state.errorCode === SYNC_ERROR_CODES.NOT_MEMBER
 
   // V3: Compute filtered tab configs based on user's tier
-  const getVisibleTabs = useCallback((): TabConfig[] => {
+  const visibleTabs = useMemo((): TabConfig[] => {
     const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
     const userTierLevel = state.profile?.role === 'admin'
       ? Number.MAX_SAFE_INTEGER
@@ -1568,33 +1597,64 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     return visibleTabs
   }, [allTabConfigs, getAllowedTabsForTier, state.allowedTabs, state.profile?.membership_tier, state.profile?.role, state.profile?.discord_roles])
 
-  const getMobileTabs = useCallback((): TabConfig[] => {
-    return getVisibleTabs().filter(tab => tab.mobile_visible)
-  }, [getVisibleTabs])
+  const mobileTabs = useMemo(
+    () => visibleTabs.filter((tab) => tab.mobile_visible),
+    [visibleTabs],
+  )
 
-  // Keep tabConfigs in state synced with allTabConfigs when they're loaded
-  useEffect(() => {
-    if (allTabConfigs.length > 0 && state.profile) {
-      const visibleTabs = getVisibleTabs()
-      setState(prev => ({ ...prev, tabConfigs: visibleTabs }))
-    }
-  }, [allTabConfigs, getVisibleTabs, state.profile])
+  const getVisibleTabs = useCallback(() => visibleTabs, [visibleTabs])
+  const getMobileTabs = useCallback(() => mobileTabs, [mobileTabs])
 
-  const value = useMemo<MemberAuthContextValue>(() => ({
-    ...state,
-    signOut,
-    syncDiscordRoles,
-    hasPermission,
-    refresh,
+  const sessionValue = useMemo<MemberSessionContextValue>(() => ({
+    user: state.user,
+    session: state.session,
+    isLoading: state.isLoading,
+    isAuthenticated: state.isAuthenticated,
+    error: state.error,
+    errorCode: state.errorCode,
     isNotMember,
+  }), [
+    isNotMember,
+    state.error,
+    state.errorCode,
+    state.isAuthenticated,
+    state.isLoading,
+    state.session,
+    state.user,
+  ])
+
+  const accessValue = useMemo<MemberAccessContextValue>(() => ({
+    profile: state.profile,
+    permissions: state.permissions,
+    allowedTabs: state.allowedTabs,
+    tabConfigs: visibleTabs,
+    hasPermission,
     getVisibleTabs,
     getMobileTabs,
-  }), [state, signOut, syncDiscordRoles, hasPermission, refresh, isNotMember, getVisibleTabs, getMobileTabs])
+  }), [
+    getMobileTabs,
+    getVisibleTabs,
+    hasPermission,
+    state.allowedTabs,
+    state.permissions,
+    state.profile,
+    visibleTabs,
+  ])
+
+  const actionsValue = useMemo<MemberAuthActionsContextValue>(() => ({
+    signOut,
+    syncDiscordRoles,
+    refresh,
+  }), [refresh, signOut, syncDiscordRoles])
 
   return (
-    <MemberAuthContext.Provider value={value}>
-      {children}
-    </MemberAuthContext.Provider>
+    <MemberSessionContext.Provider value={sessionValue}>
+      <MemberAccessContext.Provider value={accessValue}>
+        <MemberAuthActionsContext.Provider value={actionsValue}>
+          {children}
+        </MemberAuthActionsContext.Provider>
+      </MemberAccessContext.Provider>
+    </MemberSessionContext.Provider>
   )
 }
 
@@ -1602,15 +1662,53 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 // HOOK
 // ============================================
 
-export function useMemberAuth() {
-  const context = useContext(MemberAuthContext)
+function useRequiredMemberContext<T>(
+  context: Context<T | null>,
+  hookName: string,
+): T {
+  const value = useContext(context)
 
-  if (!context) {
-    throw new Error('useMemberAuth must be used within a MemberAuthProvider')
+  if (!value) {
+    throw new Error(`${hookName} must be used within a MemberAuthProvider`)
   }
 
-  return context
+  return value
 }
 
-// Alias for convenience
-export const useMemberSession = useMemberAuth
+export function useMemberSession() {
+  return useRequiredMemberContext(MemberSessionContext, 'useMemberSession')
+}
+
+export function useMemberAccess() {
+  return useRequiredMemberContext(MemberAccessContext, 'useMemberAccess')
+}
+
+export function useMemberAuthActions() {
+  return useRequiredMemberContext(MemberAuthActionsContext, 'useMemberAuthActions')
+}
+
+export function useMemberAuth() {
+  const session = useMemberSession()
+  const access = useMemberAccess()
+  const actions = useMemberAuthActions()
+
+  return useMemo<MemberAuthContextValue>(() => ({
+    user: session.user,
+    session: session.session,
+    profile: access.profile,
+    permissions: access.permissions,
+    allowedTabs: access.allowedTabs,
+    tabConfigs: access.tabConfigs,
+    isLoading: session.isLoading,
+    isAuthenticated: session.isAuthenticated,
+    error: session.error,
+    errorCode: session.errorCode,
+    signOut: actions.signOut,
+    syncDiscordRoles: actions.syncDiscordRoles,
+    hasPermission: access.hasPermission,
+    refresh: actions.refresh,
+    isNotMember: session.isNotMember,
+    getVisibleTabs: access.getVisibleTabs,
+    getMobileTabs: access.getMobileTabs,
+  }), [access, actions, session])
+}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { buildSymbolAICoachHref } from '@/lib/ai-coach-links'
 
 interface RecentTrade {
@@ -42,7 +42,7 @@ function gradeColor(grade: string | null | undefined): string {
 export function RecentTrades() {
   const [trades, setTrades] = useState<RecentTrade[]>([])
   const [loading, setLoading] = useState(true)
-  const { session, isLoading: isAuthLoading } = useMemberAuth()
+  const { session, isLoading: isAuthLoading } = useMemberSession()
   const router = useRouter()
 
   useEffect(() => {

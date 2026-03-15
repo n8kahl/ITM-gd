@@ -25,7 +25,7 @@ import { CenterPanel, type ChartRequest, type CenterView } from '@/components/ai
 import { MobileToolSheet } from '@/components/ai-coach/mobile-tool-sheet'
 import { MiniChatOverlay } from '@/components/ai-coach/mini-chat-overlay'
 import { AICoachErrorBoundary } from '@/components/ai-coach/error-boundary'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberAccess, useMemberSession } from '@/contexts/MemberAuthContext'
 import { AICoachWorkflowProvider } from '@/contexts/AICoachWorkflowContext'
 import {
   analyzeScreenshot as apiAnalyzeScreenshot,
@@ -681,7 +681,8 @@ function ChatArea({
   isLoadingMessages, error, rateLimitInfo, onSendMessage, onNewSession,
   onSelectSession, onDeleteSession, onClearError, onAppendUserMessage, onAppendAssistantMessage, onExpandChart, onOpenSheet, onTogglePanelCollapse,
 }: ChatAreaProps) {
-  const { session, profile } = useMemberAuth()
+  const { session } = useMemberSession()
+  const { profile } = useMemberAccess()
   const [inputValue, setInputValue] = useState('')
   const [showSessions, setShowSessions] = useState(false)
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false)

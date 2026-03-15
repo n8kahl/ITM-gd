@@ -30,7 +30,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMemberAuth } from '@/contexts/MemberAuthContext'
+import { useMemberSession } from '@/contexts/MemberAuthContext'
 import { useAICoachWorkflow } from '@/contexts/AICoachWorkflowContext'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
@@ -486,7 +486,7 @@ function getWelcomeGreeting(displayName?: string, now: Date = new Date()): strin
 
 export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParams, sheetSymbol }: CenterPanelProps) {
   const searchParams = useSearchParams()
-  const { session } = useMemberAuth()
+  const { session } = useMemberSession()
   const {
     activeCenterView,
     activeSymbol,

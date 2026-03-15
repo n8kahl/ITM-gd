@@ -216,6 +216,7 @@ export function createDesktopSpatialCanvasProps(
     spatialThrottled: controller.spatialThrottled,
     showSpatialGhostCards: controller.uxFlags.spatialCoachGhostCards,
     coordinatesRef: controller.coordinatesRef,
+    coordinatesVersion: controller.coordinatesVersion,
     showAllRelevantLevels: controller.showAllRelevantLevels,
     onDisplayedLevelsChange: controller.handleDisplayedLevelsChange,
     onChartReady: controller.handleChartReady,
