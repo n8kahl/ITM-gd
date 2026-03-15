@@ -8,7 +8,8 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: (...args: unknown[]) => mockCreateClient(...args),
 }))
 
-import { GET } from '@/app/api/health/route'
+import { GET as getHealth } from '@/app/api/health/route'
+import { GET as getReadyHealth } from '@/app/api/health/ready/route'
 
 function buildSupabaseClient(error: { message: string } | null = null) {
   const limit = vi.fn().mockResolvedValue({ error })
@@ -44,7 +45,7 @@ describe('/api/health route', () => {
   it('returns 200 with ok status when supabase is reachable', async () => {
     mockCreateClient.mockReturnValue(buildSupabaseClient())
 
-    const response = await GET(new Request('https://example.com/api/health'))
+    const response = await getHealth()
     const payload = await response.json()
 
     expect(response.status).toBe(200)
@@ -61,7 +62,7 @@ describe('/api/health route', () => {
   it('returns 200 with degraded status for the default liveness probe when supabase is down', async () => {
     mockCreateClient.mockReturnValue(buildSupabaseClient({ message: 'connection failed' }))
 
-    const response = await GET(new Request('https://example.com/api/health'))
+    const response = await getHealth()
     const payload = await response.json()
 
     expect(response.status).toBe(200)
@@ -76,10 +77,10 @@ describe('/api/health route', () => {
     })
   })
 
-  it('returns 503 for strict readiness probes when supabase is down', async () => {
+  it('returns 503 for the strict readiness endpoint when supabase is down', async () => {
     mockCreateClient.mockReturnValue(buildSupabaseClient({ message: 'connection failed' }))
 
-    const response = await GET(new Request('https://example.com/api/health?strict=1'))
+    const response = await getReadyHealth()
     const payload = await response.json()
 
     expect(response.status).toBe(503)
@@ -98,7 +99,7 @@ describe('/api/health route', () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL
     delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    const response = await GET(new Request('https://example.com/api/health'))
+    const response = await getHealth()
     const payload = await response.json()
 
     expect(response.status).toBe(200)
@@ -109,6 +110,24 @@ describe('/api/health route', () => {
         supabase: {
           status: 'down',
           message: 'Missing Supabase environment configuration',
+        },
+      },
+    })
+  })
+
+  it('returns 200 for the liveness endpoint even when supabase is down', async () => {
+    mockCreateClient.mockReturnValue(buildSupabaseClient({ message: 'connection failed' }))
+
+    const response = await getHealth()
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toMatchObject({
+      status: 'degraded',
+      checks: {
+        supabase: {
+          status: 'down',
+          message: 'connection failed',
         },
       },
     })
