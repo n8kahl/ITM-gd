@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { buildHealthPayload } from '../health-check'
+import { buildReadinessPayload } from '../health-check'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const payload = await buildHealthPayload()
+  const payload = await buildReadinessPayload()
 
   return NextResponse.json(payload, {
     status: payload.status === 'degraded' ? 503 : 200,
