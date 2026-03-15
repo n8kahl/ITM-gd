@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -188,6 +188,21 @@ export function DossierPanel({
   ).slice(0, 3)
   const transitionSymbol = selectedSymbol ?? dossier?.symbol ?? 'Research'
   const [showDeepDive, setShowDeepDive] = useState(false)
+  const deepDiveRef = useRef<HTMLDivElement | null>(null)
+
+  const openDeepDiveTab = (tab: DossierTab) => {
+    onTabChange(tab)
+    setShowDeepDive(true)
+
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        deepDiveRef.current?.scrollIntoView?.({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      })
+    }
+  }
 
   return (
     <section className="glass-card-heavy rounded-[28px] border border-white/10 p-4" data-testid="swing-sniper-dossier">
@@ -254,7 +269,7 @@ export function DossierPanel({
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
-                  onClick={() => onTabChange('Structure')}
+                  onClick={() => openDeepDiveTab('Structure')}
                   className="rounded-full bg-white text-black hover:bg-white/90"
                 >
                   Build trade
@@ -390,7 +405,7 @@ export function DossierPanel({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => onTabChange('Structure')}
+                    onClick={() => openDeepDiveTab('Structure')}
                     className="rounded-full border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
                   >
                     Compare setups
@@ -514,7 +529,7 @@ export function DossierPanel({
                             <button
                               key={`${structure.name}-${structure.fit_score}`}
                               type="button"
-                              onClick={() => onTabChange('Structure')}
+                              onClick={() => openDeepDiveTab('Structure')}
                               className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs uppercase tracking-[0.14em] text-white/75 transition-colors hover:bg-white/[0.08]"
                             >
                               {structure.name}
@@ -558,7 +573,7 @@ export function DossierPanel({
             </div>
           </div>
 
-          <div className="mt-5 rounded-[22px] border border-white/10 bg-white/[0.03] p-3">
+          <div ref={deepDiveRef} className="mt-5 rounded-[22px] border border-white/10 bg-white/[0.03] p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">Research depth</p>
               <button
