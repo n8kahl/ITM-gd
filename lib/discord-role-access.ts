@@ -46,42 +46,6 @@ function parseRoleIdsFromString(value: string): string[] {
   return normalizeDiscordRoleIds(trimmed.split(','))
 }
 
-function parseRoleIdsFromUnknown(raw: unknown): string[] {
-  if (Array.isArray(raw)) {
-    return normalizeDiscordRoleIds(raw)
-  }
-  if (typeof raw === 'string') {
-    return parseRoleIdsFromString(raw)
-  }
-  return []
-}
-
-function getConfiguredMembersAllowedRoleIdsFromRows(rows: Array<{ key?: unknown; value?: unknown }>): string[] {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return []
-  }
-
-  const settingByKey = new Map<string, unknown>()
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue
-    const key = typeof row.key === 'string' ? row.key.trim() : ''
-    if (!key) continue
-    settingByKey.set(key, row.value)
-  }
-
-  const preferred = parseRoleIdsFromUnknown(settingByKey.get(MEMBERS_REQUIRED_ROLE_IDS_SETTING_KEY))
-  if (preferred.length > 0) {
-    return preferred
-  }
-
-  const legacy = parseRoleIdsFromUnknown(settingByKey.get(MEMBERS_REQUIRED_ROLE_ID_LEGACY_SETTING_KEY))
-  if (legacy.length > 0) {
-    return legacy
-  }
-
-  return []
-}
-
 export function getDefaultMembersAllowedRoleIds(): string[] {
   const fromEnv = parseRoleIdsFromString(process.env[MEMBERS_ALLOWED_ROLE_IDS_ENV_KEY] || '')
   if (fromEnv.length > 0) {
@@ -117,9 +81,10 @@ export async function resolveMembersAllowedRoleIds(params?: {
 
   try {
     const { data, error } = await supabase
-      .from('app_settings')
-      .select('key, value')
-      .in('key', [MEMBERS_REQUIRED_ROLE_IDS_SETTING_KEY, MEMBERS_REQUIRED_ROLE_ID_LEGACY_SETTING_KEY])
+      .from('access_control_settings')
+      .select('members_allowed_role_ids')
+      .eq('singleton', true)
+      .maybeSingle()
 
     if (error) {
       const fallback = getDefaultMembersAllowedRoleIds()
@@ -130,7 +95,7 @@ export async function resolveMembersAllowedRoleIds(params?: {
       return fallback
     }
 
-    const configuredRoleIds = getConfiguredMembersAllowedRoleIdsFromRows((data || []) as Array<{ key?: unknown; value?: unknown }>)
+    const configuredRoleIds = normalizeDiscordRoleIds((data as { members_allowed_role_ids?: unknown } | null)?.members_allowed_role_ids)
     const resolvedRoleIds = configuredRoleIds.length > 0
       ? configuredRoleIds
       : getDefaultMembersAllowedRoleIds()

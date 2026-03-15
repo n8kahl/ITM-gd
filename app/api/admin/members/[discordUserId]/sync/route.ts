@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
 import {
   evaluateMemberAccess,
 } from '@/lib/access-control/evaluate-member-access'
@@ -18,51 +17,46 @@ import {
 } from '@/lib/server-supabase'
 import { logAdminActivity } from '@/lib/admin/audit-log'
 
-const requestSchema = z.object({
-  user_id: z.string().uuid(),
-})
-
-export async function POST(request: NextRequest) {
+export async function POST(
+  _request: NextRequest,
+  context: { params: Promise<{ discordUserId: string }> },
+) {
   const admin = await requireAdminAccess()
   if (!admin.authorized) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 
+  const { discordUserId } = await context.params
   const supabase = createServiceRoleSupabaseClient()
   if (!supabase) {
     return NextResponse.json({ success: false, error: 'Sync unavailable' }, { status: 500 })
   }
 
-  const body = requestSchema.parse(await request.json().catch(() => ({})))
-  const subject = await loadAccessControlSubject(supabase, { userId: body.user_id })
-  const discordUserId = subject.discordMember?.discordUserId || subject.linkedProfile?.discordUserId || null
-
-  if (!discordUserId) {
-    return NextResponse.json({
-      success: false,
-      error: 'Discord user ID could not be resolved for this linked user.',
-    }, { status: 400 })
-  }
+  const subject = await loadAccessControlSubject(supabase, { discordUserId })
+  const linkedUserId = subject.linkedAuthUser?.id || subject.linkedProfile?.userId || subject.discordMember?.linkedUserId || null
 
   const refreshedMember = await refreshSingleDiscordGuildMember(supabase, discordUserId)
-  await syncLinkedMemberCaches({
-    supabase,
-    userId: body.user_id,
-    discordUserId,
-    username: refreshedMember?.username || subject.linkedProfile?.discordUsername || null,
-    avatar: refreshedMember?.avatar || subject.linkedProfile?.discordAvatar || null,
-    roleIds: refreshedMember?.discordRoles || [],
-  })
+  if (linkedUserId) {
+    await syncLinkedMemberCaches({
+      supabase,
+      userId: linkedUserId,
+      discordUserId,
+      username: refreshedMember?.username || subject.linkedProfile?.discordUsername || null,
+      avatar: refreshedMember?.avatar || subject.linkedProfile?.discordAvatar || null,
+      roleIds: refreshedMember?.discordRoles || [],
+    })
+  }
 
   const evaluation = await evaluateMemberAccess(supabase, { discordUserId })
 
   await logAdminActivity({
-    action: 'member_force_sync_wrapper_requested',
-    targetType: 'member',
-    targetId: body.user_id,
+    action: 'member_access_single_sync_requested',
+    targetType: 'discord_member',
+    targetId: discordUserId,
     details: {
-      user_id: body.user_id,
       discord_user_id: discordUserId,
+      user_id: linkedUserId,
+      in_guild: refreshedMember?.isInGuild ?? false,
     },
   })
 
@@ -72,7 +66,6 @@ export async function POST(request: NextRequest) {
       member: refreshedMember,
       evaluation,
     },
-    message: 'Legacy force-sync route now proxies the canonical member sync flow.',
   }, {
     headers: {
       'Cache-Control': 'no-store',

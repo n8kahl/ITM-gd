@@ -1,876 +1,1265 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import {
   AlertTriangle,
   CheckCircle2,
-  Clock3,
-  Database,
   Loader2,
-  PanelTop,
   RefreshCw,
   Search,
   Shield,
   ShieldAlert,
-  SlidersHorizontal,
+  UserRound,
   Users,
-  XCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
 
-type LookupMode = 'user_id' | 'email' | 'discord_user_id'
-type GapSeverity = 'critical' | 'warning' | 'info'
-
-interface OverviewRole {
-  role_id: string
-  role_name: string | null
-  is_known?: boolean
+type DirectoryRow = {
+  discord_user_id: string
+  username: string
+  global_name: string | null
+  nickname: string | null
+  avatar: string | null
+  avatar_url: string | null
+  linked_user_id: string | null
+  email: string | null
+  link_status: 'linked' | 'discord_only' | 'site_only'
+  resolved_tier: 'core' | 'pro' | 'executive' | null
+  access_status: 'suspended' | 'admin' | 'member' | 'denied'
+  is_admin: boolean
+  is_privileged: boolean
+  has_members_access: boolean
+  active_override_count: number
+  role_summary: Array<{ role_id: string; role_name: string }>
+  role_count: number
+  last_synced_at: string | null
+  sync_error: string | null
 }
 
-interface OverviewGap {
-  id: string
-  severity: GapSeverity
-  title: string
-  description: string
-  count: number
-  items: string[]
-}
-
-interface OverviewTab {
-  tab_id: string
-  label: string
-  path: string
-  required_tier: string
-  required_roles: OverviewRole[]
-  unknown_required_role_ids: string[]
-  is_required: boolean
-}
-
-interface OverviewTierMapping {
-  role_id: string
-  role_name: string | null
-  tier: string
-  has_permission_mapping?: boolean
-}
-
-interface OverviewData {
-  generated_at?: string
-  intended_use?: {
-    summary?: string
-    controls?: string[]
-  }
-  counts?: Record<string, number>
-  discord?: {
-    guild_id_configured?: boolean
-    bot_token_configured?: boolean
-    invite_url_configured?: boolean
-    guild_role_catalog_count?: number
-    guild_role_catalog_last_synced_at?: string | null
-    guild_role_catalog_error?: string | null
-  }
-  members_gate?: {
-    roles?: OverviewRole[]
-    matching_profile_count?: number
-  }
-  tiers?: {
-    role_tier_mapping?: OverviewTierMapping[]
-    roles_missing_tier_mapping?: OverviewRole[]
-    tier_mapped_roles_without_permission_mapping?: OverviewTierMapping[]
-    pricing_tiers?: Array<{
-      tier_id: string
-      tier_name: string
-      discord_role_id: string | null
-      discord_role_name: string | null
-      is_active: boolean
-    }>
-  }
-  permissions?: {
-    unmapped_app_permissions?: string[]
-    tier_fallback_permission_names?: string[]
-  }
-  tabs?: {
-    active?: OverviewTab[]
-  }
-  sync?: {
-    stale_profile_count?: number
-    total_profile_count?: number
-    stale_profiles?: Array<{
-      user_id: string
+type DetailResponse = {
+  success: boolean
+  error?: string
+  data?: {
+    identity: {
       discord_user_id: string | null
-      discord_username: string | null
+      username: string | null
+      global_name: string | null
+      nickname: string | null
+      avatar: string | null
+      avatar_url: string | null
+      email: string | null
+      linked_user_id: string | null
+      link_status: string
+      is_in_guild: boolean
+      sources: {
+        roles: string
+        identity: string
+      }
+    }
+    discord_roles: Array<{ role_id: string; role_name: string }>
+    app_access: {
+      resolved_tier: 'core' | 'pro' | 'executive' | null
+      is_admin: boolean
+      is_privileged: boolean
+      has_members_access: boolean
+      allowed_tabs: string[]
+    }
+    controls: {
+      allow_discord_role_mutation: boolean
+      role_catalog: Array<{
+        role_id: string
+        role_name: string
+        managed: boolean
+        position: number
+      }>
+    }
+    tab_matrix: Array<{
+      tabId: string
+      label: string
+      path: string
+      requiredTier: string
+      requiredRoleIds: string[]
+      requiredRoleNames: string[]
+      allowed: boolean
+      reasonCode: string
+      reason: string
+      overrideApplied: string | null
+    }>
+    profile_sync_health: {
       last_synced_at: string | null
+      warnings: Array<{ code: string; severity: 'info' | 'warning' | 'critical'; message: string }>
+      guild_sync_error: string | null
+      linked_profile_last_synced_at: string | null
+      linked_auth_created_at: string | null
+      linked_auth_last_sign_in_at: string | null
+    }
+    overrides: Array<{
+      id: string
+      overrideType: string
+      reason: string
+      createdAt: string
+      expiresAt: string | null
+      payload: Record<string, unknown>
+    }>
+    audit_history: Array<{
+      id: string
+      action: string
+      created_at: string
+      details: Record<string, unknown> | null
     }>
   }
-  diagnostics?: {
-    query_errors?: string[]
-  }
-  thresholds?: {
-    stale_sync_hours?: number
-  }
-  gaps?: OverviewGap[]
 }
 
-function formatRoleTitle(role: Pick<OverviewRole, 'role_id' | 'role_name'>): string {
-  const roleName = role.role_name?.trim()
-  if (roleName) return roleName
-  return `Unknown role (${role.role_id})`
+type RoleMutationResponse = {
+  success: boolean
+  error?: string
+  data?: {
+    mutation_enabled?: boolean
+    manageable?: boolean
+    manageability_reason?: string | null
+    role?: {
+      id: string
+      name: string
+    } | null
+    current_role_ids?: string[]
+    next_role_ids?: string[]
+    preview_evaluation?: {
+      resolvedTier: 'core' | 'pro' | 'executive' | null
+      isAdmin: boolean
+      hasMembersAccess: boolean
+      allowedTabs: string[]
+    }
+    evaluation?: {
+      resolvedTier: 'core' | 'pro' | 'executive' | null
+      isAdmin: boolean
+      hasMembersAccess: boolean
+      allowedTabs: string[]
+    }
+    no_op?: boolean
+  }
 }
 
-function formatDateTime(value?: string | null): string {
+type DirectoryResponse = {
+  success: boolean
+  error?: string
+  data?: DirectoryRow[]
+  meta?: {
+    resultCount: number
+  }
+}
+
+function formatDate(value: string | null | undefined): string {
   if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString()
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  return parsed.toLocaleString()
 }
 
-function gapContainerClass(severity: GapSeverity): string {
-  if (severity === 'critical') return 'bg-red-500/10 border-red-500/30'
-  if (severity === 'warning') return 'bg-amber-500/10 border-amber-500/30'
-  return 'bg-blue-500/10 border-blue-500/30'
+function getDisplayName(row: Pick<DirectoryRow, 'nickname' | 'global_name' | 'username'>): string {
+  return row.nickname || row.global_name || row.username || 'Unknown member'
 }
 
-function gapTitleClass(severity: GapSeverity): string {
-  if (severity === 'critical') return 'text-red-200'
-  if (severity === 'warning') return 'text-amber-200'
-  return 'text-blue-200'
+function buildPayloadTabIds(raw: string): string[] {
+  return Array.from(new Set(raw.split(',').map((value) => value.trim()).filter(Boolean)))
 }
 
-function gapTextClass(severity: GapSeverity): string {
-  if (severity === 'critical') return 'text-red-100/80'
-  if (severity === 'warning') return 'text-amber-100/80'
-  return 'text-blue-100/80'
+function accessBadgeClass(status: DirectoryRow['access_status']): string {
+  if (status === 'suspended') return 'border-red-500/30 bg-red-500/10 text-red-200'
+  if (status === 'admin') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+  if (status === 'member') return 'border-blue-500/30 bg-blue-500/10 text-blue-200'
+  return 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+}
+
+function warningClass(severity: 'info' | 'warning' | 'critical'): string {
+  if (severity === 'critical') return 'border-red-500/30 bg-red-500/10 text-red-100'
+  if (severity === 'warning') return 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+  return 'border-blue-500/30 bg-blue-500/10 text-blue-100'
+}
+
+function getErrorMessage(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object') {
+    const direct = (payload as { error?: unknown }).error
+    if (typeof direct === 'string' && direct.trim()) {
+      return direct
+    }
+
+    const nested = direct && typeof direct === 'object'
+      ? (direct as { message?: unknown }).message
+      : null
+    if (typeof nested === 'string' && nested.trim()) {
+      return nested
+    }
+  }
+
+  return fallback
 }
 
 export default function AdminMembersAccessPage() {
-  const [overview, setOverview] = useState<OverviewData | null>(null)
-  const [overviewLoading, setOverviewLoading] = useState(true)
-  const [overviewError, setOverviewError] = useState<string | null>(null)
-
-  const [mode, setMode] = useState<LookupMode>('email')
   const [query, setQuery] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [syncing, setSyncing] = useState(false)
-  const [lookupError, setLookupError] = useState<string | null>(null)
-  const [result, setResult] = useState<any | null>(null)
+  const [linkedFilter, setLinkedFilter] = useState('all')
+  const [tierFilter, setTierFilter] = useState('all')
+  const [overrideFilter, setOverrideFilter] = useState('all')
+  const [privilegedFilter, setPrivilegedFilter] = useState('all')
+  const [directoryRows, setDirectoryRows] = useState<DirectoryRow[]>([])
+  const [directoryLoading, setDirectoryLoading] = useState(true)
+  const [directoryError, setDirectoryError] = useState<string | null>(null)
+  const [selectedDiscordUserId, setSelectedDiscordUserId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<DetailResponse['data'] | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [syncingGuild, setSyncingGuild] = useState(false)
+  const [syncingMember, setSyncingMember] = useState(false)
+  const [overrideType, setOverrideType] = useState('suspend_members_access')
+  const [overrideReason, setOverrideReason] = useState('')
+  const [overrideTabs, setOverrideTabs] = useState('')
+  const [overrideExpiresAt, setOverrideExpiresAt] = useState('')
+  const [savingOverride, setSavingOverride] = useState(false)
+  const [roleMutationOperation, setRoleMutationOperation] = useState<'add' | 'remove'>('add')
+  const [selectedRoleId, setSelectedRoleId] = useState('')
+  const [roleMutationReason, setRoleMutationReason] = useState('')
+  const [rolePreview, setRolePreview] = useState<RoleMutationResponse['data'] | null>(null)
+  const [roleMutationLoading, setRoleMutationLoading] = useState(false)
+  const [linkUserId, setLinkUserId] = useState('')
+  const [linkReason, setLinkReason] = useState('')
+  const [linkLoading, setLinkLoading] = useState(false)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
-  const loadOverview = useCallback(async () => {
-    setOverviewLoading(true)
-    setOverviewError(null)
+  const loadDirectory = useCallback(async () => {
+    setDirectoryLoading(true)
+    setDirectoryError(null)
 
     try {
-      const response = await fetch('/api/admin/members/access?overview=1', { cache: 'no-store' })
-      const payload = await response.json()
+      const params = new URLSearchParams()
+      if (query.trim()) params.set('q', query.trim())
+      if (linkedFilter !== 'all') params.set('linked', linkedFilter)
+      if (tierFilter !== 'all') params.set('tier', tierFilter)
+      if (overrideFilter !== 'all') params.set('override', overrideFilter)
+      if (privilegedFilter !== 'all') params.set('privileged', privilegedFilter)
+      params.set('limit', '80')
 
-      if (!response.ok || !payload?.success || payload?.mode !== 'overview') {
-        setOverview(null)
-        setOverviewError(payload?.error || 'Failed to load member access overview')
+      const response = await fetch(`/api/admin/members/directory?${params.toString()}`, { cache: 'no-store' })
+      const payload = await response.json() as DirectoryResponse
+
+      if (!response.ok || !payload.success) {
+        setDirectoryRows([])
+        setDirectoryError(payload.error || 'Failed to load directory')
         return
       }
 
-      setOverview(payload.overview || null)
+      const rows = payload.data || []
+      setDirectoryRows(rows)
+      setSelectedDiscordUserId((current) => {
+        if (current && rows.some((row) => row.discord_user_id === current)) {
+          return current
+        }
+        return rows[0]?.discord_user_id || null
+      })
     } catch (error) {
-      setOverview(null)
-      setOverviewError(error instanceof Error ? error.message : 'Failed to load member access overview')
+      setDirectoryRows([])
+      setDirectoryError(error instanceof Error ? error.message : 'Failed to load directory')
     } finally {
-      setOverviewLoading(false)
+      setDirectoryLoading(false)
+    }
+  }, [linkedFilter, overrideFilter, privilegedFilter, query, tierFilter])
+
+  const loadDetail = useCallback(async (discordUserId: string) => {
+    setDetailLoading(true)
+    setDetailError(null)
+
+    try {
+      const response = await fetch(`/api/admin/members/directory/${discordUserId}`, { cache: 'no-store' })
+      const payload = await response.json() as DetailResponse
+      if (!response.ok || !payload.success || !payload.data) {
+        setDetail(null)
+        setDetailError(payload.error || 'Failed to load member detail')
+        return
+      }
+
+      setDetail(payload.data)
+    } catch (error) {
+      setDetail(null)
+      setDetailError(error instanceof Error ? error.message : 'Failed to load member detail')
+    } finally {
+      setDetailLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    loadOverview()
-  }, [loadOverview])
+    void loadDirectory()
+  }, [loadDirectory])
 
-  const canSync = useMemo(() => Boolean(result?.user?.id), [result?.user?.id])
-
-  const lookup = useCallback(async () => {
-    const value = query.trim()
-    if (!value) {
-      setLookupError('Enter a value to search')
+  useEffect(() => {
+    if (!selectedDiscordUserId) {
+      setDetail(null)
       return
     }
 
-    setLoading(true)
-    setLookupError(null)
+    void loadDetail(selectedDiscordUserId)
+  }, [loadDetail, selectedDiscordUserId])
 
+  useEffect(() => {
+    setRolePreview(null)
+    setSelectedRoleId('')
+    setRoleMutationReason('')
+    setActionMessage(null)
+    setActionError(null)
+  }, [selectedDiscordUserId])
+
+  useEffect(() => {
+    setLinkUserId(detail?.identity.linked_user_id || '')
+  }, [detail?.identity.linked_user_id])
+
+  const selectedRow = useMemo(
+    () => directoryRows.find((row) => row.discord_user_id === selectedDiscordUserId) || null,
+    [directoryRows, selectedDiscordUserId],
+  )
+
+  const handleRefreshGuildRoster = useCallback(async () => {
+    setSyncingGuild(true)
     try {
-      const params = new URLSearchParams({ [mode]: value })
-      const response = await fetch(`/api/admin/members/access?${params.toString()}`, { cache: 'no-store' })
-      const payload = await response.json()
-
-      if (!response.ok || !payload?.success || payload?.mode !== 'user') {
-        setResult(null)
-        setLookupError(payload?.error || 'Lookup failed')
-        return
-      }
-
-      setResult(payload)
-    } catch (err) {
-      setResult(null)
-      setLookupError(err instanceof Error ? err.message : 'Lookup failed')
-    } finally {
-      setLoading(false)
-    }
-  }, [mode, query])
-
-  const forceSync = useCallback(async () => {
-    if (!result?.user?.id) {
-      setLookupError('Lookup a user first')
-      return
-    }
-
-    setSyncing(true)
-    setLookupError(null)
-    try {
-      const response = await fetch('/api/admin/members/force-sync', {
+      await fetch('/api/admin/members/sync-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: result.user.id }),
+        body: JSON.stringify({ mode: 'guild_roster' }),
       })
-      const payload = await response.json()
-      if (!response.ok || !payload?.success) {
-        setLookupError(payload?.error || 'Force sync failed')
+      await loadDirectory()
+      if (selectedDiscordUserId) {
+        await loadDetail(selectedDiscordUserId)
+      }
+    } finally {
+      setSyncingGuild(false)
+    }
+  }, [loadDetail, loadDirectory, selectedDiscordUserId])
+
+  const handleSyncMember = useCallback(async () => {
+    if (!selectedDiscordUserId) return
+    setSyncingMember(true)
+    try {
+      await fetch(`/api/admin/members/${selectedDiscordUserId}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      await Promise.all([loadDirectory(), loadDetail(selectedDiscordUserId)])
+    } finally {
+      setSyncingMember(false)
+    }
+  }, [loadDetail, loadDirectory, selectedDiscordUserId])
+
+  const handleCreateOverride = useCallback(async () => {
+    if (!selectedDiscordUserId || !overrideReason.trim()) return
+
+    setSavingOverride(true)
+    try {
+      const payload: Record<string, unknown> = {}
+      if (overrideType === 'allow_specific_tabs' || overrideType === 'deny_specific_tabs') {
+        payload.tab_ids = buildPayloadTabIds(overrideTabs)
+      }
+
+      await fetch(`/api/admin/members/${selectedDiscordUserId}/overrides`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          overrideType,
+          reason: overrideReason.trim(),
+          expiresAt: overrideExpiresAt ? new Date(overrideExpiresAt).toISOString() : null,
+          payload,
+        }),
+      })
+
+      setOverrideReason('')
+      setOverrideTabs('')
+      setOverrideExpiresAt('')
+      await Promise.all([loadDirectory(), loadDetail(selectedDiscordUserId)])
+    } finally {
+      setSavingOverride(false)
+    }
+  }, [loadDetail, loadDirectory, overrideExpiresAt, overrideReason, overrideTabs, overrideType, selectedDiscordUserId])
+
+  const handleRevokeOverride = useCallback(async (overrideId: string) => {
+    if (!selectedDiscordUserId) return
+
+    setSavingOverride(true)
+    try {
+      await fetch(`/api/admin/members/${selectedDiscordUserId}/overrides`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'revoke',
+          overrideId,
+          reason: 'Revoked from Member Access Control Center',
+        }),
+      })
+
+      await Promise.all([loadDirectory(), loadDetail(selectedDiscordUserId)])
+    } finally {
+      setSavingOverride(false)
+    }
+  }, [loadDetail, loadDirectory, selectedDiscordUserId])
+
+  const handlePreviewRoleMutation = useCallback(async () => {
+    if (!selectedDiscordUserId || !selectedRoleId) return
+
+    setRoleMutationLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+    try {
+      const response = await fetch(`/api/admin/members/${selectedDiscordUserId}/roles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'preview',
+          operation: roleMutationOperation,
+          roleId: selectedRoleId,
+        }),
+      })
+      const payload = await response.json() as RoleMutationResponse
+      if (!response.ok || !payload.success || !payload.data) {
+        setRolePreview(null)
+        setActionError(getErrorMessage(payload, 'Failed to preview Discord role change'))
         return
       }
 
-      const refreshed = await fetch(`/api/admin/members/access?user_id=${encodeURIComponent(result.user.id)}`, { cache: 'no-store' })
-      const refreshedPayload = await refreshed.json()
-      if (refreshed.ok && refreshedPayload?.success) {
-        setResult(refreshedPayload)
+      setRolePreview(payload.data)
+      if (payload.data.manageable === false) {
+        setActionError(payload.data.manageability_reason || 'Discord role is not manageable by the bot')
+        return
+      }
+      if (payload.data.mutation_enabled === false) {
+        setActionError('Discord role mutation is disabled in access control settings')
+        return
       }
 
-      await loadOverview()
-    } catch (err) {
-      setLookupError(err instanceof Error ? err.message : 'Force sync failed')
+      setActionMessage('Preview loaded. Review the resulting access before applying the change.')
+    } catch (error) {
+      setRolePreview(null)
+      setActionError(error instanceof Error ? error.message : 'Failed to preview Discord role change')
     } finally {
-      setSyncing(false)
+      setRoleMutationLoading(false)
     }
-  }, [loadOverview, result?.user?.id])
+  }, [roleMutationOperation, selectedDiscordUserId, selectedRoleId])
 
-  const overviewCounts = overview?.counts || {}
-  const overviewGaps = Array.isArray(overview?.gaps) ? overview.gaps : []
-  const membersGateRoles = Array.isArray(overview?.members_gate?.roles) ? overview.members_gate.roles : []
-  const activeTabs = Array.isArray(overview?.tabs?.active) ? overview.tabs.active : []
-  const rolesMissingTierMapping = Array.isArray(overview?.tiers?.roles_missing_tier_mapping)
-    ? overview.tiers.roles_missing_tier_mapping
-    : []
-  const tierMappedRolesWithoutPermissions = Array.isArray(overview?.tiers?.tier_mapped_roles_without_permission_mapping)
-    ? overview.tiers.tier_mapped_roles_without_permission_mapping
-    : []
-  const unmappedPermissions = Array.isArray(overview?.permissions?.unmapped_app_permissions)
-    ? overview.permissions.unmapped_app_permissions
-    : []
-  const staleProfiles = Array.isArray(overview?.sync?.stale_profiles) ? overview.sync.stale_profiles : []
-  const diagnosticsErrors = Array.isArray(overview?.diagnostics?.query_errors)
-    ? overview.diagnostics.query_errors
-    : []
+  const handleApplyRoleMutation = useCallback(async () => {
+    if (!selectedDiscordUserId || !selectedRoleId || !roleMutationReason.trim()) return
 
-  const hasMembersRole = result?.access?.has_members_required_role === true
-  const resolvedTier = result?.access?.resolved_tier || null
-  const effectiveRoles = Array.isArray(result?.access?.effective_roles) ? result.access.effective_roles : []
-  const membersAllowedRoleIds = Array.isArray(result?.constants?.members_allowed_role_ids)
-    ? result.constants.members_allowed_role_ids
-    : []
-  const membersAllowedRoleTitlesById: Record<string, string> = (
-    result?.constants?.members_allowed_role_titles_by_id
-    && typeof result.constants.members_allowed_role_titles_by_id === 'object'
-  )
-    ? result.constants.members_allowed_role_titles_by_id
-    : {}
-  const membersAllowedRoleTitles = membersAllowedRoleIds.map((roleId: string) => (
-    membersAllowedRoleTitlesById[roleId] || `Unknown role (${roleId})`
-  ))
-  const lastSyncedAt = result?.discord_profile?.last_synced_at || null
-  const expectedMissing = Array.isArray(result?.permissions?.expected_missing) ? result.permissions.expected_missing : []
-  const lookupSource = String(result?.resolution?.source || 'direct')
-  const effectiveRolesSource = String(result?.diagnosis?.effective_roles_source || 'none')
-  const guildRoleCatalogError = typeof result?.diagnosis?.discord_guild_role_catalog_error === 'string'
-    ? result.diagnosis.discord_guild_role_catalog_error
-    : null
-  const allowedTabsDetailed = Array.isArray(result?.access?.allowed_tabs_details)
-    ? result.access.allowed_tabs_details
-    : []
+    setRoleMutationLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+    try {
+      const response = await fetch(`/api/admin/members/${selectedDiscordUserId}/roles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'apply',
+          operation: roleMutationOperation,
+          roleId: selectedRoleId,
+          reason: roleMutationReason.trim(),
+        }),
+      })
+      const payload = await response.json() as RoleMutationResponse
+      if (!response.ok || !payload.success) {
+        setActionError(getErrorMessage(payload, 'Failed to apply Discord role change'))
+        return
+      }
+
+      setRoleMutationReason('')
+      setRolePreview(null)
+      setActionMessage(payload.data?.no_op
+        ? 'The requested role change was already reflected in the member role set.'
+        : 'Discord role change applied and access was recomputed.')
+      await Promise.all([loadDirectory(), loadDetail(selectedDiscordUserId)])
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to apply Discord role change')
+    } finally {
+      setRoleMutationLoading(false)
+    }
+  }, [loadDetail, loadDirectory, roleMutationOperation, roleMutationReason, selectedDiscordUserId, selectedRoleId])
+
+  const handleLinkMember = useCallback(async () => {
+    if (!selectedDiscordUserId || !linkUserId.trim() || !linkReason.trim()) return
+
+    setLinkLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+    try {
+      const response = await fetch(`/api/admin/members/${selectedDiscordUserId}/link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: linkUserId.trim(),
+          reason: linkReason.trim(),
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) {
+        setActionError(getErrorMessage(payload, 'Failed to link Discord member'))
+        return
+      }
+
+      setActionMessage('Discord member linked to the site user and caches were refreshed.')
+      await Promise.all([loadDirectory(), loadDetail(selectedDiscordUserId)])
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to link Discord member')
+    } finally {
+      setLinkLoading(false)
+    }
+  }, [linkReason, linkUserId, loadDetail, loadDirectory, selectedDiscordUserId])
+
+  const handleUnlinkMember = useCallback(async () => {
+    if (!selectedDiscordUserId || !linkReason.trim()) return
+
+    setLinkLoading(true)
+    setActionMessage(null)
+    setActionError(null)
+    try {
+      const response = await fetch(`/api/admin/members/${selectedDiscordUserId}/unlink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: linkReason.trim(),
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) {
+        setActionError(getErrorMessage(payload, 'Failed to unlink Discord member'))
+        return
+      }
+
+      setLinkUserId('')
+      setActionMessage('Discord member unlinked and cached access state was cleared.')
+      await Promise.all([loadDirectory(), loadDetail(selectedDiscordUserId)])
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to unlink Discord member')
+    } finally {
+      setLinkLoading(false)
+    }
+  }, [linkReason, loadDetail, loadDirectory, selectedDiscordUserId])
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-white flex items-center gap-3">
-            <ShieldAlert className="w-8 h-8 text-emerald-500" />
+          <h1 className="flex items-center gap-3 text-2xl font-bold text-white lg:text-3xl">
+            <ShieldAlert className="h-8 w-8 text-emerald-500" />
             Member Access Control Center
           </h1>
-          <p className="text-white/60 mt-1">
-            Discord/member access health, gap analysis, and user-level diagnostics for login + tab visibility.
+          <p className="mt-1 text-white/60">
+            Browse the full Discord guild roster, inspect canonical access, and apply audited overrides from one workspace.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
-            onClick={loadOverview}
-            disabled={overviewLoading}
+            type="button"
             variant="outline"
             className="border-white/20 text-white hover:bg-white/5"
+            onClick={() => void loadDirectory()}
+            disabled={directoryLoading}
           >
-            {overviewLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            Refresh Overview
+            {directoryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Refresh Directory
           </Button>
-          <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/5">
-            <Link href="/admin/settings#membership-tier-mapping">
-              <SlidersHorizontal className="w-4 h-4 mr-2" />
-              Settings
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/5">
-            <Link href="/admin/roles">
-              <Shield className="w-4 h-4 mr-2" />
-              Role Permissions
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/5">
-            <Link href="/admin/tabs">
-              <PanelTop className="w-4 h-4 mr-2" />
-              Member Tabs
-            </Link>
+          <Button
+            type="button"
+            className="bg-emerald-600 hover:bg-emerald-500"
+            onClick={() => void handleRefreshGuildRoster()}
+            disabled={syncingGuild}
+          >
+            {syncingGuild ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+            Refresh Guild Roster
           </Button>
         </div>
       </div>
 
-      {overviewLoading && (
-        <Card className="bg-[#0a0a0b] border-white/10">
-          <CardContent className="py-10 text-center">
-            <Loader2 className="w-6 h-6 animate-spin text-emerald-500 mx-auto mb-3" />
-            <p className="text-sm text-white/60">Loading member access overview...</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {!overviewLoading && overviewError && (
-        <Card className="bg-[#0a0a0b] border-red-500/30">
-          <CardContent className="py-4">
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
-              <XCircle className="w-4 h-4 text-red-400" />
-              <p className="text-sm text-red-300">{overviewError}</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {!overviewLoading && !overviewError && overview && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
-            <Card className="bg-[#0a0a0b] border-white/10">
-              <CardContent className="pt-5">
-                <p className="text-xs text-white/60">Gate Roles</p>
-                <p className="text-2xl font-semibold text-white mt-1">{overviewCounts.members_gate_role_count || 0}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-[#0a0a0b] border-white/10">
-              <CardContent className="pt-5">
-                <p className="text-xs text-white/60">Active Tabs</p>
-                <p className="text-2xl font-semibold text-white mt-1">{overviewCounts.active_tab_count || 0}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-[#0a0a0b] border-white/10">
-              <CardContent className="pt-5">
-                <p className="text-xs text-white/60">Role Permission Maps</p>
-                <p className="text-2xl font-semibold text-white mt-1">{overviewCounts.role_permission_mapping_count || 0}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-[#0a0a0b] border-white/10">
-              <CardContent className="pt-5">
-                <p className="text-xs text-white/60">Tier Mapped Roles</p>
-                <p className="text-2xl font-semibold text-white mt-1">{overviewCounts.tier_mapped_role_count || 0}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-[#0a0a0b] border-white/10">
-              <CardContent className="pt-5">
-                <p className="text-xs text-white/60">Stale Discord Profiles</p>
-                <p className="text-2xl font-semibold text-white mt-1">{overviewCounts.stale_discord_profile_count || 0}</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-[#0a0a0b] border-white/10">
-              <CardContent className="pt-5">
-                <p className="text-xs text-white/60">Profiles Matching Gate</p>
-                <p className="text-2xl font-semibold text-white mt-1">{overviewCounts.members_gate_profile_match_count || 0}</p>
-              </CardContent>
-            </Card>
+      <Card className="border-white/10 bg-[#0a0a0b]">
+        <CardContent className="grid gap-3 pt-6 md:grid-cols-2 xl:grid-cols-5">
+          <div className="relative xl:col-span-2">
+            <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-white/30" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search Discord username, nickname, display name, email, user ID, or Discord ID"
+              className="pl-10"
+            />
           </div>
-
-          <Card className="bg-[#0a0a0b] border-white/10">
-            <CardHeader>
-              <CardTitle className="text-white text-base">Intended Use + Control Surface</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <p className="text-white/80">{overview.intended_use?.summary || 'Member access controls overview.'}</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {(overview.intended_use?.controls || []).map((item) => (
-                  <div key={item} className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white/70">
-                    {item}
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-white/40">
-                Snapshot generated {formatDateTime(overview.generated_at)}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-[#0a0a0b] border-white/10">
-            <CardHeader>
-              <CardTitle className="text-white text-base">Gap Analysis</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {overviewGaps.length === 0 ? (
-                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <p className="text-sm text-emerald-300">No member access gaps detected in this snapshot.</p>
-                </div>
-              ) : (
-                overviewGaps.map((gap) => (
-                  <div key={gap.id} className={`p-3 rounded-lg border ${gapContainerClass(gap.severity)}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className={`text-sm font-medium ${gapTitleClass(gap.severity)}`}>
-                        {gap.title}
-                      </p>
-                      <span className="text-xs text-white/60">{gap.count}</span>
-                    </div>
-                    <p className={`text-xs mt-1 ${gapTextClass(gap.severity)}`}>
-                      {gap.description}
-                    </p>
-                    {gap.items.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {gap.items.slice(0, 8).map((item) => (
-                          <span
-                            key={`${gap.id}-${item}`}
-                            className="px-2 py-1 rounded-md bg-black/30 border border-white/10 text-xs text-white/80"
-                          >
-                            {item}
-                          </span>
-                        ))}
-                        {gap.items.length > 8 && (
-                          <span className="px-2 py-1 rounded-md bg-black/30 border border-white/10 text-xs text-white/60">
-                            +{gap.items.length - 8} more
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <Card className="bg-[#0a0a0b] border-white/10">
-              <CardHeader>
-                <CardTitle className="text-white text-base">Members Gate Configuration</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                    <p className="text-xs text-white/60">Guild ID Configured</p>
-                    <p className={overview.discord?.guild_id_configured ? 'text-emerald-300' : 'text-red-300'}>
-                      {overview.discord?.guild_id_configured ? 'Yes' : 'No'}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                    <p className="text-xs text-white/60">Bot Token Configured</p>
-                    <p className={overview.discord?.bot_token_configured ? 'text-emerald-300' : 'text-red-300'}>
-                      {overview.discord?.bot_token_configured ? 'Yes' : 'No'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs text-white/60">Allowed Discord Roles ({membersGateRoles.length})</p>
-                  <div className="flex flex-wrap gap-2">
-                    {membersGateRoles.length === 0 && (
-                      <span className="text-xs text-white/50">No roles configured.</span>
-                    )}
-                    {membersGateRoles.map((role) => (
-                      <span
-                        key={role.role_id}
-                        className={`px-2 py-1 rounded-md border text-xs ${
-                          role.is_known === false
-                            ? 'bg-red-500/10 border-red-500/30 text-red-200'
-                            : 'bg-white/5 border-white/10 text-white/80'
-                        }`}
-                      >
-                        {formatRoleTitle(role)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <p className="text-xs text-white/40">
-                  Guild role catalog: {overview.discord?.guild_role_catalog_count || 0} roles, last sync {formatDateTime(overview.discord?.guild_role_catalog_last_synced_at)}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-[#0a0a0b] border-white/10">
-              <CardHeader>
-                <CardTitle className="text-white text-base">Tier + Permission Coverage</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div>
-                  <p className="text-xs text-white/60 mb-2">Roles missing tier mapping ({rolesMissingTierMapping.length})</p>
-                  <div className="flex flex-wrap gap-2">
-                    {rolesMissingTierMapping.length === 0 && (
-                      <span className="text-xs text-emerald-300">None</span>
-                    )}
-                    {rolesMissingTierMapping.map((role) => (
-                      <span key={role.role_id} className="px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-xs text-amber-100">
-                        {formatRoleTitle(role)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-xs text-white/60 mb-2">Tier roles without explicit permission mapping ({tierMappedRolesWithoutPermissions.length})</p>
-                  <div className="flex flex-wrap gap-2">
-                    {tierMappedRolesWithoutPermissions.length === 0 && (
-                      <span className="text-xs text-emerald-300">None</span>
-                    )}
-                    {tierMappedRolesWithoutPermissions.map((role) => (
-                      <span key={role.role_id} className="px-2 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-xs text-blue-100">
-                        {formatRoleTitle(role)} ({role.tier})
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-xs text-white/60 mb-2">Unmapped app permissions ({unmappedPermissions.length})</p>
-                  <div className="flex flex-wrap gap-2">
-                    {unmappedPermissions.length === 0 && (
-                      <span className="text-xs text-emerald-300">None</span>
-                    )}
-                    {unmappedPermissions.map((permissionName) => (
-                      <span key={permissionName} className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-white/80">
-                        {permissionName}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <Select value={linkedFilter} onValueChange={setLinkedFilter}>
+            <SelectTrigger><SelectValue placeholder="Link status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All members</SelectItem>
+              <SelectItem value="linked">Linked only</SelectItem>
+              <SelectItem value="unlinked">Unlinked only</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={tierFilter} onValueChange={setTierFilter}>
+            <SelectTrigger><SelectValue placeholder="Tier" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All tiers</SelectItem>
+              <SelectItem value="core">Core</SelectItem>
+              <SelectItem value="pro">Pro</SelectItem>
+              <SelectItem value="executive">Executive</SelectItem>
+              <SelectItem value="none">No tier</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <Select value={overrideFilter} onValueChange={setOverrideFilter}>
+              <SelectTrigger><SelectValue placeholder="Override" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All overrides</SelectItem>
+                <SelectItem value="blocked">Suspended</SelectItem>
+                <SelectItem value="overridden">Has override</SelectItem>
+                <SelectItem value="none">No override</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={privilegedFilter} onValueChange={setPrivilegedFilter}>
+              <SelectTrigger><SelectValue placeholder="Privilege" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All privilege</SelectItem>
+                <SelectItem value="true">Privileged only</SelectItem>
+                <SelectItem value="false">Non-privileged</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-
-          <Card className="bg-[#0a0a0b] border-white/10">
-            <CardHeader>
-              <CardTitle className="text-white text-base">Active Tab Access Matrix</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {activeTabs.length === 0 ? (
-                <p className="text-sm text-white/50">No active tab configuration found.</p>
-              ) : (
-                activeTabs.map((tab) => (
-                  <div key={tab.tab_id} className="rounded-lg border border-white/10 bg-white/5 p-3">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                      <div>
-                        <p className="text-sm text-white font-medium">{tab.label}</p>
-                        <p className="text-xs text-white/50">{tab.path}</p>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-white/70">
-                          Tier: {tab.required_tier}
-                        </span>
-                        {tab.is_required && (
-                          <span className="px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-200">
-                            Required
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {tab.required_roles.length === 0 && (
-                        <span className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-white/50">
-                          No Discord role gate
-                        </span>
-                      )}
-                      {tab.required_roles.map((role) => (
-                        <span
-                          key={`${tab.tab_id}-${role.role_id}`}
-                          className={`px-2 py-1 rounded-md border text-xs ${
-                            role.is_known === false
-                              ? 'bg-red-500/10 border-red-500/30 text-red-200'
-                              : 'bg-white/5 border-white/10 text-white/80'
-                          }`}
-                        >
-                          {formatRoleTitle(role)}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-[#0a0a0b] border-white/10">
-            <CardHeader>
-              <CardTitle className="text-white text-base">Sync Health</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                  <p className="text-xs text-white/60 flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5" />
-                    Total Discord Profiles
-                  </p>
-                  <p className="text-white text-xl">{overview.sync?.total_profile_count || 0}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                  <p className="text-xs text-white/60 flex items-center gap-1">
-                    <Clock3 className="w-3.5 h-3.5" />
-                    Stale Profiles ({overview.thresholds?.stale_sync_hours || 24}h)
-                  </p>
-                  <p className={(overview.sync?.stale_profile_count || 0) > 0 ? 'text-amber-300 text-xl' : 'text-emerald-300 text-xl'}>
-                    {overview.sync?.stale_profile_count || 0}
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                  <p className="text-xs text-white/60 flex items-center gap-1">
-                    <Database className="w-3.5 h-3.5" />
-                    Diagnostics Errors
-                  </p>
-                  <p className={diagnosticsErrors.length > 0 ? 'text-amber-300 text-xl' : 'text-emerald-300 text-xl'}>
-                    {diagnosticsErrors.length}
-                  </p>
-                </div>
-              </div>
-
-              {staleProfiles.length > 0 && (
-                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-                  <p className="text-amber-100 text-sm font-medium mb-2">Oldest stale profiles</p>
-                  <div className="space-y-1">
-                    {staleProfiles.slice(0, 5).map((profile) => (
-                      <p key={profile.user_id} className="text-xs text-amber-100/80 break-all">
-                        {profile.discord_username || profile.user_id} · last sync {formatDateTime(profile.last_synced_at)}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {overview.discord?.guild_role_catalog_error && (
-                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-                  <p className="text-amber-100 text-sm font-medium">Guild role catalog warning</p>
-                  <p className="text-xs text-amber-100/80 mt-1 break-all">
-                    {overview.discord.guild_role_catalog_error}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
-
-      <Card className="bg-[#0a0a0b] border-white/10">
-        <CardHeader>
-          <CardTitle className="text-white text-base">User Access Debugger</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-            <label className="space-y-1 lg:col-span-1">
-              <span className="text-xs text-white/60">Search by</span>
-              <select
-                value={mode}
-                onChange={(event) => setMode(event.target.value as LookupMode)}
-                className="w-full rounded-md bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
-              >
-                <option value="email">Email</option>
-                <option value="user_id">Supabase user_id</option>
-                <option value="discord_user_id">Discord user ID</option>
-              </select>
-            </label>
-
-            <label className="space-y-1 lg:col-span-3">
-              <span className="text-xs text-white/60">Value</span>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') lookup()
-                }}
-                placeholder={mode === 'email' ? 'member@example.com' : 'Enter ID'}
-                className="w-full rounded-md bg-white/5 border border-white/10 px-3 py-2 text-sm text-white"
-              />
-            </label>
-
-            <div className="flex items-end gap-2 lg:col-span-1">
-              <Button
-                onClick={lookup}
-                disabled={loading}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-black"
-              >
-                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
-                Lookup
-              </Button>
-            </div>
-          </div>
-
-          {lookupError && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
-              <XCircle className="w-4 h-4 text-red-400" />
-              <p className="text-sm text-red-400">{lookupError}</p>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {result && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <Card className="bg-[#0a0a0b] border-white/10">
-            <CardHeader>
-              <CardTitle className="text-white text-base">Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-white/60">Members gate role</span>
-                <span className={hasMembersRole ? 'text-emerald-400' : 'text-red-400'}>
-                  {hasMembersRole ? 'PASS' : 'FAIL'}
-                </span>
+      <div className="grid gap-6 xl:grid-cols-[420px,minmax(0,1fr)]">
+        <Card className="border-white/10 bg-[#0a0a0b]">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-white">
+              <span className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-emerald-400" />
+                Guild Directory
+              </span>
+              <Badge className="border-white/10 bg-white/5 text-white/80">
+                {directoryRows.length} results
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {directoryLoading && (
+              <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-center text-sm text-white/60">
+                <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-emerald-500" />
+                Loading guild directory...
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/60">Resolved tier</span>
-                <span className="text-white">{resolvedTier || '—'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/60">Effective roles</span>
-                <span className="text-white">{effectiveRoles.length}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/60">Last role sync</span>
-                <span className="text-white">{formatDateTime(lastSyncedAt)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/60">Expected missing perms</span>
-                <span className="text-white">{expectedMissing.length}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/60">Lookup source</span>
-                <span className="text-white">{lookupSource}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/60">Roles source</span>
-                <span className="text-white">{effectiveRolesSource}</span>
-              </div>
+            )}
 
-              <div className="pt-2">
+            {!directoryLoading && directoryError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+                {directoryError}
+              </div>
+            )}
+
+            {!directoryLoading && !directoryError && directoryRows.length === 0 && (
+              <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+                No members matched the current filters.
+              </div>
+            )}
+
+            {!directoryLoading && !directoryError && directoryRows.length > 0 && (
+              <div className="max-h-[72vh] space-y-2 overflow-y-auto pr-1">
+                {directoryRows.map((row) => {
+                  const isSelected = row.discord_user_id === selectedDiscordUserId
+                  return (
+                        <button
+                          key={row.discord_user_id}
+                          type="button"
+                          data-testid={`member-directory-row-${row.discord_user_id}`}
+                          onClick={() => setSelectedDiscordUserId(row.discord_user_id)}
+                          className={cn(
+                        'w-full rounded-xl border p-3 text-left transition',
+                        isSelected
+                          ? 'border-emerald-500/40 bg-emerald-500/10'
+                          : 'border-white/10 bg-white/5 hover:bg-white/10',
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        {row.avatar_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={row.avatar_url}
+                            alt={getDisplayName(row)}
+                            className="h-11 w-11 rounded-full border border-white/10 object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                            <UserRound className="h-5 w-5 text-white/40" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate font-medium text-white">{getDisplayName(row)}</p>
+                            <Badge className={cn('border', accessBadgeClass(row.access_status))}>
+                              {row.access_status}
+                            </Badge>
+                          </div>
+                          <p className="truncate text-xs text-white/50">@{row.username}</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Badge className="border-white/10 bg-white/5 text-white/70">
+                              {row.link_status}
+                            </Badge>
+                            <Badge className="border-white/10 bg-white/5 text-white/70">
+                              {row.resolved_tier || 'no tier'}
+                            </Badge>
+                            {row.active_override_count > 0 && (
+                              <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-100">
+                                {row.active_override_count} override{row.active_override_count > 1 ? 's' : ''}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs text-white/40">
+                            Synced {formatDate(row.last_synced_at)}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-white/10 bg-[#0a0a0b]">
+          <CardHeader>
+            <CardTitle className="flex flex-col gap-3 text-white lg:flex-row lg:items-center lg:justify-between">
+              <span className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-emerald-400" />
+                Member Detail Workspace
+              </span>
+              <div className="flex flex-wrap gap-2">
                 <Button
-                  onClick={forceSync}
-                  disabled={!canSync || syncing}
-                  className="w-full bg-champagne text-black hover:opacity-90"
+                  type="button"
+                  variant="outline"
+                  className="border-white/20 text-white hover:bg-white/5"
+                  onClick={() => selectedDiscordUserId && void loadDetail(selectedDiscordUserId)}
+                  disabled={!selectedDiscordUserId || detailLoading}
                 >
-                  {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                  Force Discord Role Sync
+                  {detailLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Refresh Detail
                 </Button>
-                <p className="text-xs text-white/40 mt-2">
-                  Re-syncs roles from Discord and refreshes auth claims for this user.
-                </p>
+                <Button
+                  type="button"
+                  className="bg-emerald-600 hover:bg-emerald-500"
+                  onClick={() => void handleSyncMember()}
+                  disabled={!selectedDiscordUserId || syncingMember}
+                >
+                  {syncingMember ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Sync Member
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-[#0a0a0b] border-white/10 xl:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-white text-base">Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                  <p className="text-white/60 text-xs mb-1">User</p>
-                  <p className="text-white break-all">{result.user?.email || '—'}</p>
-                  <p className="text-white/40 text-xs break-all mt-1">{result.user?.id}</p>
-                </div>
-                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                  <p className="text-white/60 text-xs mb-1">Discord</p>
-                  <p className="text-white break-all">{result.discord_profile?.discord_username || '—'}</p>
-                  <p className="text-white/40 text-xs break-all mt-1">{result.auth_metadata?.discord_user_id || '—'}</p>
-                </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!selectedRow && (
+              <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-sm text-white/60">
+                Select a guild member to inspect access, tab reasoning, overrides, and sync health.
               </div>
+            )}
 
-              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <p className="text-white text-sm font-medium">Allowed tabs</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {allowedTabsDetailed.map((tab: any) => (
-                    <span key={tab.tab_id} className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-white/80">
-                      {tab.label || tab.tab_id}
-                    </span>
-                  ))}
-                  {allowedTabsDetailed.length === 0 && (
-                    <span className="text-xs text-white/50">No tabs granted.</span>
+            {selectedRow && detailLoading && (
+              <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-center text-sm text-white/60">
+                <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-emerald-500" />
+                Loading member detail...
+              </div>
+            )}
+
+            {selectedRow && !detailLoading && detailError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+                {detailError}
+              </div>
+            )}
+
+            {selectedRow && !detailLoading && detail && (
+              <Tabs defaultValue="identity" className="w-full">
+                <div className="mb-4 space-y-3">
+                  {actionError && (
+                    <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-100">
+                      {actionError}
+                    </div>
+                  )}
+                  {actionMessage && !actionError && (
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                      {actionMessage}
+                    </div>
                   )}
                 </div>
-              </div>
+                <TabsList>
+                  <TabsTrigger value="identity">Identity</TabsTrigger>
+                  <TabsTrigger value="access">Access</TabsTrigger>
+                  <TabsTrigger value="roles">Roles</TabsTrigger>
+                  <TabsTrigger value="health">Health</TabsTrigger>
+                  <TabsTrigger value="overrides">Overrides</TabsTrigger>
+                </TabsList>
 
-              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <p className="text-white text-sm font-medium">Effective Discord roles</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {effectiveRoles.map((role: OverviewRole) => (
-                    <span key={role.role_id} className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-xs text-white/80">
-                      {formatRoleTitle(role)}
-                    </span>
-                  ))}
-                  {effectiveRoles.length === 0 && (
-                    <span className="text-xs text-white/50">No effective roles found.</span>
-                  )}
-                </div>
-              </div>
+                <TabsContent value="identity" className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Card className="border-white/10 bg-white/5">
+                      <CardContent className="space-y-3 pt-6 text-sm">
+                        <div>
+                          <p className="text-xs text-white/50">Display name</p>
+                          <p className="text-white">{detail.identity.nickname || detail.identity.global_name || detail.identity.username || 'Unknown'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Discord username</p>
+                          <p className="text-white">@{detail.identity.username || 'unknown'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Discord user ID</p>
+                          <p className="font-mono text-white/80">{detail.identity.discord_user_id || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Linked site account</p>
+                          <p className="font-mono text-white/80">{detail.identity.linked_user_id || 'Unlinked'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Email</p>
+                          <p className="text-white/80">{detail.identity.email || '—'}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-              {expectedMissing.length > 0 && (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <p className="text-amber-200 text-sm font-medium mb-2">Missing permissions (expected from mappings)</p>
-                  <div className="flex flex-wrap gap-2">
-                    {expectedMissing.map((permissionName: string) => (
-                      <span key={permissionName} className="px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-xs text-amber-100">
-                        {permissionName}
-                      </span>
+                    <Card className="border-white/10 bg-white/5">
+                      <CardContent className="space-y-3 pt-6 text-sm">
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className="border-white/10 bg-white/5 text-white/70">
+                            {detail.identity.link_status}
+                          </Badge>
+                          <Badge className={cn('border', detail.app_access.is_admin ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100' : 'border-white/10 bg-white/5 text-white/70')}>
+                            {detail.app_access.is_admin ? 'admin' : 'non-admin'}
+                          </Badge>
+                          <Badge className="border-white/10 bg-white/5 text-white/70">
+                            {detail.app_access.resolved_tier || 'no tier'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Role source</p>
+                          <p className="text-white/80">{detail.identity.sources.roles}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Identity source</p>
+                          <p className="text-white/80">{detail.identity.sources.identity}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Discord roles</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {detail.discord_roles.length === 0 && <span className="text-white/40">No roles</span>}
+                            {detail.discord_roles.map((role) => (
+                              <Badge key={role.role_id} className="border-white/10 bg-white/5 text-white/80">
+                                {role.role_name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card className="border-white/10 bg-white/5">
+                    <CardHeader>
+                      <CardTitle className="text-white">Link Repair</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 md:grid-cols-2">
+                      <Input
+                        value={linkUserId}
+                        onChange={(event) => setLinkUserId(event.target.value)}
+                        placeholder="Site user UUID"
+                      />
+                      <div className="flex items-center rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white/60">
+                        Current link: {detail.identity.linked_user_id || 'Unlinked'}
+                      </div>
+                      <Textarea
+                        value={linkReason}
+                        onChange={(event) => setLinkReason(event.target.value)}
+                        placeholder="Audit reason for linking or unlinking"
+                        className="min-h-24 md:col-span-2"
+                      />
+                      <div className="flex flex-wrap gap-2 md:col-span-2">
+                        <Button
+                          type="button"
+                          className="bg-emerald-600 hover:bg-emerald-500"
+                          onClick={() => void handleLinkMember()}
+                          disabled={linkLoading || !linkUserId.trim() || !linkReason.trim()}
+                        >
+                          {linkLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserRound className="mr-2 h-4 w-4" />}
+                          Link Member
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-white/20 text-white hover:bg-white/5"
+                          onClick={() => void handleUnlinkMember()}
+                          disabled={linkLoading || !detail.identity.linked_user_id || !linkReason.trim()}
+                        >
+                          {linkLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserRound className="mr-2 h-4 w-4" />}
+                          Unlink Member
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="access" className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Card className="border-white/10 bg-white/5">
+                      <CardContent className="pt-6">
+                        <p className="text-xs text-white/50">Tier</p>
+                        <p className="mt-1 text-xl font-semibold text-white">{detail.app_access.resolved_tier || 'None'}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-white/10 bg-white/5">
+                      <CardContent className="pt-6">
+                        <p className="text-xs text-white/50">Members Access</p>
+                        <p className="mt-1 text-xl font-semibold text-white">{detail.app_access.has_members_access ? 'Allowed' : 'Denied'}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-white/10 bg-white/5">
+                      <CardContent className="pt-6">
+                        <p className="text-xs text-white/50">Allowed Tabs</p>
+                        <p className="mt-1 text-xl font-semibold text-white">{detail.app_access.allowed_tabs.length}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="space-y-3">
+                    {detail.tab_matrix.map((tab) => (
+                      <div key={tab.tabId} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div>
+                            <p className="font-medium text-white">{tab.label}</p>
+                            <p className="text-xs text-white/50">{tab.path}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge className={cn('border', tab.allowed ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100' : 'border-red-500/30 bg-red-500/10 text-red-100')}>
+                              {tab.allowed ? 'Allowed' : 'Denied'}
+                            </Badge>
+                            <Badge className="border-white/10 bg-white/5 text-white/70">
+                              Tier: {tab.requiredTier}
+                            </Badge>
+                          </div>
+                        </div>
+                        <p className="mt-3 text-sm text-white/80">{tab.reason}</p>
+                        {tab.requiredRoleNames.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {tab.requiredRoleNames.map((roleName) => (
+                              <Badge key={`${tab.tabId}-${roleName}`} className="border-white/10 bg-white/5 text-white/70">
+                                {roleName}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
-                </div>
-              )}
+                </TabsContent>
 
-              {!hasMembersRole && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                  <p className="text-red-200 text-sm font-medium">Members gate failed</p>
-                  <p className="text-xs text-red-200/70 mt-1">
-                    The user is missing all allowed members roles ({membersAllowedRoleTitles.join(', ') || 'none configured'}).
-                  </p>
-                </div>
-              )}
+                <TabsContent value="roles" className="space-y-4" data-testid="member-roles-panel">
+                  <Card className="border-white/10 bg-white/5">
+                    <CardHeader>
+                      <CardTitle className="text-white">Discord Role Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {!detail.controls.allow_discord_role_mutation && (
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                          Discord role mutation is disabled in `access_control_settings`. Preview is still available.
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {detail.discord_roles.length === 0 && (
+                          <span className="text-sm text-white/50">This member currently has no cached Discord roles.</span>
+                        )}
+                        {detail.discord_roles.map((role) => (
+                          <Badge key={role.role_id} className="border-white/10 bg-black/20 text-white/80">
+                            {role.role_name}
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <Select
+                          value={roleMutationOperation}
+                          onValueChange={(value: 'add' | 'remove') => setRoleMutationOperation(value)}
+                        >
+                          <SelectTrigger data-testid="member-role-operation-trigger"><SelectValue placeholder="Role operation" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="add">Add role</SelectItem>
+                            <SelectItem value="remove">Remove role</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
+                          <SelectTrigger data-testid="member-role-select-trigger"><SelectValue placeholder="Select guild role" /></SelectTrigger>
+                          <SelectContent>
+                            {detail.controls.role_catalog
+                              .filter((role) => !role.managed)
+                              .map((role) => (
+                                <SelectItem key={role.role_id} value={role.role_id}>
+                                  {role.role_name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <Textarea
+                          data-testid="member-role-reason"
+                          value={roleMutationReason}
+                          onChange={(event) => setRoleMutationReason(event.target.value)}
+                          placeholder="Audit reason for this Discord role change"
+                          className="min-h-24 md:col-span-2"
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          data-testid="member-role-preview-button"
+                          variant="outline"
+                          className="border-white/20 text-white hover:bg-white/5"
+                          onClick={() => void handlePreviewRoleMutation()}
+                          disabled={roleMutationLoading || !selectedRoleId}
+                        >
+                          {roleMutationLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Shield className="mr-2 h-4 w-4" />}
+                          Preview Change
+                        </Button>
+                        <Button
+                          type="button"
+                          data-testid="member-role-apply-button"
+                          className="bg-emerald-600 hover:bg-emerald-500"
+                          onClick={() => void handleApplyRoleMutation()}
+                          disabled={roleMutationLoading || !selectedRoleId || !roleMutationReason.trim()}
+                        >
+                          {roleMutationLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Shield className="mr-2 h-4 w-4" />}
+                          Apply Change
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-              {guildRoleCatalogError && (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <p className="text-amber-200 text-sm font-medium">Guild role catalog unavailable</p>
-                  <p className="text-xs text-amber-200/80 mt-1 break-all">
-                    {guildRoleCatalogError}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                  {rolePreview && (
+                    <Card className="border-white/10 bg-white/5" data-testid="member-role-preview">
+                      <CardHeader>
+                        <CardTitle className="text-white">Role Change Preview</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-sm">
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className="border-white/10 bg-black/20 text-white/80">
+                            {rolePreview.role?.name || selectedRoleId || 'Selected role'}
+                          </Badge>
+                          {rolePreview.manageable === false && (
+                            <Badge className="border-red-500/30 bg-red-500/10 text-red-100">Not manageable</Badge>
+                          )}
+                          {rolePreview.no_op && (
+                            <Badge className="border-blue-500/30 bg-blue-500/10 text-blue-100">No-op</Badge>
+                          )}
+                        </div>
+                        {rolePreview.manageability_reason && (
+                          <p className="text-white/70">{rolePreview.manageability_reason}</p>
+                        )}
+                        {(rolePreview.preview_evaluation || rolePreview.evaluation) && (
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <Card className="border-white/10 bg-black/20">
+                              <CardContent className="pt-6">
+                                <p className="text-xs text-white/50">Tier</p>
+                                <p className="mt-1 text-lg font-semibold text-white">
+                                  {rolePreview.preview_evaluation?.resolvedTier || rolePreview.evaluation?.resolvedTier || 'None'}
+                                </p>
+                              </CardContent>
+                            </Card>
+                            <Card className="border-white/10 bg-black/20">
+                              <CardContent className="pt-6">
+                                <p className="text-xs text-white/50">Admin</p>
+                                <p className="mt-1 text-lg font-semibold text-white">
+                                  {(rolePreview.preview_evaluation?.isAdmin || rolePreview.evaluation?.isAdmin) ? 'Yes' : 'No'}
+                                </p>
+                              </CardContent>
+                            </Card>
+                            <Card className="border-white/10 bg-black/20">
+                              <CardContent className="pt-6">
+                                <p className="text-xs text-white/50">Allowed tabs</p>
+                                <p className="mt-1 text-lg font-semibold text-white">
+                                  {rolePreview.preview_evaluation?.allowedTabs.length || rolePreview.evaluation?.allowedTabs.length || 0}
+                                </p>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
 
-      {!overviewLoading && overview && overviewGaps.length > 0 && (
-        <div className="p-3 rounded-lg bg-white/5 border border-white/10 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-300 mt-0.5" />
-          <p className="text-xs text-white/70">
-            Review the gaps above, then use <Link href="/admin/settings#membership-tier-mapping" className="text-emerald-400 hover:underline">Settings</Link>,{' '}
-            <Link href="/admin/roles" className="text-emerald-400 hover:underline">Role Permissions</Link>, and{' '}
-            <Link href="/admin/tabs" className="text-emerald-400 hover:underline">Member Tabs</Link> to apply fixes.
-          </p>
-        </div>
-      )}
+                <TabsContent value="health" className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Card className="border-white/10 bg-white/5">
+                      <CardContent className="space-y-3 pt-6 text-sm">
+                        <div>
+                          <p className="text-xs text-white/50">Roster sync</p>
+                          <p className="text-white/80">{formatDate(detail.profile_sync_health.last_synced_at)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Linked profile sync</p>
+                          <p className="text-white/80">{formatDate(detail.profile_sync_health.linked_profile_last_synced_at)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Last sign in</p>
+                          <p className="text-white/80">{formatDate(detail.profile_sync_health.linked_auth_last_sign_in_at)}</p>
+                        </div>
+                        {detail.profile_sync_health.guild_sync_error && (
+                          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-red-100">
+                            {detail.profile_sync_health.guild_sync_error}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-white/10 bg-white/5">
+                      <CardContent className="space-y-3 pt-6 text-sm">
+                        <p className="text-xs text-white/50">Health warnings</p>
+                        {detail.profile_sync_health.warnings.length === 0 && (
+                          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-emerald-100">
+                            <CheckCircle2 className="mr-2 inline h-4 w-4" />
+                            No access health warnings.
+                          </div>
+                        )}
+                        {detail.profile_sync_health.warnings.map((warning) => (
+                          <div key={warning.code} className={cn('rounded-lg border p-3', warningClass(warning.severity))}>
+                            <div className="flex items-center gap-2">
+                              <AlertTriangle className="h-4 w-4" />
+                              <span className="font-medium">{warning.code}</span>
+                            </div>
+                            <p className="mt-2 text-sm">{warning.message}</p>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card className="border-white/10 bg-white/5">
+                    <CardHeader>
+                      <CardTitle className="text-white">Audit History</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      {detail.audit_history.length === 0 && (
+                        <p className="text-white/50">No audit entries for this member yet.</p>
+                      )}
+                      {detail.audit_history.map((entry) => (
+                        <div key={entry.id} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                            <p className="font-medium text-white">{entry.action}</p>
+                            <p className="text-xs text-white/40">{formatDate(entry.created_at)}</p>
+                          </div>
+                          {entry.details && (
+                            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded bg-black/30 p-3 text-xs text-white/70">
+                              {JSON.stringify(entry.details, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="overrides" className="space-y-4" data-testid="member-overrides-panel">
+                  <Card className="border-white/10 bg-white/5">
+                    <CardHeader>
+                      <CardTitle className="text-white">Create Override</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 md:grid-cols-2">
+                      <Select value={overrideType} onValueChange={setOverrideType}>
+                        <SelectTrigger><SelectValue placeholder="Override type" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="suspend_members_access">Suspend members access</SelectItem>
+                          <SelectItem value="allow_members_access">Allow members access</SelectItem>
+                          <SelectItem value="allow_specific_tabs">Allow specific tabs</SelectItem>
+                          <SelectItem value="deny_specific_tabs">Deny specific tabs</SelectItem>
+                          <SelectItem value="temporary_admin">Temporary admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="datetime-local"
+                        value={overrideExpiresAt}
+                        onChange={(event) => setOverrideExpiresAt(event.target.value)}
+                        placeholder="Optional expiry"
+                      />
+                      <Textarea
+                        data-testid="member-override-reason"
+                        value={overrideReason}
+                        onChange={(event) => setOverrideReason(event.target.value)}
+                        placeholder="Reason for this override"
+                        className="min-h-28 md:col-span-2"
+                      />
+                      {(overrideType === 'allow_specific_tabs' || overrideType === 'deny_specific_tabs') && (
+                        <Input
+                          value={overrideTabs}
+                          onChange={(event) => setOverrideTabs(event.target.value)}
+                          placeholder="Comma-separated tab IDs (example: ai-coach,journal)"
+                          className="md:col-span-2"
+                        />
+                      )}
+                      <div className="md:col-span-2">
+                        <Button
+                          type="button"
+                          data-testid="member-override-create-button"
+                          className="bg-emerald-600 hover:bg-emerald-500"
+                          onClick={() => void handleCreateOverride()}
+                          disabled={savingOverride || !overrideReason.trim()}
+                        >
+                          {savingOverride ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Shield className="mr-2 h-4 w-4" />}
+                          Create Override
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-white/10 bg-white/5">
+                    <CardHeader>
+                      <CardTitle className="text-white">Active Overrides</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      {detail.overrides.length === 0 && (
+                        <p className="text-white/50" data-testid="member-overrides-empty">No active overrides for this member.</p>
+                      )}
+                      {detail.overrides.map((override) => (
+                        <div key={override.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                              <p className="font-medium text-white">{override.overrideType}</p>
+                              <p className="text-xs text-white/40">Created {formatDate(override.createdAt)}</p>
+                              <p className="mt-2 text-white/80">{override.reason}</p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="border-white/20 text-white hover:bg-white/5"
+                              onClick={() => void handleRevokeOverride(override.id)}
+                              disabled={savingOverride}
+                            >
+                              Revoke
+                            </Button>
+                          </div>
+                          {Object.keys(override.payload || {}).length > 0 && (
+                            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded bg-black/30 p-3 text-xs text-white/70">
+                              {JSON.stringify(override.payload, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

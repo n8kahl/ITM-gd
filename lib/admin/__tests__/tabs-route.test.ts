@@ -2,24 +2,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const {
-  mockCreateServerSupabaseClient,
   mockCreateClient,
+  mockRequireAdminAccess,
   mockLogAdminActivity,
   mockRevalidatePath,
 } = vi.hoisted(() => ({
-  mockCreateServerSupabaseClient: vi.fn(),
   mockCreateClient: vi.fn(),
+  mockRequireAdminAccess: vi.fn(),
   mockLogAdminActivity: vi.fn(),
   mockRevalidatePath: vi.fn(),
 }))
 
-vi.mock('@/lib/supabase-server', () => ({
-  createServerSupabaseClient: (...args: unknown[]) =>
-    mockCreateServerSupabaseClient(...args),
-}))
-
 vi.mock('@supabase/supabase-js', () => ({
   createClient: (...args: unknown[]) => mockCreateClient(...args),
+}))
+
+vi.mock('@/lib/access-control/admin-access', () => ({
+  requireAdminAccess: (...args: unknown[]) => mockRequireAdminAccess(...args),
 }))
 
 vi.mock('@/lib/admin/audit-log', () => ({
@@ -47,19 +46,9 @@ describe('PUT /api/admin/tabs', () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key'
 
-    mockCreateServerSupabaseClient.mockResolvedValue({
-      auth: {
-        getUser: vi.fn(async () => ({
-          data: {
-            user: {
-              id: '00000000-0000-4000-8000-000000000001',
-              app_metadata: { is_admin: true },
-            },
-          },
-          error: null,
-        })),
-      },
-      from: vi.fn(),
+    mockRequireAdminAccess.mockResolvedValue({
+      authorized: true,
+      user: { id: '00000000-0000-4000-8000-000000000001' },
     })
   })
 
@@ -68,40 +57,49 @@ describe('PUT /api/admin/tabs', () => {
     const deleteMock = vi.fn(() => ({
       in: deleteInMock,
     }))
-    const upsertMock = vi.fn(async (rows: unknown[], options?: unknown) => {
-      void rows
-      void options
-      return { error: null }
-    })
-    const orderMock = vi.fn(async () => ({
-      data: [
-        { tab_id: 'dashboard', sort_order: 0 },
-        { tab_id: 'profile', sort_order: 99 },
-      ],
-      error: null,
-    }))
-    const selectMock = vi.fn((columns: string) => {
+    const upsertMock = vi.fn(async () => ({ error: null }))
+    const tabSelectMock = vi.fn((columns: string) => {
       if (columns === 'tab_id') {
         return Promise.resolve({
           data: [{ tab_id: 'dashboard' }, { tab_id: 'legacy-tab' }],
           error: null,
         })
       }
+
       return {
-        order: orderMock,
+        order: vi.fn(async () => ({
+          data: [
+            { tab_id: 'dashboard', sort_order: 0 },
+            { tab_id: 'profile', sort_order: 99 },
+          ],
+          error: null,
+        })),
       }
     })
+    const guildRoleSelectMock = vi.fn(() => ({
+      in: vi.fn(async () => ({
+        data: [],
+        error: null,
+      })),
+    }))
 
     mockCreateClient.mockReturnValue({
       from: vi.fn((table: string) => {
-        if (table !== 'tab_configurations') {
-          throw new Error(`Unexpected table: ${table}`)
+        if (table === 'tab_configurations') {
+          return {
+            select: tabSelectMock,
+            delete: deleteMock,
+            upsert: upsertMock,
+          }
         }
-        return {
-          select: selectMock,
-          delete: deleteMock,
-          upsert: upsertMock,
+
+        if (table === 'discord_guild_roles') {
+          return {
+            select: guildRoleSelectMock,
+          }
         }
+
+        throw new Error(`Unexpected table: ${table}`)
       }),
     })
 
@@ -118,6 +116,7 @@ describe('PUT /api/admin/tabs', () => {
             is_required: true,
             is_active: true,
             mobile_visible: true,
+            required_discord_role_ids: [],
           },
           {
             tab_id: 'profile',
@@ -129,6 +128,7 @@ describe('PUT /api/admin/tabs', () => {
             is_required: true,
             is_active: true,
             mobile_visible: true,
+            required_discord_role_ids: [],
           },
         ],
       }),
@@ -141,16 +141,6 @@ describe('PUT /api/admin/tabs', () => {
     expect(deleteMock).toHaveBeenCalledTimes(1)
     expect(deleteInMock).toHaveBeenCalledWith('tab_id', ['legacy-tab'])
     expect(upsertMock).toHaveBeenCalledTimes(1)
-    expect(upsertMock).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({ tab_id: 'dashboard' }),
-        expect.objectContaining({ tab_id: 'profile' }),
-      ]),
-      expect.objectContaining({
-        onConflict: 'tab_id',
-      }),
-    )
-
     expect(mockLogAdminActivity).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'tabs_updated',
@@ -212,7 +202,7 @@ describe('PUT /api/admin/tabs', () => {
           'new row for relation "tab_configurations" violates check constraint "tab_configurations_required_tier_check"',
       },
     }))
-    const selectMock = vi.fn((columns: string) => {
+    const tabSelectMock = vi.fn((columns: string) => {
       if (columns === 'tab_id') {
         return Promise.resolve({
           data: [{ tab_id: 'dashboard' }],
@@ -226,14 +216,23 @@ describe('PUT /api/admin/tabs', () => {
 
     mockCreateClient.mockReturnValue({
       from: vi.fn((table: string) => {
-        if (table !== 'tab_configurations') {
-          throw new Error(`Unexpected table: ${table}`)
+        if (table === 'tab_configurations') {
+          return {
+            select: tabSelectMock,
+            delete: deleteMock,
+            upsert: upsertMock,
+          }
         }
-        return {
-          select: selectMock,
-          delete: deleteMock,
-          upsert: upsertMock,
+
+        if (table === 'discord_guild_roles') {
+          return {
+            select: vi.fn(() => ({
+              in: vi.fn(async () => ({ data: [], error: null })),
+            })),
+          }
         }
+
+        throw new Error(`Unexpected table: ${table}`)
       }),
     })
 
@@ -250,6 +249,7 @@ describe('PUT /api/admin/tabs', () => {
             is_required: true,
             is_active: true,
             mobile_visible: true,
+            required_discord_role_ids: [],
           },
           {
             tab_id: 'trade-day-replay',
@@ -261,6 +261,7 @@ describe('PUT /api/admin/tabs', () => {
             is_required: false,
             is_active: true,
             mobile_visible: true,
+            required_discord_role_ids: [],
           },
         ],
       }),

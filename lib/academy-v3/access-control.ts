@@ -5,6 +5,8 @@ import {
   normalizeDiscordRoleIds,
   resolveMembersAllowedRoleIds,
 } from '@/lib/discord-role-access'
+import { evaluateMemberAccess } from '@/lib/access-control/evaluate-member-access'
+import { createServiceRoleSupabaseClient } from '@/lib/server-supabase'
 
 export class AcademyAccessError extends Error {
   readonly status: number
@@ -42,6 +44,18 @@ export async function resolveEffectiveDiscordRoleIds(params: {
   supabase: SupabaseClient
 }): Promise<string[]> {
   const { user, supabase } = params
+  const serviceRoleSupabase = createServiceRoleSupabaseClient()
+  if (serviceRoleSupabase) {
+    try {
+      const evaluation = await evaluateMemberAccess(serviceRoleSupabase, { userId: user.id })
+      if (evaluation.effectiveDiscordRoleIds.length > 0) {
+        return evaluation.effectiveDiscordRoleIds
+      }
+    } catch {
+      // Fall through to cached profile lookup when canonical evaluation is unavailable.
+    }
+  }
+
   let roleIds = extractDiscordRoleIdsFromUser(user)
 
   try {
@@ -66,10 +80,24 @@ export async function assertMembersAreaRoleAccess(params: {
   user: User
   supabase: SupabaseClient
 }): Promise<string[]> {
-  const { supabase } = params
   const roleIds = await resolveEffectiveDiscordRoleIds(params)
-  const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({ supabase })
+  const serviceRoleSupabase = createServiceRoleSupabaseClient()
+  if (serviceRoleSupabase) {
+    const evaluation = await evaluateMemberAccess(serviceRoleSupabase, { userId: params.user.id })
+    if (!evaluation.hasMembersAccess) {
+      throw new AcademyAccessError(
+        403,
+        'MEMBERS_ROLE_REQUIRED',
+        'Members-area Discord role required to access academy resources.',
+      )
+    }
 
+    return evaluation.effectiveDiscordRoleIds.length > 0
+      ? evaluation.effectiveDiscordRoleIds
+      : roleIds
+  }
+
+  const membersAllowedRoleIds = await resolveMembersAllowedRoleIds({ supabase: params.supabase })
   if (!hasMembersAreaAccess(roleIds, membersAllowedRoleIds)) {
     throw new AcademyAccessError(
       403,

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient, isAdminUser } from '@/lib/supabase-server'
+import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { evaluateMemberAccess } from '@/lib/access-control/evaluate-member-access'
+import { createServiceRoleSupabaseClient } from '@/lib/server-supabase'
 
 function jsonNoStore(payload: Record<string, unknown>, status: number) {
   return NextResponse.json(payload, {
@@ -27,8 +29,19 @@ export async function authorizeMoneyMakerMemberRequest(): Promise<NextResponse |
     )
   }
 
-  const isAdmin = await isAdminUser()
-  if (isAdmin) {
+  const serviceRoleSupabase = createServiceRoleSupabaseClient()
+  if (!serviceRoleSupabase) {
+    return jsonNoStore(
+      {
+        success: false,
+        error: 'Access control unavailable',
+      },
+      500,
+    )
+  }
+
+  const evaluation = await evaluateMemberAccess(serviceRoleSupabase, { userId: user.id })
+  if (evaluation.isAdmin || evaluation.allowedTabs.includes('money-maker')) {
     return null
   }
 

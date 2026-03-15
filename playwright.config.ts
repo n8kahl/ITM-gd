@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 const aiCoachMode = process.env.E2E_AI_COACH_MODE || 'mock'
 const isAICoachLiveMode = aiCoachMode === 'live'
 const defaultLiveBackendUrl = 'http://127.0.0.1:3101'
+const frontendBaseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000'
 const e2eBackendUrl = process.env.E2E_BACKEND_URL
   || process.env.NEXT_PUBLIC_AI_COACH_API_URL
   || (isAICoachLiveMode ? defaultLiveBackendUrl : 'http://127.0.0.1:3001')
@@ -10,6 +11,27 @@ const e2eBackendUrl = process.env.E2E_BACKEND_URL
 if (isAICoachLiveMode && !process.env.E2E_BACKEND_URL) {
   process.env.E2E_BACKEND_URL = e2eBackendUrl
 }
+
+function getFrontendServerTarget(): { baseUrl: string; hostname: string; port: string } {
+  try {
+    const parsed = new URL(frontendBaseUrl)
+    const hostname = parsed.hostname || '127.0.0.1'
+    const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80')
+    return {
+      baseUrl: parsed.toString().replace(/\/$/, ''),
+      hostname,
+      port,
+    }
+  } catch {
+    return {
+      baseUrl: 'http://127.0.0.1:3000',
+      hostname: '127.0.0.1',
+      port: '3000',
+    }
+  }
+}
+
+const frontendServerTarget = getFrontendServerTarget()
 
 function shouldStartLocalBackendServer(): boolean {
   try {
@@ -23,8 +45,8 @@ function shouldStartLocalBackendServer(): boolean {
 const webServers: NonNullable<ReturnType<typeof defineConfig>['webServer']> = [
   {
     // Bind explicitly to loopback; some sandboxed environments deny listening on 0.0.0.0.
-    command: `E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET=${process.env.E2E_BYPASS_SHARED_SECRET || ''} NEXT_PUBLIC_AI_COACH_API_URL=${e2eBackendUrl} NEXT_PUBLIC_SPX_E2E_ALLOW_STALE_ENTRY=true node_modules/.bin/next dev --hostname 127.0.0.1 --port 3000`,
-    url: 'http://127.0.0.1:3000',
+    command: `E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_AUTH=true NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET=${process.env.E2E_BYPASS_SHARED_SECRET || ''} NEXT_PUBLIC_AI_COACH_API_URL=${e2eBackendUrl} NEXT_PUBLIC_SPX_E2E_ALLOW_STALE_ENTRY=true node_modules/.bin/next dev --hostname ${frontendServerTarget.hostname} --port ${frontendServerTarget.port}`,
+    url: frontendServerTarget.baseUrl,
     reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === 'true',
     timeout: 120000,
   },
@@ -74,7 +96,7 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000',
+    baseURL: frontendServerTarget.baseUrl,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

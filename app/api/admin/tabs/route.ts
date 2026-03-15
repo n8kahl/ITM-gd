@@ -1,13 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { logAdminActivity } from '@/lib/admin/audit-log'
-import {
-  extractDiscordRoleIdsFromUser,
-  hasAdminRoleAccess,
-  normalizeDiscordRoleIds,
-} from '@/lib/discord-role-access'
+import { normalizeDiscordRoleIds } from '@/lib/discord-role-access'
+import { requireAdminAccess } from '@/lib/access-control/admin-access'
 
 type DynamicTabRecord = Record<string, unknown> & {
   tab_id?: unknown
@@ -28,65 +24,15 @@ function getSupabaseAdmin() {
   return createClient(url, key)
 }
 
-async function requireAdmin(): Promise<{ authorized: boolean; userId?: string; reason?: string }> {
-  try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error) {
-      console.error('[Admin Tabs API] Auth error:', error.message)
-      return { authorized: false, reason: 'session_expired' }
-    }
-    if (!user) {
-      console.error('[Admin Tabs API] No user in session')
-      return { authorized: false, reason: 'no_session' }
-    }
-
-    if (user.app_metadata?.is_admin === true) {
-      return { authorized: true, userId: user.id }
-    }
-
-    let roleIds = extractDiscordRoleIdsFromUser(user)
-    try {
-      const { data: profile } = await supabase
-        .from('user_discord_profiles')
-        .select('discord_roles')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (profile) {
-        // Prefer cached Discord profile roles when present to avoid stale JWT role claims.
-        roleIds = normalizeDiscordRoleIds(profile.discord_roles)
-      }
-    } catch (lookupErr) {
-      console.warn('[Admin Tabs API] Discord role lookup failed:', lookupErr)
-    }
-
-    const hasRoleAccess = hasAdminRoleAccess(roleIds)
-
-    if (!hasRoleAccess) {
-      console.error('[Admin Tabs API] User is not admin:', user.id)
-      return { authorized: false, reason: 'not_admin' }
-    }
-
-    return { authorized: true, userId: user.id }
-  } catch (err) {
-    console.error('[Admin Tabs API] requireAdmin exception:', err)
-    return { authorized: false, reason: 'auth_error' }
-  }
-}
-
 /**
  * GET /api/admin/tabs — Fetch all tab configurations (admin-only)
  */
 export async function GET() {
   try {
-    const { authorized, reason } = await requireAdmin()
+    const { authorized } = await requireAdminAccess()
     if (!authorized) {
-      const message = reason === 'session_expired' || reason === 'no_session'
-        ? 'Your session has expired. Please refresh the page and try again.'
-        : 'Admin access required'
       return NextResponse.json(
-        { success: false, error: { code: 'UNAUTHORIZED', message } },
+        { success: false, error: { code: 'UNAUTHORIZED', message: 'Admin access required' } },
         { status: 403 }
       )
     }
@@ -120,13 +66,10 @@ export async function GET() {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const { authorized, userId, reason } = await requireAdmin()
+    const { authorized, user } = await requireAdminAccess()
     if (!authorized) {
-      const message = reason === 'session_expired' || reason === 'no_session'
-        ? 'Your session has expired. Please refresh the page and try again.'
-        : 'Admin access required'
       return NextResponse.json(
-        { success: false, error: { code: 'UNAUTHORIZED', message } },
+        { success: false, error: { code: 'UNAUTHORIZED', message: 'Admin access required' } },
         { status: 403 }
       )
     }
@@ -247,7 +190,7 @@ export async function PUT(request: NextRequest) {
     await logAdminActivity({
       action: 'tabs_updated',
       targetType: 'tab_config',
-      targetId: userId,
+      targetId: user?.id || null,
       details: {
         tabs_updated: incomingIds,
         tabs_deleted: tabIdsToDelete,

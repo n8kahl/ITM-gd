@@ -2,24 +2,20 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
-  useState,
-  useCallback,
-  useRef,
   useMemo,
+  useRef,
+  useState,
   type Context,
-  type ReactNode
+  type ReactNode,
 } from 'react'
 import { useRouter } from 'next/navigation'
 import * as Sentry from '@sentry/nextjs'
+import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import type { User, Session } from '@supabase/supabase-js'
-import type { DiscordSyncResult, UserDiscordProfile } from '@/lib/types_db'
-
-// ============================================
-// TYPES
-// ============================================
+import type { DiscordSyncResult } from '@/lib/types_db'
 
 export interface MemberPermission {
   id: string
@@ -40,10 +36,6 @@ export interface MemberProfile {
   role?: 'admin' | null
 }
 
-/**
- * V3: Admin-configured tab configuration from tab_configurations table.
- * Fetched via /api/config/tabs, replaces hardcoded tab arrays.
- */
 export interface TabConfig {
   id: string
   tab_id: string
@@ -58,11 +50,9 @@ export interface TabConfig {
   sort_order: number
   is_required: boolean
   is_active: boolean
-  /** When non-empty, tab is only visible to users with at least one of these Discord role IDs (admins always bypass). */
   required_discord_role_ids?: string[] | null
 }
 
-// Error codes from sync-discord-roles edge function
 export const SYNC_ERROR_CODES = {
   NOT_MEMBER: 'NOT_MEMBER',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
@@ -79,8 +69,8 @@ interface MemberAuthState {
   session: Session | null
   profile: MemberProfile | null
   permissions: MemberPermission[]
-  allowedTabs: string[] // Simple RBAC: tabs user can access
-  tabConfigs: TabConfig[] // V3: Full tab configs from admin-configured table
+  allowedTabs: string[]
+  tabConfigs: TabConfig[]
   isLoading: boolean
   isAuthenticated: boolean
   error: string | null
@@ -93,9 +83,7 @@ interface MemberAuthContextValue extends MemberAuthState {
   hasPermission: (permissionName: string) => boolean
   refresh: () => Promise<void>
   isNotMember: boolean
-  /** V3: Get tab configs filtered by user's tier */
   getVisibleTabs: () => TabConfig[]
-  /** V3: Get mobile-visible tab configs filtered by user's tier */
   getMobileTabs: () => TabConfig[]
 }
 
@@ -125,230 +113,48 @@ interface MemberAuthActionsContextValue {
   refresh: () => Promise<void>
 }
 
-interface AdminStatusResponse {
+interface AccessSnapshotResponse {
   success: boolean
-  isAdmin?: boolean
-  warning?: string
   error?: string
+  data?: {
+    profile: MemberProfile
+    permissions: MemberPermission[]
+    allowedTabs: string[]
+    tabConfigs: TabConfig[]
+    access?: {
+      isAdmin?: boolean
+      hasMembersAccess?: boolean
+      linkStatus?: string
+      tabDecisions?: unknown[]
+      activeOverrides?: unknown[]
+      healthWarnings?: unknown[]
+    }
+  }
 }
 
 const E2E_BYPASS_AUTH_ENABLED = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === 'true'
 const E2E_BYPASS_USER_ID = '00000000-0000-4000-8000-000000000001'
 const E2E_BYPASS_SHARED_SECRET = process.env.NEXT_PUBLIC_E2E_BYPASS_SHARED_SECRET || ''
-const DISCORD_GUILD_ROLES_MISSING_CACHE_KEY = 'member_auth:discord_guild_roles_missing_at_ms'
-const DISCORD_GUILD_ROLES_MISSING_CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const SWING_SNIPER_LEAD_ROLE_ID = '1465515598640447662'
-const SNIPER_MEMBERSHIP_ROLE_ID = '1468748795234881597'
-const SNIPER_MEMBERSHIP_TAB_ALLOWLIST = new Set(['dashboard', 'journal', 'ai-coach', 'swing-sniper', 'mentorship', 'profile'])
+const REQUEST_TIMEOUT_MS = 10000
+const SYNC_COOLDOWN_MS = 30_000
+const AUTH_CHANNEL_NAME = 'titm-auth-sync'
 
-const FALLBACK_TAB_CONFIGS: TabConfig[] = [
-  {
-    id: 'dashboard',
-    tab_id: 'dashboard',
-    label: 'Dashboard',
-    icon: 'LayoutDashboard',
-    path: '/members',
-    required_tier: 'core',
-    badge_text: null,
-    badge_variant: null,
-    description: null,
-    mobile_visible: true,
-    sort_order: 1,
-    is_required: true,
-    is_active: true,
-  },
-  {
-    id: 'journal',
-    tab_id: 'journal',
-    label: 'Journal',
-    icon: 'BookOpen',
-    path: '/members/journal',
-    required_tier: 'core',
-    badge_text: null,
-    badge_variant: null,
-    description: null,
-    mobile_visible: true,
-    sort_order: 2,
-    is_required: false,
-    is_active: true,
-  },
-  {
-    id: 'spx-command-center',
-    tab_id: 'spx-command-center',
-    label: 'SPX Command Center',
-    icon: 'Target',
-    path: '/members/spx-command-center',
-    required_tier: 'pro',
-    badge_text: null,
-    badge_variant: null,
-    description: null,
-    mobile_visible: true,
-    sort_order: 3,
-    is_required: false,
-    is_active: true,
-  },
-  {
-    id: 'money-maker',
-    tab_id: 'money-maker',
-    label: 'Money Maker',
-    icon: 'Target',
-    path: '/members/money-maker',
-    required_tier: 'admin',
-    badge_text: 'Beta',
-    badge_variant: 'emerald',
-    description: 'High-Precision KCU Strategy Signals',
-    mobile_visible: true,
-    sort_order: 3,
-    is_required: false,
-    is_active: true,
-  },
-  {
-    id: 'ai-coach',
-    tab_id: 'ai-coach',
-    label: 'AI Coach',
-    icon: 'Bot',
-    path: '/members/ai-coach',
-    required_tier: 'pro',
-    badge_text: null,
-    badge_variant: null,
-    description: null,
-    mobile_visible: true,
-    sort_order: 4,
-    is_required: false,
-    is_active: true,
-  },
-  {
-    id: 'swing-sniper',
-    tab_id: 'swing-sniper',
-    label: 'Swing Sniper',
-    icon: 'Radar',
-    path: '/members/swing-sniper',
-    required_tier: 'core',
-    badge_text: 'New',
-    badge_variant: 'champagne',
-    description: 'Options research workspace for catalysts, contracts, and thesis monitoring.',
-    mobile_visible: true,
-    sort_order: 5,
-    is_required: false,
-    is_active: true,
-    required_discord_role_ids: [SWING_SNIPER_LEAD_ROLE_ID],
-  },
-  {
-    id: 'library',
-    tab_id: 'library',
-    label: 'Academy',
-    icon: 'GraduationCap',
-    path: '/members/academy',
-    required_tier: 'pro',
-    badge_text: null,
-    badge_variant: null,
-    description: null,
-    mobile_visible: true,
-    sort_order: 6,
-    is_required: false,
-    is_active: true,
-  },
-  {
-    id: 'social',
-    tab_id: 'social',
-    label: 'Social',
-    icon: 'Users',
-    path: '/members/social',
-    required_tier: 'core',
-    badge_text: null,
-    badge_variant: null,
-    description: null,
-    mobile_visible: true,
-    sort_order: 7,
-    is_required: false,
-    is_active: true,
-  },
-  {
-    id: 'studio',
-    tab_id: 'studio',
-    label: 'Studio',
-    icon: 'Palette',
-    path: '/members/studio',
-    required_tier: 'executive',
-    badge_text: null,
-    badge_variant: null,
-    description: null,
-    mobile_visible: false,
-    sort_order: 8,
-    is_required: false,
-    is_active: true,
-  },
-  {
-    id: 'profile',
-    tab_id: 'profile',
-    label: 'Profile',
-    icon: 'UserCircle',
-    path: '/members/profile',
-    required_tier: 'core',
-    badge_text: null,
-    badge_variant: null,
-    description: null,
-    mobile_visible: true,
-    sort_order: 99,
-    is_required: true,
-    is_active: true,
-  },
-  {
-    id: 'mentorship',
-    tab_id: 'mentorship',
-    label: 'Mentorship',
-    icon: 'Crosshair',
-    path: '/members/mentorship',
-    required_tier: 'core',
-    badge_text: null,
-    badge_variant: null,
-    description: '8-week Sniper Mentorship curriculum',
-    mobile_visible: true,
-    sort_order: 9,
-    is_required: false,
-    is_active: true,
-    required_discord_role_ids: ['1468748795234881597'],
-  },
+const E2E_TAB_CONFIGS: TabConfig[] = [
+  { id: 'dashboard', tab_id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard', path: '/members', required_tier: 'core', badge_text: null, badge_variant: null, description: null, mobile_visible: true, sort_order: 0, is_required: true, is_active: true, required_discord_role_ids: [] },
+  { id: 'journal', tab_id: 'journal', label: 'Journal', icon: 'BookOpen', path: '/members/journal', required_tier: 'core', badge_text: null, badge_variant: null, description: null, mobile_visible: true, sort_order: 1, is_required: false, is_active: true, required_discord_role_ids: [] },
+  { id: 'ai-coach', tab_id: 'ai-coach', label: 'AI Coach', icon: 'Bot', path: '/members/ai-coach', required_tier: 'pro', badge_text: null, badge_variant: null, description: null, mobile_visible: true, sort_order: 2, is_required: false, is_active: true, required_discord_role_ids: [] },
+  { id: 'profile', tab_id: 'profile', label: 'Profile', icon: 'UserCircle', path: '/members/profile', required_tier: 'core', badge_text: null, badge_variant: null, description: null, mobile_visible: true, sort_order: 99, is_required: true, is_active: true, required_discord_role_ids: [] },
+  { id: 'money-maker', tab_id: 'money-maker', label: 'Money Maker', icon: 'Target', path: '/members/money-maker', required_tier: 'admin', badge_text: 'Beta', badge_variant: 'emerald', description: null, mobile_visible: true, sort_order: 120, is_required: false, is_active: true, required_discord_role_ids: [] },
 ]
 
-const FALLBACK_TAB_CONFIG_MAP = new Map(FALLBACK_TAB_CONFIGS.map((tab) => [tab.tab_id, tab]))
+const MemberSessionContext = createContext<MemberSessionContextValue | null>(null)
+const MemberAccessContext = createContext<MemberAccessContextValue | null>(null)
+const MemberAuthActionsContext = createContext<MemberAuthActionsContextValue | null>(null)
 
 function readE2EBypassRoleOverride(): 'admin' | null {
   if (typeof window === 'undefined') return null
-
   const role = new URLSearchParams(window.location.search).get('e2eBypassRole')
   return role === 'admin' ? 'admin' : null
-}
-
-function toFallbackTabLabel(tabId: string): string {
-  return tabId
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
-function buildFallbackTabConfig(tabId: string, sortOrder: number): TabConfig {
-  const existing = FALLBACK_TAB_CONFIG_MAP.get(tabId)
-  if (existing) {
-    return { ...existing }
-  }
-
-  return {
-    id: tabId,
-    tab_id: tabId,
-    label: toFallbackTabLabel(tabId),
-    icon: 'LayoutDashboard',
-    path: tabId === 'dashboard' ? '/members' : `/members/${tabId}`,
-    required_tier: 'core',
-    badge_text: null,
-    badge_variant: null,
-    description: null,
-    mobile_visible: true,
-    sort_order: sortOrder,
-    is_required: false,
-    is_active: true,
-  }
 }
 
 function createE2EBypassAuthState(): MemberAuthState {
@@ -379,6 +185,10 @@ function createE2EBypassAuthState(): MemberAuthState {
     user,
   } as Session
 
+  const tabConfigs = isAdmin
+    ? E2E_TAB_CONFIGS
+    : E2E_TAB_CONFIGS.filter((tab) => tab.required_tier !== 'admin')
+
   return {
     user,
     session,
@@ -388,12 +198,10 @@ function createE2EBypassAuthState(): MemberAuthState {
       discord_user_id: '000000000000000001',
       discord_username: 'E2E Member',
       discord_avatar: null,
-      discord_roles: ['role-member', 'role-pro', '1468748795234881597', SWING_SNIPER_LEAD_ROLE_ID],
+      discord_roles: ['role-member', 'role-pro'],
       discord_role_titles: {
         'role-member': 'Member',
         'role-pro': 'Pro',
-        '1468748795234881597': 'Sniper Mentorship',
-        [SWING_SNIPER_LEAD_ROLE_ID]: 'Lead',
       },
       membership_tier: 'pro',
       role: isAdmin ? 'admin' : null,
@@ -405,28 +213,9 @@ function createE2EBypassAuthState(): MemberAuthState {
         description: 'Playwright E2E bypass permission',
         granted_by_role: 'role-pro',
       },
-      ...(isAdmin
-        ? [{
-            id: 'e2e-admin-dashboard',
-            name: 'admin_dashboard',
-            description: 'Playwright E2E bypass admin permission',
-            granted_by_role: 'e2e-admin',
-          }]
-        : []),
     ],
-    allowedTabs: [
-      'dashboard',
-      'journal',
-      'spx-command-center',
-      'ai-coach',
-      'swing-sniper',
-      'library',
-      'social',
-      'mentorship',
-      'profile',
-      ...(isAdmin ? ['money-maker'] : []),
-    ],
-    tabConfigs: [],
+    allowedTabs: tabConfigs.map((tab) => tab.tab_id),
+    tabConfigs,
     isLoading: false,
     isAuthenticated: true,
     error: null,
@@ -434,164 +223,35 @@ function createE2EBypassAuthState(): MemberAuthState {
   }
 }
 
-// ============================================
-// CONTEXT
-// ============================================
-
-const MemberSessionContext = createContext<MemberSessionContextValue | null>(null)
-const MemberAccessContext = createContext<MemberAccessContextValue | null>(null)
-const MemberAuthActionsContext = createContext<MemberAuthActionsContextValue | null>(null)
-
-// ============================================
-// PROVIDER
-// ============================================
-
-// Default role mapping fallback (Discord role ID -> tier)
-// Configure actual Discord role IDs in Admin > Settings or via app_settings table
-// Example: { "1234567890123456789": "executive", "9876543210987654321": "pro" }
-const DEFAULT_ROLE_MAPPING: Record<string, 'core' | 'pro' | 'executive'> = {
-  // Empty by default - must be configured with actual Discord role IDs
-}
-
-// Rate limiting for sync operations
-const SYNC_COOLDOWN_MS = 30000 // 30 seconds
-
-// Request timeout for auth operations (10 seconds - faster fallback)
-const REQUEST_TIMEOUT_MS = 10000
-
-// Cross-tab sync channel name
-const AUTH_CHANNEL_NAME = 'titm-auth-sync'
-
-/**
- * Helper to fetch with timeout
- */
 async function fetchWithTimeout(
   url: string,
   options: RequestInit,
-  timeoutMs = REQUEST_TIMEOUT_MS
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<Response> {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const response = await fetch(url, {
+    return await fetch(url, {
       ...options,
       signal: controller.signal,
     })
-    return response
   } finally {
-    clearTimeout(timeoutId)
+    window.clearTimeout(timeoutId)
   }
 }
 
-function buildRoleTitleMapFromSyncResult(result: any): Record<string, string> {
-  const roleTitleMap: Record<string, string> = {}
-  const roles = Array.isArray(result?.roles) ? result.roles : []
-
-  for (const role of roles) {
-    const roleId = typeof role?.id === 'string' ? role.id : null
-    const roleName = typeof role?.name === 'string' ? role.name : null
-    if (!roleId) continue
-    roleTitleMap[roleId] = roleName && roleName.trim().length > 0 ? roleName : 'Discord Role'
-  }
-
-  return roleTitleMap
-}
-
-function buildRoleTitleMapFromPermissions(rows: any[]): Record<string, string> {
-  const roleTitleMap: Record<string, string> = {}
-  for (const row of rows) {
-    const roleId = typeof row?.granted_by_role_id === 'string' ? row.granted_by_role_id : null
-    const roleName = typeof row?.granted_by_role_name === 'string' ? row.granted_by_role_name : null
-    if (!roleId || !roleName) continue
-    if (!roleTitleMap[roleId]) {
-      roleTitleMap[roleId] = roleName
-    }
-  }
-  return roleTitleMap
-}
-
-async function fetchIsAdminFromProfiles(userId: string): Promise<boolean> {
-  try {
-    const response = await fetchWithTimeout(
-      '/api/members/admin-status',
-      {
-        method: 'GET',
-        cache: 'no-store',
-        credentials: 'include',
-      },
-    )
-
-    if (!response.ok) {
-      console.warn(`[MemberAuth] admin-status lookup failed for user ${userId}, defaulting isAdmin=false:`, response.status)
-      return false
-    }
-
-    const payload = await response.json().catch(() => null) as AdminStatusResponse | null
-    if (!payload || payload.success !== true || typeof payload.isAdmin !== 'boolean') {
-      console.warn(`[MemberAuth] admin-status payload invalid for user ${userId}, defaulting isAdmin=false`)
-      return false
-    }
-
-    if (payload.warning) {
-      console.warn(`[MemberAuth] admin-status warning for user ${userId}:`, payload.warning)
-    }
-
-    return payload.isAdmin
-  } catch (error) {
-    console.warn(`[MemberAuth] admin-status lookup threw for user ${userId}, defaulting isAdmin=false:`, error)
-    return false
-  }
-}
-
-function isMissingSupabaseRelationError(error: unknown, tableName: string): boolean {
-  const code = typeof (error as { code?: unknown })?.code === 'string'
-    ? String((error as { code: string }).code).toUpperCase()
-    : ''
-  const message = typeof (error as { message?: unknown })?.message === 'string'
-    ? String((error as { message: string }).message).toLowerCase()
-    : ''
-
-  if (code === '42P01' || code === 'PGRST205' || code === 'PGRST116') {
-    return true
-  }
-
-  if (!message) return false
-  if (!message.includes(tableName.toLowerCase())) return false
-
-  return (
-    message.includes('does not exist')
-    || message.includes('could not find')
-    || message.includes('not found')
-  )
-}
-
-function readCachedMissingDiscordGuildRolesFlag(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    const raw = window.localStorage.getItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY)
-    if (!raw) return false
-    const detectedAtMs = Number.parseInt(raw, 10)
-    if (!Number.isFinite(detectedAtMs)) {
-      window.localStorage.removeItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY)
-      return false
-    }
-    if ((Date.now() - detectedAtMs) > DISCORD_GUILD_ROLES_MISSING_CACHE_TTL_MS) {
-      window.localStorage.removeItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY)
-      return false
-    }
-    return true
-  } catch {
-    return false
-  }
-}
-
-function cacheMissingDiscordGuildRolesFlag(): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(DISCORD_GUILD_ROLES_MISSING_CACHE_KEY, String(Date.now()))
-  } catch {
-    // Ignore storage write failures.
+function createBasicProfile(user: User): MemberProfile {
+  return {
+    id: user.id,
+    email: user.email || null,
+    discord_user_id: null,
+    discord_username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Member',
+    discord_avatar: user.user_metadata?.avatar_url || null,
+    discord_roles: [],
+    discord_role_titles: {},
+    membership_tier: null,
+    role: null,
   }
 }
 
@@ -610,430 +270,93 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     errorCode: null,
   })
 
-  // V3: Fetched tab configurations from /api/config/tabs
-  const [allTabConfigs, setAllTabConfigs] = useState<TabConfig[]>([])
-
-  // Dynamic role mapping fetched from config API (role ID -> tier)
-  const [roleMapping, setRoleMapping] = useState<Record<string, 'core' | 'pro' | 'executive'>>(DEFAULT_ROLE_MAPPING)
-
-  // Rate limiting using ref (not state) to avoid race conditions
-  const lastSyncTimeRef = useRef(0)
-  const isSyncingRef = useRef(false)
-
-  // Track authentication status to prevent re-initialization on navigation
-  const isAuthenticatedRef = useRef(false)
-
-  // Guard against concurrent initializeAuth calls (useEffect + onAuthStateChange race)
   const isInitializingRef = useRef(false)
-
-  // Refs for state values so callbacks stay stable (don't depend on state objects)
-  const sessionRef = useRef(state.session)
-  sessionRef.current = state.session
-  const userRef = useRef(state.user)
-  userRef.current = state.user
-  const isAdminRef = useRef(false)
-  isAdminRef.current = state.profile?.role === 'admin'
-
-  // Cross-tab sync channel
+  const isAuthenticatedRef = useRef(false)
+  const isSyncingRef = useRef(false)
+  const lastSyncTimeRef = useRef(0)
   const authChannelRef = useRef<BroadcastChannel | null>(null)
-  const discordGuildRolesTableMissingRef = useRef(false)
 
-  // Fetch role mapping and tab configurations from config APIs on mount
-  useEffect(() => {
-    discordGuildRolesTableMissingRef.current = readCachedMissingDiscordGuildRolesFlag()
-    let cancelled = false
-
-    // Fetch role mapping
-    fetch('/api/config/roles')
-      .then(res => res.json())
-      .then(data => {
-        if (cancelled) return
-        if (data && typeof data === 'object') {
-          setRoleMapping(data)
-        }
-      })
-      .catch(() => {
-        // Keep default mapping on error
-      })
-
-    // V3: Fetch admin-configured tab configurations
-    const loadTabs = async () => {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          const response = await fetchWithTimeout(
-            '/api/config/tabs',
-            {
-              method: 'GET',
-              cache: 'no-store',
-              credentials: 'include',
-            },
-            REQUEST_TIMEOUT_MS,
-          )
-
-          if (!response.ok) {
-            throw new Error(`tabs config request failed: ${response.status}`)
-          }
-
-          const payload = await response.json()
-          if (cancelled) return
-
-          if (payload?.success && Array.isArray(payload.data)) {
-            setAllTabConfigs(payload.data)
-          }
-          return
-        } catch (error) {
-          if (attempt === 0) {
-            await new Promise((resolve) => setTimeout(resolve, 350))
-            continue
-          }
-
-          console.warn('[MemberAuth] failed to load tab configurations; using fallback nav defaults', error)
-        }
-      }
-    }
-
-    void loadTabs()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // Derive membership tier from Discord role IDs using dynamic mapping
-  // roleMapping keys are Discord role IDs, values are tier names
-  const getMembershipTier = useCallback((roleIds: string[]): 'core' | 'pro' | 'executive' | null => {
-    // Check in order of highest tier (executive > pro > core)
-    const tierOrder: Array<'executive' | 'pro' | 'core'> = ['executive', 'pro', 'core']
-
-    for (const tier of tierOrder) {
-      for (const [roleId, mappedTier] of Object.entries(roleMapping)) {
-        if (mappedTier === tier && roleIds.includes(roleId)) {
-          return tier
-        }
-      }
-    }
-
-    // Sniper Membership should retain AI Coach access even when tier mapping
-    // is not configured for this Discord role in app_settings.
-    if (roleIds.includes(SNIPER_MEMBERSHIP_ROLE_ID)) {
-      return 'pro'
-    }
-
-    return null
-  }, [roleMapping])
-
-  // V3: Get allowed tabs based on membership tier + admin-configured tab_configurations
-  const getAllowedTabsForTier = useCallback((tier: 'core' | 'pro' | 'executive' | null, isAdmin = false): string[] => {
-    // If we have tab configurations from the API, use them
-    if (allTabConfigs.length > 0) {
-      const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
-      const userTierLevel = isAdmin
-        ? Number.MAX_SAFE_INTEGER
-        : tier
-          ? tierHierarchy[tier] || 0
-          : 0
-
-      const allowedTabIds = allTabConfigs
-        .filter(tab => {
-          if (!tab.is_active) return false
-          if (tab.required_tier === 'admin') return isAdmin
-          if (tab.is_required) return true // Always show required tabs
-          const requiredLevel = tierHierarchy[tab.required_tier] || 0
-          return userTierLevel >= requiredLevel
-        })
-        .map(tab => tab.tab_id)
-
-      return allowedTabIds
-    }
-
-    // Fallback: hardcoded tabs if API not yet loaded
-    if (!tier && isAdmin) {
-      return ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'swing-sniper', 'money-maker', 'library', 'social', 'studio', 'profile', 'mentorship']
-    }
-    if (!tier) return ['dashboard', 'profile']
-
-    let fallbackTabs: string[]
-    switch (tier) {
-      case 'executive':
-        fallbackTabs = ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'studio', 'profile']
-        break
-      case 'pro':
-        fallbackTabs = ['dashboard', 'journal', 'spx-command-center', 'ai-coach', 'library', 'social', 'profile']
-        break
-      case 'core':
-        fallbackTabs = ['dashboard', 'journal', 'social', 'profile']
-        break
-      default:
-        fallbackTabs = ['dashboard', 'profile']
-    }
-
-    return fallbackTabs
-  }, [allTabConfigs])
-
-  // Fetch allowed tabs (now based on tier, not database)
-  const fetchAllowedTabs = useCallback(async (
-    _userId: string,
-    tier?: 'core' | 'pro' | 'executive' | null,
-    isAdmin?: boolean,
-  ): Promise<string[]> => {
-    const effectiveTier = tier === undefined
-      ? (state.profile?.membership_tier ?? null)
-      : tier
-    const effectiveIsAdmin = isAdmin === undefined
-      ? (state.profile?.role === 'admin')
-      : Boolean(isAdmin)
-
-    return getAllowedTabsForTier(effectiveTier, effectiveIsAdmin)
-  }, [getAllowedTabsForTier, state.profile?.membership_tier, state.profile?.role])
-
-  // Refs for stable access to latest callback versions (breaks dependency chains)
-  const getMembershipTierRef = useRef(getMembershipTier)
-  getMembershipTierRef.current = getMembershipTier
-  const fetchAllowedTabsRef = useRef(fetchAllowedTabs)
-  fetchAllowedTabsRef.current = fetchAllowedTabs
-
-  // Sync Discord roles via Edge Function (with rate limiting and timeout)
-  const syncDiscordRoles = useCallback(async (): Promise<DiscordSyncResult | null> => {
-    const now = Date.now()
-
-    // Atomic check: if already syncing or in cooldown, skip
-    if (isSyncingRef.current) {
-      console.log('Sync already in progress, skipping')
-      return null
-    }
-
-    if (now - lastSyncTimeRef.current < SYNC_COOLDOWN_MS) {
-      console.log('Sync cooldown active, skipping (wait', Math.ceil((SYNC_COOLDOWN_MS - (now - lastSyncTimeRef.current)) / 1000), 'seconds)')
-      return null
-    }
-
-    // Set flags atomically before async operation
-    isSyncingRef.current = true
-    lastSyncTimeRef.current = now
-
-    if (!sessionRef.current) {
-      console.log('No session available for Discord sync')
-      isSyncingRef.current = false
-      return null
-    }
-
-    try {
-      let accessToken = sessionRef.current.access_token
-      const expiresAtMs = (sessionRef.current.expires_at ?? 0) * 1000
-      const tokenNearExpiry = expiresAtMs > 0 && (expiresAtMs - Date.now()) < 60_000
-
-      if (!accessToken || tokenNearExpiry) {
-        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
-        if (refreshError || !refreshedSession?.access_token) {
-          console.warn('Discord sync skipped: unable to refresh session token', refreshError?.message)
-          setState(prev => ({
-            ...prev,
-            error: 'Session expired. Please refresh and sign in again.',
-            errorCode: SYNC_ERROR_CODES.INVALID_SESSION,
-          }))
-          return null
-        }
-
-        accessToken = refreshedSession.access_token
-        setState(prev => ({
-          ...prev,
-          session: refreshedSession,
-          user: refreshedSession.user ?? prev.user,
-          isAuthenticated: true,
-        }))
-      }
-
-      const syncUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`
-      const executeSync = async (token: string) => {
-        const response = await fetchWithTimeout(
-          syncUrl,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        )
-        const result = await response.json().catch(() => ({}))
-        return { response, result }
-      }
-
-      let { response, result } = await executeSync(accessToken)
-
-      // One retry after forced refresh if token was invalidated between calls.
-      if (response.status === 401) {
-        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
-        if (!refreshError && refreshedSession?.access_token) {
-          accessToken = refreshedSession.access_token
-          setState(prev => ({
-            ...prev,
-            session: refreshedSession,
-            user: refreshedSession.user ?? prev.user,
-            isAuthenticated: true,
-          }))
-          ;({ response, result } = await executeSync(accessToken))
-        }
-      }
-
-      if (!response.ok || !result?.success) {
-        if (response.status === 401) {
-          console.warn('Discord sync skipped: session token was rejected by edge function')
-          return null
-        }
-
-        const errorMessage = typeof result?.error === 'string'
-          ? result.error
-          : (response.status === 401
-            ? 'Session expired while syncing Discord roles. Please sign in again.'
-            : `Discord sync failed (${response.status})`)
-        const errorCode = (
-          typeof result?.code === 'string'
-            ? result.code
-            : (response.status === 401 ? SYNC_ERROR_CODES.INVALID_SESSION : SYNC_ERROR_CODES.SYNC_FAILED)
-        ) as SyncErrorCode
-
-        console.warn('Discord sync failed:', errorMessage, 'Code:', errorCode, 'Status:', response.status)
-        setState(prev => ({
-          ...prev,
-          error: errorMessage,
-          errorCode,
-        }))
-        return null
-      }
-
-      // Extract role IDs for tier determination (not names)
-      const roles = Array.isArray(result.roles) ? result.roles : []
-      const roleIds = roles.map((r: { id: string; name: string | null }) => r.id)
-      const roleTitleMap = buildRoleTitleMapFromSyncResult(result)
-      const isAdmin = isAdminRef.current
-
-      // Update state with sync results
-      const profile: MemberProfile = {
-        id: userRef.current?.id || '',
-        email: userRef.current?.email || null,
-        discord_user_id: result.discord_user_id,
-        discord_username: result.discord_username,
-        discord_avatar: result.discord_avatar || null, // Store avatar from sync result
-        discord_roles: roleIds,
-        discord_role_titles: roleTitleMap,
-        membership_tier: getMembershipTierRef.current(roleIds),
-        role: isAdmin ? 'admin' : null,
-      }
-
-      const permissions: MemberPermission[] = (Array.isArray(result.permissions) ? result.permissions : []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        granted_by_role: p.granted_by_role,
-      }))
-
-      // Get allowed tabs based on membership tier
-      const allowedTabs = await fetchAllowedTabsRef.current(userRef.current?.id || '', profile.membership_tier, isAdmin)
-
-      setState(prev => ({
+  const applyAccessSnapshot = useCallback((user: User, session: Session, payload: AccessSnapshotResponse['data']) => {
+    if (!payload) {
+      setState((prev) => ({
         ...prev,
-        profile,
-        permissions,
-        allowedTabs,
-        error: null,
-        errorCode: null,
+        user,
+        session,
+        profile: createBasicProfile(user),
+        permissions: [],
+        allowedTabs: [],
+        tabConfigs: [],
+        isLoading: false,
+        isAuthenticated: true,
       }))
-
-      // Notify other tabs of auth change
-      authChannelRef.current?.postMessage({ type: 'SYNC_COMPLETE', profile })
-
-      return result as DiscordSyncResult
-    } catch (error) {
-      // Handle timeout specifically
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.error('Discord sync timed out')
-        setState(prev => ({
-          ...prev,
-          error: 'Discord sync timed out. Please try again.',
-          errorCode: SYNC_ERROR_CODES.SYNC_FAILED,
-        }))
-      } else {
-        console.error('Discord sync error:', error)
-        setState(prev => ({
-          ...prev,
-          error: error instanceof Error ? error.message : 'Failed to sync Discord roles',
-          errorCode: SYNC_ERROR_CODES.SYNC_FAILED,
-        }))
-      }
-      return null
-    } finally {
-      isSyncingRef.current = false
-    }
-  }, []) // Stable — reads from refs
-
-  // Ref for syncDiscordRoles so initializeAuth doesn't depend on it
-  const syncDiscordRolesRef = useRef(syncDiscordRoles)
-  syncDiscordRolesRef.current = syncDiscordRoles
-
-  // Initialize auth state
-  const initializeAuth = useCallback(async () => {
-    // Prevent concurrent calls (useEffect + onAuthStateChange can race)
-    if (isInitializingRef.current) {
-      console.log('[MemberAuth] initializeAuth already running, skipping')
       return
     }
+
+    setState({
+      user,
+      session,
+      profile: payload.profile,
+      permissions: payload.permissions,
+      allowedTabs: payload.allowedTabs,
+      tabConfigs: payload.tabConfigs,
+      isLoading: false,
+      isAuthenticated: true,
+      error: null,
+      errorCode: null,
+    })
+  }, [])
+
+  const loadAccessSnapshot = useCallback(async (user: User, session: Session) => {
+    const response = await fetchWithTimeout(
+      '/api/members/access-snapshot',
+      {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'include',
+      },
+    )
+
+    const payload = await response.json().catch(() => null) as AccessSnapshotResponse | null
+    if (!response.ok || !payload?.success) {
+      setState((prev) => ({
+        ...prev,
+        user,
+        session,
+        profile: createBasicProfile(user),
+        permissions: [],
+        allowedTabs: [],
+        tabConfigs: [],
+        isLoading: false,
+        isAuthenticated: true,
+        error: payload?.error || 'Failed to load member access snapshot',
+        errorCode: null,
+      }))
+      return
+    }
+
+    applyAccessSnapshot(user, session, payload.data)
+  }, [applyAccessSnapshot])
+
+  const initializeAuth = useCallback(async () => {
+    if (isInitializingRef.current) return
     isInitializingRef.current = true
 
-    console.log('[MemberAuth] initializeAuth started')
     try {
-      // Diagnostic: check Supabase client health
-      console.log('[MemberAuth] 🔍 Supabase client check:', {
-        hasAuthModule: !!supabase?.auth,
-        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) || 'MISSING',
-      })
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-      // Try a direct fetch to Supabase to check connectivity
-      const healthUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/settings`
-      console.log('[MemberAuth] 🔍 Testing Supabase connectivity:', healthUrl)
-      try {
-        const healthCheck = await Promise.race([
-          fetch(healthUrl, {
-            headers: { 'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '' }
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('health check timeout')), 5000))
-        ]) as Response
-        console.log('[MemberAuth] 🔍 Supabase health:', { status: healthCheck.status, ok: healthCheck.ok })
-      } catch (healthErr: any) {
-        console.error('[MemberAuth] 🔍 Supabase NOT reachable:', healthErr.message)
-      }
-
-      // Get current session with timeout wrapper
-      console.log('[MemberAuth] 1️⃣ Calling getSession()...')
-
-      // Add 8-second timeout to prevent hanging
-      const getSessionWithTimeout = async () => {
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('getSession timeout after 8 seconds')), 8000)
-        )
-        return Promise.race([
-          supabase.auth.getSession(),
-          timeout
-        ])
-      }
-
-      const { data: { session }, error: sessionError } = await getSessionWithTimeout() as any
-
-      if (sessionError) {
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: sessionError.message,
-        }))
-        return
-      }
-
-      if (!session) {
-        setState(prev => ({
-          ...prev,
+      if (sessionError || !session) {
+        setState({
+          user: null,
+          session: null,
+          profile: null,
+          permissions: [],
+          allowedTabs: [],
+          tabConfigs: [],
           isLoading: false,
           isAuthenticated: false,
-        }))
+          error: sessionError?.message || null,
+          errorCode: null,
+        })
         return
       }
 
@@ -1044,307 +367,122 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
         if (!refreshError && refreshedSession) {
           currentSession = refreshedSession
-          user = refreshedSession.user ?? user
-
-          if (!user) {
-            const { data: { user: refreshedUser }, error: refreshedUserError } = await supabase.auth.getUser()
-            user = refreshedUser ?? null
-            userError = refreshedUserError
-          } else {
-            userError = null
-          }
+          user = refreshedSession.user ?? null
+          userError = null
         }
       }
 
       if (userError || !user) {
-        setState(prev => ({
-          ...prev,
+        setState({
+          user: null,
+          session: null,
+          profile: null,
+          permissions: [],
+          allowedTabs: [],
+          tabConfigs: [],
           isLoading: false,
-          error: userError?.message || 'Failed to get user',
-        }))
+          isAuthenticated: false,
+          error: userError?.message || 'Failed to resolve current user',
+          errorCode: null,
+        })
         return
       }
 
-      setState(prev => ({
-        ...prev,
-        user,
-        session: currentSession,
-        isAuthenticated: true,
-      }))
-      const isAdmin = await fetchIsAdminFromProfiles(user.id)
-
-      // Try to get cached Discord profile first
-      const { data: discordProfile } = await supabase
-        .from('user_discord_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (discordProfile) {
-        const roleIds = Array.isArray(discordProfile.discord_roles) ? discordProfile.discord_roles : []
-
-        // Get cached permissions
-        const { data: userPermissions } = await supabase
-          .from('user_permissions')
-          .select(`
-            permission_id,
-            granted_by_role_id,
-            granted_by_role_name,
-            app_permissions (
-              id,
-              name,
-              description
-            )
-          `)
-          .eq('user_id', user.id)
-
-        const permissionRows = Array.isArray(userPermissions) ? userPermissions : []
-        const roleTitleMap = buildRoleTitleMapFromPermissions(permissionRows)
-
-        if (roleIds.length > 0 && !discordGuildRolesTableMissingRef.current) {
-          const { data: guildRoleRows, error: guildRoleError } = await supabase
-            .from('discord_guild_roles')
-            .select('discord_role_id, discord_role_name')
-            .in('discord_role_id', roleIds)
-
-          if (guildRoleError) {
-            if (isMissingSupabaseRelationError(guildRoleError, 'discord_guild_roles')) {
-              discordGuildRolesTableMissingRef.current = true
-              cacheMissingDiscordGuildRolesFlag()
-            }
-          } else {
-            for (const row of guildRoleRows || []) {
-              const roleId = typeof (row as any)?.discord_role_id === 'string' ? (row as any).discord_role_id : null
-              const roleName = typeof (row as any)?.discord_role_name === 'string' ? (row as any).discord_role_name : null
-              if (roleId && roleName && !roleTitleMap[roleId]) {
-                roleTitleMap[roleId] = roleName
-              }
-            }
-          }
-        }
-
-        for (const roleId of roleIds) {
-          if (!roleTitleMap[roleId]) {
-            roleTitleMap[roleId] = 'Discord Role'
-          }
-        }
-
-        const profile: MemberProfile = {
-          id: user.id,
-          email: user.email || null,
-          discord_user_id: discordProfile.discord_user_id,
-          discord_username: discordProfile.discord_username,
-          discord_avatar: discordProfile.discord_avatar,
-          discord_roles: roleIds,
-          discord_role_titles: roleTitleMap,
-          membership_tier: getMembershipTierRef.current(roleIds),
-          role: isAdmin ? 'admin' : null,
-        }
-
-        const permissions: MemberPermission[] = permissionRows.map((up: any) => ({
-          id: up.app_permissions?.id || up.permission_id,
-          name: up.app_permissions?.name || '',
-          description: up.app_permissions?.description || null,
-          granted_by_role: up.granted_by_role_name,
-        }))
-
-        // Get allowed tabs based on membership tier
-        const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier, isAdmin)
-
-        setState(prev => ({
-          ...prev,
-          profile,
-          permissions,
-          allowedTabs,
-          isLoading: false,
-        }))
-
-        // Sync Discord roles in background if profile is stale (> 5 minutes)
-        const lastSynced = new Date(discordProfile.last_synced_at).getTime()
-        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
-        if (lastSynced < fiveMinutesAgo) {
-          syncDiscordRolesRef.current()
-        }
-      } else {
-        // No cached profile - sync Discord roles immediately
-        setState(prev => ({ ...prev, session: currentSession, user }))
-
-        // Validate Supabase URL is configured
-        if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-          throw new Error('Supabase URL not configured')
-        }
-
-        try {
-          const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`
-          let accessToken = currentSession.access_token
-          const executeSync = async (token: string) => {
-            const response = await fetchWithTimeout(
-              edgeFunctionUrl,
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-              }
-            )
-
-            const result = await response.json().catch(() => ({}))
-            return { response, result }
-          }
-
-          let { response, result } = await executeSync(accessToken)
-
-          if (response.status === 401) {
-            const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession()
-            if (!refreshError && refreshedSession?.access_token) {
-              accessToken = refreshedSession.access_token
-              setState(prev => ({
-                ...prev,
-                session: refreshedSession,
-                user: refreshedSession.user ?? prev.user,
-                isAuthenticated: true,
-              }))
-              ;({ response, result } = await executeSync(accessToken))
-            }
-          }
-
-          if (response.ok && result?.success) {
-            // Use role IDs for tier determination
-            const roleIds = (Array.isArray(result.roles) ? result.roles : []).map((r: { id: string; name: string | null }) => r.id)
-            const roleTitleMap = buildRoleTitleMapFromSyncResult(result)
-
-            const profile: MemberProfile = {
-              id: user.id,
-              email: user.email || null,
-              discord_user_id: result.discord_user_id,
-              discord_username: result.discord_username,
-              discord_avatar: result.discord_avatar || null,
-              discord_roles: roleIds,
-              discord_role_titles: roleTitleMap,
-              membership_tier: getMembershipTierRef.current(roleIds),
-              role: isAdmin ? 'admin' : null,
-            }
-
-            const permissions: MemberPermission[] = result.permissions.map((p: any) => ({
-              id: p.id,
-              name: p.name,
-              description: p.description,
-              granted_by_role: p.granted_by_role,
-            }))
-
-            // Get allowed tabs based on membership tier
-            const allowedTabs = await fetchAllowedTabsRef.current(user.id, profile.membership_tier, isAdmin)
-
-            setState(prev => ({
-              ...prev,
-              profile,
-              permissions,
-              allowedTabs,
-              isLoading: false,
-            }))
-          } else {
-            // Sync failed but user is still authenticated
-            // Create basic profile from Supabase user
-            const profile: MemberProfile = {
-              id: user.id,
-              email: user.email || null,
-              discord_user_id: null,
-              discord_username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Member',
-              discord_avatar: user.user_metadata?.avatar_url || null,
-              discord_roles: [],
-              discord_role_titles: {},
-              membership_tier: null,
-              role: isAdmin ? 'admin' : null,
-            }
-
-            const isUnauthorizedSync = response.status === 401
-
-            setState(prev => ({
-              ...prev,
-              profile,
-              isLoading: false,
-              error: isUnauthorizedSync
-                ? null
-                : (typeof result?.error === 'string' ? result.error : 'Failed to sync Discord roles'),
-              errorCode: isUnauthorizedSync
-                ? null
-                : (
-                  typeof result?.code === 'string'
-                    ? result.code
-                    : SYNC_ERROR_CODES.SYNC_FAILED
-                ) as SyncErrorCode,
-            }))
-          }
-        } catch (syncError) {
-          // Handle timeout or network errors during initial sync
-          const isTimeout = syncError instanceof Error && syncError.name === 'AbortError'
-          console.error('[MemberAuth] Initial Discord sync failed:', {
-            error: syncError,
-            isTimeout,
-            message: syncError instanceof Error ? syncError.message : 'Unknown error'
-          })
-
-          // Create basic profile from Supabase user so user isn't stuck
-          const fallbackProfile: MemberProfile = {
-            id: user.id,
-            email: user.email || null,
-            discord_user_id: null,
-            discord_username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Member',
-            discord_avatar: user.user_metadata?.avatar_url || null,
-            discord_roles: [],
-            discord_role_titles: {},
-            membership_tier: null,
-            role: isAdmin ? 'admin' : null,
-          }
-
-          setState(prev => ({
-            ...prev,
-            profile: fallbackProfile,
-            isLoading: false,
-            error: isTimeout
-              ? 'Discord sync timed out. Your roles will sync in the background.'
-              : 'Failed to sync Discord roles. Please try refreshing.',
-            errorCode: SYNC_ERROR_CODES.SYNC_FAILED,
-          }))
-        }
-      }
+      await loadAccessSnapshot(user, currentSession)
     } catch (error) {
-      const isTimeout = error instanceof Error && error.message.includes('timeout')
-      console.error('[MemberAuth] Auth initialization error:', {
-        error,
-        isTimeout,
-        message: error instanceof Error ? error.message : 'Unknown'
-      })
-
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         isLoading: false,
-        error: isTimeout
-          ? 'Authentication check timed out. Please refresh the page or check your connection.'
-          : (error instanceof Error ? error.message : 'Authentication failed'),
-        errorCode: isTimeout ? SYNC_ERROR_CODES.SYNC_FAILED : null,
+        error: error instanceof Error ? error.message : 'Authentication failed',
+        errorCode: null,
       }))
     } finally {
       isInitializingRef.current = false
-      // Safety net: ensure loading is always set to false
-      console.log('[MemberAuth] initializeAuth completed')
-      setState(prev => {
-        if (prev.isLoading) {
-          console.warn('[MemberAuth] isLoading was still true after initialization, forcing to false')
-          return { ...prev, isLoading: false }
-        }
-        return prev
-      })
     }
-  }, []) // Stable — reads from refs to avoid re-render cascade
+  }, [loadAccessSnapshot])
 
-  // Sign out with full cleanup
+  const refresh = useCallback(async () => {
+    if (E2E_BYPASS_AUTH_ENABLED) {
+      setState(createE2EBypassAuthState())
+      return
+    }
+
+    setState((prev) => ({ ...prev, isLoading: true }))
+    isInitializingRef.current = false
+    await initializeAuth()
+  }, [initializeAuth])
+
+  const syncDiscordRoles = useCallback(async (): Promise<DiscordSyncResult | null> => {
+    if (!state.session || !state.user) return null
+
+    const now = Date.now()
+    if (isSyncingRef.current || (now - lastSyncTimeRef.current) < SYNC_COOLDOWN_MS) {
+      return null
+    }
+
+    isSyncingRef.current = true
+    lastSyncTimeRef.current = now
+
+    try {
+      let accessToken = state.session.access_token
+      if (!accessToken) {
+        const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
+        if (!refreshedSession?.access_token) {
+          setState((prev) => ({
+            ...prev,
+            error: 'Session expired. Please refresh and sign in again.',
+            errorCode: SYNC_ERROR_CODES.INVALID_SESSION,
+          }))
+          return null
+        }
+        accessToken = refreshedSession.access_token
+      }
+
+      const response = await fetchWithTimeout(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-discord-roles`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      )
+
+      const payload = await response.json().catch(() => ({})) as DiscordSyncResult & {
+        error?: string
+        code?: SyncErrorCode
+      }
+
+      if (!response.ok || !payload?.success) {
+        setState((prev) => ({
+          ...prev,
+          error: payload?.error || 'Failed to sync Discord roles',
+          errorCode: payload?.code || SYNC_ERROR_CODES.SYNC_FAILED,
+        }))
+        return null
+      }
+
+      await loadAccessSnapshot(state.user, state.session)
+      authChannelRef.current?.postMessage({ type: 'SYNC_COMPLETE' })
+
+      return payload
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to sync Discord roles',
+        errorCode: SYNC_ERROR_CODES.SYNC_FAILED,
+      }))
+      return null
+    } finally {
+      isSyncingRef.current = false
+    }
+  }, [loadAccessSnapshot, state.session, state.user])
+
   const signOut = useCallback(async () => {
     try {
       await supabase.auth.signOut()
-
-      // Clear all auth-related state
+    } finally {
       setState({
         user: null,
         session: null,
@@ -1357,68 +495,11 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         error: null,
         errorCode: null,
       })
-
-      // Clear any cached data from storage
-      try {
-        // Clear localStorage items (analytics session, etc.)
-        const keysToRemove = ['titm_session', 'titm_analytics', 'titm_user']
-        keysToRemove.forEach(key => localStorage.removeItem(key))
-
-        // Clear sessionStorage
-        sessionStorage.clear()
-      } catch (storageError) {
-        // Storage might not be available in some contexts
-        console.warn('Could not clear storage:', storageError)
-      }
-
-      // Notify other tabs of sign out
       authChannelRef.current?.postMessage({ type: 'SIGNED_OUT' })
-
-      router.push('/')
-    } catch (error) {
-      console.error('Sign out error:', error)
-      // Still redirect on error
       router.push('/')
     }
   }, [router])
 
-  // Check if user has a specific permission
-  // Supports both:
-  // 1. Simple RBAC tab IDs: 'dashboard', 'journal', 'library', 'profile'
-  // 2. Legacy permission names: 'access_trading_journal', etc.
-  const hasPermission = useCallback((permissionName: string): boolean => {
-    // Check if it's a tab ID (Simple RBAC)
-    const tabIds = ['dashboard', 'journal', 'spx-command-center', 'library', 'social', 'profile', 'ai-coach', 'swing-sniper']
-    if (tabIds.includes(permissionName)) {
-      return state.allowedTabs.includes(permissionName)
-    }
-
-    // Map permission names to tab IDs for nav items
-    const permissionToTab: Record<string, string> = {
-      'access_ai_coach': 'ai-coach',
-      'access_spx_command_center': 'spx-command-center',
-    }
-    if (permissionToTab[permissionName]) {
-      return state.allowedTabs.includes(permissionToTab[permissionName])
-    }
-
-    // Fall back to legacy permission system
-    return state.permissions.some(p => p.name === permissionName)
-  }, [state.permissions, state.allowedTabs])
-
-  // Refresh auth state (reset guard so initializeAuth can run again)
-  const refresh = useCallback(async () => {
-    if (E2E_BYPASS_AUTH_ENABLED) {
-      setState(createE2EBypassAuthState())
-      return
-    }
-
-    isInitializingRef.current = false
-    setState(prev => ({ ...prev, isLoading: true }))
-    await initializeAuth()
-  }, [initializeAuth])
-
-  // Initialize on mount
   useEffect(() => {
     if (E2E_BYPASS_AUTH_ENABLED) {
       isAuthenticatedRef.current = true
@@ -1426,52 +507,79 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    initializeAuth()
+    void initializeAuth()
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: any, session: any) => {
-
-        if (event === 'SIGNED_OUT') {
-          isAuthenticatedRef.current = false
-          setState({
-            user: null,
-            session: null,
-            profile: null,
-            permissions: [],
-            allowedTabs: [],
-            tabConfigs: [],
-            isLoading: false,
-            isAuthenticated: false,
-            error: null,
-            errorCode: null,
-          })
-        } else if (event === 'SIGNED_IN' && session) {
-          // Only re-initialize if not already authenticated
-          // This prevents the loading screen on navigation/tab switching
-          if (!isAuthenticatedRef.current) {
-            // First sign in - full initialization needed
-            await initializeAuth()
-          } else {
-            // Already signed in, just update session without loading screen
-            setState(prev => ({ ...prev, session }))
-          }
-        } else if (event === 'TOKEN_REFRESHED' && session) {
-          // Just update session, don't show loading screen
-          setState(prev => ({ ...prev, session }))
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: Session | null) => {
+      if (event === 'SIGNED_OUT') {
+        setState({
+          user: null,
+          session: null,
+          profile: null,
+          permissions: [],
+          allowedTabs: [],
+          tabConfigs: [],
+          isLoading: false,
+          isAuthenticated: false,
+          error: null,
+          errorCode: null,
+        })
+        return
       }
-    )
+
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        if (!isAuthenticatedRef.current) {
+          await initializeAuth()
+          return
+        }
+
+        setState((prev) => ({
+          ...prev,
+          session,
+        }))
+      }
+    })
 
     return () => {
       subscription.unsubscribe()
     }
   }, [initializeAuth])
 
-  // Keep authentication ref in sync with state
   useEffect(() => {
     isAuthenticatedRef.current = state.isAuthenticated
   }, [state.isAuthenticated])
+
+  useEffect(() => {
+    if (!('BroadcastChannel' in window)) return
+
+    const channel = new BroadcastChannel(AUTH_CHANNEL_NAME)
+    authChannelRef.current = channel
+
+    channel.onmessage = (event) => {
+      if (event.data?.type === 'SIGNED_OUT') {
+        setState({
+          user: null,
+          session: null,
+          profile: null,
+          permissions: [],
+          allowedTabs: [],
+          tabConfigs: [],
+          isLoading: false,
+          isAuthenticated: false,
+          error: null,
+          errorCode: null,
+        })
+      }
+
+      if (event.data?.type === 'SYNC_COMPLETE' && state.user && state.session) {
+        void loadAccessSnapshot(state.user, state.session)
+      }
+    }
+
+    return () => {
+      channel.close()
+      authChannelRef.current = null
+    }
+  }, [loadAccessSnapshot, state.session, state.user])
 
   useEffect(() => {
     if (state.user?.id) {
@@ -1482,128 +590,29 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     Sentry.setUser(null)
   }, [state.user?.id])
 
-  // Cross-tab session sync using BroadcastChannel
-  useEffect(() => {
-    // BroadcastChannel is not available in all environments (e.g., SSR)
-    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) {
-      return
+  const hasPermission = useCallback((permissionName: string): boolean => {
+    const tabIds = ['dashboard', 'journal', 'spx-command-center', 'library', 'social', 'profile', 'ai-coach', 'swing-sniper', 'money-maker', 'mentorship']
+    if (tabIds.includes(permissionName)) {
+      return state.allowedTabs.includes(permissionName)
     }
 
-    const channel = new BroadcastChannel(AUTH_CHANNEL_NAME)
-    authChannelRef.current = channel
-
-    channel.onmessage = (event) => {
-      const { type, profile } = event.data
-
-      switch (type) {
-        case 'SIGNED_OUT':
-          // Another tab signed out, update this tab's state
-          console.log('Received SIGNED_OUT from another tab')
-          setState({
-            user: null,
-            session: null,
-            profile: null,
-            permissions: [],
-            allowedTabs: [],
-            tabConfigs: [],
-            isLoading: false,
-            isAuthenticated: false,
-            error: null,
-            errorCode: null,
-          })
-          break
-
-        case 'SYNC_COMPLETE':
-          // Another tab completed a sync, update profile
-          if (profile && state.isAuthenticated) {
-            console.log('Received SYNC_COMPLETE from another tab')
-            setState(prev => ({ ...prev, profile }))
-          }
-          break
-      }
+    const permissionToTab: Record<string, string> = {
+      access_ai_coach: 'ai-coach',
+      access_spx_command_center: 'spx-command-center',
     }
 
-    return () => {
-      channel.close()
-      authChannelRef.current = null
-    }
-  }, [state.isAuthenticated])
-
-  // Computed flag for NOT_MEMBER error
-  const isNotMember = state.errorCode === SYNC_ERROR_CODES.NOT_MEMBER
-
-  // V3: Compute filtered tab configs based on user's tier
-  const visibleTabs = useMemo((): TabConfig[] => {
-    const tierHierarchy: Record<string, number> = { core: 1, pro: 2, executive: 3 }
-    const userTierLevel = state.profile?.role === 'admin'
-      ? Number.MAX_SAFE_INTEGER
-      : state.profile?.membership_tier
-        ? tierHierarchy[state.profile.membership_tier] || 0
-        : 0
-    const isAdmin = state.profile?.role === 'admin'
-    const userDiscordRoles = state.profile?.discord_roles ?? []
-    const hasSniperMembershipRole = userDiscordRoles.includes(SNIPER_MEMBERSHIP_ROLE_ID)
-
-    if (!allTabConfigs.length) {
-      const fallbackTabIds = state.allowedTabs.length > 0
-        ? state.allowedTabs
-        : getAllowedTabsForTier(state.profile?.membership_tier || null, isAdmin)
-
-      const fallbackTabs = fallbackTabIds.map((tabId, index) => (
-        buildFallbackTabConfig(tabId, index + 1)
-      ))
-
-      const fallbackVisible = fallbackTabs.filter((tab) => {
-        const requiredRoles = tab.required_discord_role_ids
-        if (requiredRoles && requiredRoles.length > 0 && !isAdmin) {
-          const hasRequiredRole = requiredRoles.some(roleId => userDiscordRoles.includes(roleId))
-          if (!hasRequiredRole) return false
-        }
-
-        if (tab.required_tier === 'admin') return isAdmin
-        if (tab.is_required) return true
-        const requiredLevel = tierHierarchy[tab.required_tier] || 0
-        return userTierLevel >= requiredLevel
-      })
-
-      if (!isAdmin && hasSniperMembershipRole) {
-        return fallbackVisible.filter((tab) => SNIPER_MEMBERSHIP_TAB_ALLOWLIST.has(tab.tab_id))
-      }
-
-      return fallbackVisible
+    if (permissionToTab[permissionName]) {
+      return state.allowedTabs.includes(permissionToTab[permissionName])
     }
 
-    const visibleTabs = allTabConfigs.filter(tab => {
-      if (!tab.is_active) return false
+    return state.permissions.some((permission) => permission.name === permissionName)
+  }, [state.allowedTabs, state.permissions])
 
-      // Discord role gate: if the tab requires specific Discord roles, check them.
-      // Admins always bypass the Discord role gate.
-      const requiredRoles = tab.required_discord_role_ids
-      if (requiredRoles && requiredRoles.length > 0 && !isAdmin) {
-        const hasRequiredRole = requiredRoles.some(roleId => userDiscordRoles.includes(roleId))
-        if (!hasRequiredRole) return false
-      }
-
-      if (tab.required_tier === 'admin') return isAdmin
-      if (tab.is_required) return true
-      const requiredLevel = tierHierarchy[tab.required_tier] || 0
-      return userTierLevel >= requiredLevel
-    })
-
-    if (!isAdmin && hasSniperMembershipRole) {
-      return visibleTabs.filter((tab) => SNIPER_MEMBERSHIP_TAB_ALLOWLIST.has(tab.tab_id))
-    }
-
-    return visibleTabs
-  }, [allTabConfigs, getAllowedTabsForTier, state.allowedTabs, state.profile?.membership_tier, state.profile?.role, state.profile?.discord_roles])
-
-  const mobileTabs = useMemo(
-    () => visibleTabs.filter((tab) => tab.mobile_visible),
-    [visibleTabs],
-  )
-
+  const visibleTabs = state.tabConfigs
+  const mobileTabs = state.tabConfigs.filter((tab) => tab.mobile_visible)
   const getVisibleTabs = useCallback(() => visibleTabs, [visibleTabs])
   const getMobileTabs = useCallback(() => mobileTabs, [mobileTabs])
+  const isNotMember = state.errorCode === SYNC_ERROR_CODES.NOT_MEMBER
 
   const sessionValue = useMemo<MemberSessionContextValue>(() => ({
     user: state.user,
@@ -1613,15 +622,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     error: state.error,
     errorCode: state.errorCode,
     isNotMember,
-  }), [
-    isNotMember,
-    state.error,
-    state.errorCode,
-    state.isAuthenticated,
-    state.isLoading,
-    state.session,
-    state.user,
-  ])
+  }), [isNotMember, state.error, state.errorCode, state.isAuthenticated, state.isLoading, state.session, state.user])
 
   const accessValue = useMemo<MemberAccessContextValue>(() => ({
     profile: state.profile,
@@ -1631,15 +632,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     hasPermission,
     getVisibleTabs,
     getMobileTabs,
-  }), [
-    getMobileTabs,
-    getVisibleTabs,
-    hasPermission,
-    state.allowedTabs,
-    state.permissions,
-    state.profile,
-    visibleTabs,
-  ])
+  }), [getMobileTabs, getVisibleTabs, hasPermission, state.allowedTabs, state.permissions, state.profile, visibleTabs])
 
   const actionsValue = useMemo<MemberAuthActionsContextValue>(() => ({
     signOut,
@@ -1657,10 +650,6 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     </MemberSessionContext.Provider>
   )
 }
-
-// ============================================
-// HOOK
-// ============================================
 
 function useRequiredMemberContext<T>(
   context: Context<T | null>,
