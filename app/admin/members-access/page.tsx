@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -25,6 +26,8 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { TradeDetailPanel } from '@/components/admin/trade-review/trade-detail-panel'
+import type { JournalEntry } from '@/lib/types/journal'
 import { cn } from '@/lib/utils'
 
 type DirectoryRow = {
@@ -161,11 +164,48 @@ type DirectoryResponse = {
   }
 }
 
+type TradeBrowseEntry = JournalEntry & {
+  member_display_name: string
+}
+
+type TradeBrowseResponse = {
+  success: boolean
+  error?: string
+  data?: TradeBrowseEntry[]
+  meta?: {
+    total?: number
+  }
+}
+
 function formatDate(value: string | null | undefined): string {
   if (!value) return '—'
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return '—'
   return parsed.toLocaleString()
+}
+
+function formatTradeDate(value: string | null | undefined): string {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function formatCurrency(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return `$${Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+}
+
+function formatPnl(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return `${value >= 0 ? '+' : '-'}$${Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+}
+
+function coachStatusClass(status: JournalEntry['coach_review_status']): string {
+  if (status === 'pending') return 'border-amber-400/40 bg-amber-500/10 text-amber-200'
+  if (status === 'in_review') return 'border-sky-400/40 bg-sky-500/10 text-sky-200'
+  if (status === 'completed') return 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+  return 'border-white/10 bg-white/5 text-white/60'
 }
 
 function getDisplayName(row: Pick<DirectoryRow, 'nickname' | 'global_name' | 'username'>): string {
@@ -237,6 +277,10 @@ export default function AdminMembersAccessPage() {
   const [linkLoading, setLinkLoading] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [memberTrades, setMemberTrades] = useState<TradeBrowseEntry[]>([])
+  const [memberTradesLoading, setMemberTradesLoading] = useState(false)
+  const [memberTradesError, setMemberTradesError] = useState<string | null>(null)
+  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null)
 
   const loadDirectory = useCallback(async () => {
     setDirectoryLoading(true)
@@ -298,6 +342,41 @@ export default function AdminMembersAccessPage() {
     }
   }, [])
 
+  const loadMemberTrades = useCallback(async (linkedUserId: string) => {
+    setMemberTradesLoading(true)
+    setMemberTradesError(null)
+
+    try {
+      const params = new URLSearchParams({
+        memberId: linkedUserId,
+        sortBy: 'trade_date',
+        sortDir: 'desc',
+        limit: '200',
+      })
+
+      const response = await fetch(`/api/admin/trade-review/browse?${params.toString()}`, { cache: 'no-store' })
+      const payload = await response.json() as TradeBrowseResponse
+      if (!response.ok || !payload.success) {
+        setMemberTrades([])
+        setMemberTradesError(payload.error || 'Failed to load member trades')
+        return
+      }
+
+      const trades = payload.data || []
+      setMemberTrades(trades)
+      setSelectedTradeId((current) => (
+        current && trades.some((entry) => entry.id === current)
+          ? current
+          : trades[0]?.id || null
+      ))
+    } catch (error) {
+      setMemberTrades([])
+      setMemberTradesError(error instanceof Error ? error.message : 'Failed to load member trades')
+    } finally {
+      setMemberTradesLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     void loadDirectory()
   }, [loadDirectory])
@@ -317,16 +396,67 @@ export default function AdminMembersAccessPage() {
     setRoleMutationReason('')
     setActionMessage(null)
     setActionError(null)
+    setMemberTrades([])
+    setMemberTradesError(null)
+    setSelectedTradeId(null)
   }, [selectedDiscordUserId])
 
   useEffect(() => {
     setLinkUserId(detail?.identity.linked_user_id || '')
   }, [detail?.identity.linked_user_id])
 
+  useEffect(() => {
+    if (!selectedDiscordUserId) {
+      setMemberTrades([])
+      setMemberTradesError(null)
+      setMemberTradesLoading(false)
+      return
+    }
+
+    if (detail?.identity.discord_user_id !== selectedDiscordUserId) {
+      return
+    }
+
+    if (!detail.identity.linked_user_id) {
+      setMemberTrades([])
+      setMemberTradesError(null)
+      setMemberTradesLoading(false)
+      return
+    }
+
+    void loadMemberTrades(detail.identity.linked_user_id)
+  }, [
+    detail?.identity.discord_user_id,
+    detail?.identity.linked_user_id,
+    loadMemberTrades,
+    selectedDiscordUserId,
+  ])
+
   const selectedRow = useMemo(
     () => directoryRows.find((row) => row.discord_user_id === selectedDiscordUserId) || null,
     [directoryRows, selectedDiscordUserId],
   )
+
+  const selectedTrade = useMemo(
+    () => memberTrades.find((entry) => entry.id === selectedTradeId) || memberTrades[0] || null,
+    [memberTrades, selectedTradeId],
+  )
+
+  const tradeSummary = useMemo(() => {
+    const resolvedPnls = memberTrades
+      .map((entry) => entry.pnl)
+      .filter((value): value is number => value != null)
+    const closedTrades = memberTrades.filter((entry) => entry.is_open === false)
+    const wins = closedTrades.filter((entry) => entry.pnl != null && entry.pnl > 0).length
+    const totalPnl = resolvedPnls.reduce((sum, value) => sum + value, 0)
+
+    return {
+      totalTrades: memberTrades.length,
+      closedTrades: closedTrades.length,
+      winRate: closedTrades.length > 0 ? (wins / closedTrades.length) * 100 : null,
+      totalPnl,
+    }
+  }, [memberTrades])
 
   const handleRefreshGuildRoster = useCallback(async () => {
     setSyncingGuild(true)
@@ -799,6 +929,7 @@ export default function AdminMembersAccessPage() {
                 <TabsList>
                   <TabsTrigger value="identity">Identity</TabsTrigger>
                   <TabsTrigger value="access">Access</TabsTrigger>
+                  <TabsTrigger value="trades">Trades</TabsTrigger>
                   <TabsTrigger value="roles">Roles</TabsTrigger>
                   <TabsTrigger value="health">Health</TabsTrigger>
                   <TabsTrigger value="overrides">Overrides</TabsTrigger>
@@ -963,6 +1094,175 @@ export default function AdminMembersAccessPage() {
                       </div>
                     ))}
                   </div>
+                </TabsContent>
+
+                <TabsContent value="trades" className="space-y-4" data-testid="member-trades-panel">
+                  {!detail.identity.linked_user_id ? (
+                    <Card className="border-white/10 bg-white/5">
+                      <CardContent className="pt-6 text-sm text-white/70">
+                        This Discord member is not linked to a site account yet, so there is no member journal to inspect.
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-4">
+                        <Card className="border-white/10 bg-white/5">
+                          <CardContent className="pt-6">
+                            <p className="text-xs text-white/50">Logged Trades</p>
+                            <p className="mt-1 text-xl font-semibold text-white">{tradeSummary.totalTrades}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-white/10 bg-white/5">
+                          <CardContent className="pt-6">
+                            <p className="text-xs text-white/50">Closed Trades</p>
+                            <p className="mt-1 text-xl font-semibold text-white">{tradeSummary.closedTrades}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-white/10 bg-white/5">
+                          <CardContent className="pt-6">
+                            <p className="text-xs text-white/50">Win Rate</p>
+                            <p className="mt-1 text-xl font-semibold text-white">
+                              {tradeSummary.winRate == null ? '—' : `${tradeSummary.winRate.toFixed(1)}%`}
+                            </p>
+                          </CardContent>
+                        </Card>
+                        <Card className="border-white/10 bg-white/5">
+                          <CardContent className="pt-6">
+                            <p className="text-xs text-white/50">Net P&L</p>
+                            <p className={cn(
+                              'mt-1 text-xl font-semibold',
+                              tradeSummary.totalPnl >= 0 ? 'text-emerald-300' : 'text-red-300',
+                            )}
+                            >
+                              {formatPnl(tradeSummary.totalPnl)}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-white">Linked journal account</p>
+                          <p className="font-mono text-xs text-white/50">{detail.identity.linked_user_id}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-white/20 text-white hover:bg-white/5"
+                          onClick={() => {
+                            if (detail.identity.linked_user_id) {
+                              void loadMemberTrades(detail.identity.linked_user_id)
+                            }
+                          }}
+                          disabled={memberTradesLoading}
+                        >
+                          {memberTradesLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                          Refresh Trades
+                        </Button>
+                      </div>
+
+                      {memberTradesLoading && (
+                        <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-center text-sm text-white/60">
+                          <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin text-emerald-500" />
+                          Loading member trades...
+                        </div>
+                      )}
+
+                      {!memberTradesLoading && memberTradesError && (
+                        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+                          {memberTradesError}
+                        </div>
+                      )}
+
+                      {!memberTradesLoading && !memberTradesError && memberTrades.length === 0 && (
+                        <div className="rounded-lg border border-white/10 bg-white/5 p-6 text-sm text-white/60">
+                          No logged trades were found for this member.
+                        </div>
+                      )}
+
+                      {!memberTradesLoading && !memberTradesError && memberTrades.length > 0 && (
+                        <div className="grid gap-4 xl:grid-cols-[340px,minmax(0,1fr)]">
+                          <div className="space-y-2">
+                            <div className="max-h-[72vh] space-y-2 overflow-y-auto pr-1">
+                              {memberTrades.map((entry) => {
+                                const isSelected = entry.id === selectedTrade?.id
+                                return (
+                                  <button
+                                    key={entry.id}
+                                    type="button"
+                                    data-testid={`member-trade-row-${entry.id}`}
+                                    onClick={() => setSelectedTradeId(entry.id)}
+                                    className={cn(
+                                      'w-full rounded-xl border p-3 text-left transition',
+                                      isSelected
+                                        ? 'border-emerald-500/40 bg-emerald-500/10'
+                                        : 'border-white/10 bg-white/5 hover:bg-white/10',
+                                    )}
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm font-semibold text-white">
+                                          {entry.symbol.toUpperCase()} {entry.direction}
+                                        </p>
+                                        <p className="text-xs text-white/50">
+                                          {formatTradeDate(entry.trade_date)} • {entry.contract_type}
+                                        </p>
+                                      </div>
+                                      <Badge className={cn('border', coachStatusClass(entry.coach_review_status))}>
+                                        {entry.coach_review_status ?? 'none'}
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                                      <span className={cn(
+                                        'font-mono',
+                                        entry.pnl != null && entry.pnl < 0 ? 'text-red-300' : 'text-emerald-300',
+                                      )}
+                                      >
+                                        {formatPnl(entry.pnl)}
+                                      </span>
+                                      <span className="text-white/50">
+                                        {entry.entry_price == null ? '—' : formatCurrency(entry.entry_price)}
+                                        {' → '}
+                                        {entry.exit_price == null ? '—' : formatCurrency(entry.exit_price)}
+                                      </span>
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-4 lg:flex-row lg:items-center lg:justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-white">Trade Detail</p>
+                                <p className="text-xs text-white/50">
+                                  {selectedTrade
+                                    ? `${selectedTrade.symbol.toUpperCase()} ${selectedTrade.direction} on ${formatTradeDate(selectedTrade.trade_date)}`
+                                    : 'Select a trade to inspect the full journal entry.'}
+                                </p>
+                              </div>
+                              {selectedTrade && (
+                                <Button asChild type="button" variant="outline" className="border-white/20 text-white hover:bg-white/5">
+                                  <Link href={`/admin/trade-review/${selectedTrade.id}`} data-testid="member-trade-detail-link">
+                                    Open In Trade Review
+                                  </Link>
+                                </Button>
+                              )}
+                            </div>
+
+                            <TradeDetailPanel
+                              entry={selectedTrade}
+                              memberDisplayName={detail.identity.nickname || detail.identity.global_name || detail.identity.username || 'Unknown member'}
+                              memberDiscordUsername={detail.identity.username ? `@${detail.identity.username}` : null}
+                              memberAvatarUrl={detail.identity.avatar_url}
+                              memberTier={detail.app_access.resolved_tier}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="roles" className="space-y-4" data-testid="member-roles-panel">
