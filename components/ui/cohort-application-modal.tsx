@@ -7,6 +7,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
+import { LAUNCHPASS_URLS, waitForRewardfulReferral, withRewardfulReferral } from "@/lib/rewardful";
+import { useRewardfulLink } from "@/lib/use-rewardful-link";
 import { addContactSubmission, ApplicationMetadata } from "@/lib/supabase";
 
 // Form validation schemas for each step
@@ -67,7 +69,7 @@ const STRUGGLE_OPTIONS = [
 export function CohortApplicationModal({
   isOpen,
   onClose,
-  redirectUrl = 'https://www.launchpass.com/tradeitm/cohort',
+  redirectUrl = LAUNCHPASS_URLS.cohort,
   programType = 'cohort',
   submissionType = 'cohort_application'
 }: CohortApplicationModalProps) {
@@ -93,6 +95,7 @@ export function CohortApplicationModal({
     resolver: zodResolver(step3Schema),
     defaultValues: formData,
   });
+  const resolvedRedirectUrl = useRewardfulLink(redirectUrl);
 
   const handleStep1Submit = (data: Step1Data) => {
     setFormData((prev) => ({ ...prev, ...data }));
@@ -109,6 +112,7 @@ export function CohortApplicationModal({
     setIsSubmitting(true);
 
     try {
+      const rewardfulReferral = await waitForRewardfulReferral(300);
       const metadata: ApplicationMetadata = {
         discord_handle: fullData.discord_handle,
         experience_level: fullData.experience_level,
@@ -116,6 +120,7 @@ export function CohortApplicationModal({
         primary_struggle: fullData.primary_struggle,
         short_term_goal: fullData.short_term_goal,
         source: 'Application Wizard',
+        rewardful_referral: rewardfulReferral,
       };
 
       const programName = programType === 'cohort' ? 'Precision Cohort' : '1 on 1 Precision Mentorship';
@@ -134,7 +139,7 @@ export function CohortApplicationModal({
       setIsSuccess(true);
       // Redirect to checkout after a brief success message
       setTimeout(() => {
-        window.location.href = redirectUrl;
+        window.location.href = withRewardfulReferral(resolvedRedirectUrl);
       }, 2000);
     } catch (error) {
       console.error('Application submission failed:', error);

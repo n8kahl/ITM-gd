@@ -8,10 +8,13 @@ import { Menu, X } from "lucide-react";
 // import { Shield } from "lucide-react"; // Hidden for now - member login disabled
 import { cn } from "@/lib/utils";
 import { Analytics } from "@/lib/analytics";
+import { LAUNCHPASS_URLS } from "@/lib/rewardful";
+import { useRewardfulLink } from "@/lib/use-rewardful-link";
 
 export function FloatingNavbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const trialSignupUrl = useRewardfulLink(LAUNCHPASS_URLS.trial);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -99,7 +102,7 @@ export function FloatingNavbar() {
             */}
 
             <a
-              href="https://www.launchpass.com/tradeitm/7-day-trial"
+              href={trialSignupUrl}
               className={cn(
                 "px-4 py-2 rounded-sm text-sm font-semibold tracking-wide",
                 "bg-gradient-to-r from-trial-blue to-trial-blue-deep text-white",
@@ -202,7 +205,7 @@ export function FloatingNavbar() {
               </Button>
 
               <a
-                href="https://www.launchpass.com/tradeitm/7-day-trial"
+                href={trialSignupUrl}
                 onClick={() => {
                   setIsMobileMenuOpen(false);
                   Analytics.trackCTAClick("Mobile Nav Trial CTA");

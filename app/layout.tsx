@@ -1,17 +1,33 @@
 import React from "react"
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
+import Script from 'next/script'
 import { StructuredData } from '@/components/seo/structured-data'
 import Link from 'next/link'
 import { User } from 'lucide-react'
 import { ServiceWorkerRegister } from '@/components/pwa/service-worker-register'
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider'
+import { RewardfulReferralSync } from '@/components/analytics/rewardful-referral-sync'
 import { AppToaster } from '@/components/ui/app-toaster'
 import './globals.css'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://tradeitm.com'
+const REWARDFUL_CAMPAIGN_ID = process.env.NEXT_PUBLIC_REWARDFUL_CAMPAIGN_ID || '6deccb'
 const PWA_ASSET_VERSION = '20260301'
 const withPwaAssetVersion = (assetPath: string) => `${assetPath}?v=${PWA_ASSET_VERSION}`
+const rewardfulSiteHost = (() => {
+  try {
+    return new URL(SITE_URL).hostname
+  } catch {
+    return 'tradeitm.com'
+  }
+})()
+const rewardfulDomains = Array.from(new Set([
+  rewardfulSiteHost,
+  rewardfulSiteHost.startsWith('www.') ? rewardfulSiteHost.slice(4) : `www.${rewardfulSiteHost}`,
+  'launchpass.com',
+  'www.launchpass.com',
+])).join(',')
 const IOS_SPLASH_SCREENS = [
   {
     href: '/splash/apple-splash-640x1136.png',
@@ -168,8 +184,19 @@ export default async function RootLayout({
         ))}
       </head>
       <body className="font-sans antialiased">
+        <Script id="rewardful-queue" strategy="beforeInteractive" nonce={nonce}>
+          {`(function(w,r){w._rwq=r;w[r]=w[r]||function(){(w[r].q=w[r].q||[]).push(arguments)}})(window,'rewardful');`}
+        </Script>
+        <Script
+          src="https://r.wdfl.co/rw.js"
+          data-rewardful={REWARDFUL_CAMPAIGN_ID}
+          data-domains={rewardfulDomains}
+          strategy="afterInteractive"
+          nonce={nonce}
+        />
         <ServiceWorkerRegister />
         <AnalyticsProvider />
+        <RewardfulReferralSync />
         {/* Mobile Header Login Icon - visible only on mobile, hidden when navbar is present */}
         <Link
           href="/login"

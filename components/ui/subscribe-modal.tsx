@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
+import { waitForRewardfulReferral } from "@/lib/rewardful";
 import { addSubscriber } from "@/lib/supabase";
 import { Analytics, getSessionId } from "@/lib/analytics";
 import { BRAND_LOGO_SRC, BRAND_NAME } from "@/lib/brand";
@@ -56,11 +57,14 @@ export function SubscribeModal({ isOpen, onClose }: SubscribeModalProps) {
     Analytics.trackFormSubmit('Subscribe');
 
     try {
+      const rewardfulReferral = await waitForRewardfulReferral(300);
+
       await addSubscriber({
         name: data.name,
         email: data.email,
         phone: data.phone || undefined,
         instagram_handle: data.instagram_handle || undefined,
+        referral_source: rewardfulReferral,
         session_id: getSessionId(),
       });
 

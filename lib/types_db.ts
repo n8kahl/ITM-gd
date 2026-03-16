@@ -38,6 +38,7 @@ export interface ApplicationMetadata {
   short_term_goal?: string
   source?: string
   program_type?: 'cohort' | 'mentorship'
+  rewardful_referral?: string
 }
 
 export interface ApplicationData extends Omit<ContactSubmission, 'submission_type' | 'metadata'> {

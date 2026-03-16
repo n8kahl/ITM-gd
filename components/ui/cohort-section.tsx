@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { Calendar, Target, TrendingUp, Brain, Users } from "lucide-react";
 import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
 import { Analytics } from "@/lib/analytics";
+import { LAUNCHPASS_URLS, withRewardfulReferral } from "@/lib/rewardful";
+import { useRewardfulLink } from "@/lib/use-rewardful-link";
 
 interface CohortSectionProps {
   // No props needed - using direct link
@@ -39,6 +41,7 @@ export function CohortSection({ }: CohortSectionProps = {}) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
+  const cohortCheckoutUrl = useRewardfulLink(LAUNCHPASS_URLS.cohort);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!sectionRef.current) return;
@@ -51,7 +54,7 @@ export function CohortSection({ }: CohortSectionProps = {}) {
 
   const handleApplyClick = () => {
     Analytics.trackCTAClick('Cohort Join Today');
-    window.location.href = 'https://www.launchpass.com/tradeitm/cohort';
+    window.location.href = withRewardfulReferral(cohortCheckoutUrl);
   };
 
   return (
