@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
+import { waitForRewardfulReferral } from "@/lib/rewardful";
 import { addContactSubmission } from "@/lib/supabase";
 
 // Form validation schema
@@ -52,6 +53,8 @@ export function ContactModal({ isOpen, onClose, presetMessage }: ContactModalPro
     setError(null);
 
     try {
+      const rewardfulReferral = await waitForRewardfulReferral(300);
+
       await addContactSubmission({
         name: data.name,
         email: data.email,
@@ -60,6 +63,7 @@ export function ContactModal({ isOpen, onClose, presetMessage }: ContactModalPro
         submission_type: 'contact',
         metadata: {
           source: typeof window !== 'undefined' ? window.location.href : 'Contact Form',
+          rewardful_referral: rewardfulReferral,
         },
       });
       setIsSuccess(true);

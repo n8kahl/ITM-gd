@@ -7,11 +7,14 @@ import { cn } from "@/lib/utils";
 import { Video, CheckCircle2, Calendar, MessageCircle, Target, TrendingUp, Shield } from "lucide-react";
 import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
 import { Analytics } from "@/lib/analytics";
+import { LAUNCHPASS_URLS, withRewardfulReferral } from "@/lib/rewardful";
+import { useRewardfulLink } from "@/lib/use-rewardful-link";
 
 export function MentorshipSection() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
+  const mentorshipCheckoutUrl = useRewardfulLink(LAUNCHPASS_URLS.mentorship);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!sectionRef.current) return;
@@ -24,7 +27,7 @@ export function MentorshipSection() {
 
   const handleApplyClick = () => {
     Analytics.trackCTAClick('Mentorship Join Now');
-    window.location.href = 'https://www.launchpass.com/tradeitm/1x1-mentorship';
+    window.location.href = withRewardfulReferral(mentorshipCheckoutUrl);
   };
 
   return (

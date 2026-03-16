@@ -18,8 +18,10 @@ import { RibbonDivider } from "@/components/ui/ribbon-divider";
 import { DiscordMock } from "@/components/ui/discord-mock";
 import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
 import { Analytics } from "@/lib/analytics";
+import { LAUNCHPASS_URLS } from "@/lib/rewardful";
 import { getPricingTiers, PricingTier } from "@/lib/supabase";
 import { BRAND_LOGO_SRC, BRAND_NAME } from "@/lib/brand";
+import { useRewardfulLink } from "@/lib/use-rewardful-link";
 import { cn } from "@/lib/utils";
 
 const FloatingNavbar = dynamic(
@@ -66,18 +68,12 @@ const WinRateChart = dynamic(
   { ssr: false },
 );
 
-const PUBLIC_SIGNUP_LINKS = {
-  trial: "https://www.launchpass.com/tradeitm/7-day-trial",
-  core: "https://www.launchpass.com/tradeitm/core-sniper",
-  pro: "https://www.launchpass.com/tradeitm/pro-sniper",
-  executive: "https://www.launchpass.com/tradeitm/executive-sniper",
-} as const;
-
 export default function Home() {
   const [isSubscribeModalOpen, setIsSubscribeModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [cohortModalMessage, setCohortModalMessage] = useState<string | undefined>(undefined);
   const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
+  const trialSignupUrl = useRewardfulLink(LAUNCHPASS_URLS.trial);
 
   // Legacy handler for contact modal with preset message (kept for fallback)
   const handleCohortContactFallback = () => {
@@ -412,7 +408,7 @@ export default function Home() {
                   "💬 Community Access",
                   "📊 81% Win Rate Track Record",
                 ]}
-                whopLink={PUBLIC_SIGNUP_LINKS.trial}
+                whopLink={LAUNCHPASS_URLS.trial}
                 tier="trial"
                 tagline="Limited Time"
                 isYearly={false}
@@ -432,7 +428,7 @@ export default function Home() {
                   "🔔 High-volume & momentum alerts",
                   "🧠 Educational commentary & trade rationale",
                 ]}
-                whopLink={PUBLIC_SIGNUP_LINKS.core}
+                whopLink={LAUNCHPASS_URLS.core}
                 tier="core"
                 tagline={pricingTiers.find(t => t.id === 'core')?.tagline || "Execution focused education"}
                 isYearly={false}
@@ -454,7 +450,7 @@ export default function Home() {
                   "📊 Longer term market structure insight",
                   "🎯 Capital allocation education",
                 ]}
-                whopLink={PUBLIC_SIGNUP_LINKS.pro}
+                whopLink={LAUNCHPASS_URLS.pro}
                 tier="pro"
                 tagline={pricingTiers.find(t => t.id === 'pro')?.tagline || "More patience & strategy, not just speed"}
                 isYearly={false}
@@ -475,7 +471,7 @@ export default function Home() {
                   "🎯 Higher-level trade commentary",
                   "🧠 Risk scaling & portfolio mindset",
                 ]}
-                whopLink={PUBLIC_SIGNUP_LINKS.executive}
+                whopLink={LAUNCHPASS_URLS.executive}
                 tier="executive"
                 tagline={pricingTiers.find(t => t.id === 'executive')?.tagline || "Maximum conviction, maximum execution"}
                 isYearly={false}
@@ -739,7 +735,7 @@ export default function Home() {
                 <>
                   <span className="text-sm text-muted-foreground/40 font-medium">or</span>
                   <a
-                    href="https://www.launchpass.com/tradeitm/7-day-trial"
+                    href={trialSignupUrl}
                     className={cn(
                       "inline-flex items-center justify-center min-w-[220px]",
                       "px-8 py-4 rounded-sm text-sm font-semibold tracking-wider uppercase",

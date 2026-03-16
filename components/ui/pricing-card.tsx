@@ -5,6 +5,8 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRef, useState, useEffect } from "react";
 import { Analytics } from "@/lib/analytics";
+import { withRewardfulReferral } from "@/lib/rewardful";
+import { useRewardfulLink } from "@/lib/use-rewardful-link";
 
 // Detect touch devices to disable 3D tilt
 function useIsTouchDevice() {
@@ -207,6 +209,7 @@ export function PricingCard({
   const isTrial = tier === "trial";
   const isPro = tier === "pro";
   const isExecutive = tier === "executive";
+  const checkoutUrl = useRewardfulLink(whopLink);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -247,8 +250,8 @@ export function PricingCard({
     // Track pricing card click
     Analytics.trackPricingClick(name);
 
-    if (whopLink && whopLink !== "#") {
-      window.open(whopLink, '_blank', 'noopener,noreferrer');
+    if (checkoutUrl && checkoutUrl !== "#") {
+      window.open(withRewardfulReferral(checkoutUrl), '_blank', 'noopener,noreferrer');
     }
   };
 
