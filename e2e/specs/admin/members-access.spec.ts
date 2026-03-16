@@ -91,6 +91,132 @@ const DETAIL_RESPONSE = {
   },
 }
 
+const MEMBER_TRADES = [
+  {
+    id: '11111111-1111-4111-8111-111111111111',
+    user_id: DIRECTORY_ROW.linked_user_id,
+    trade_date: '2026-03-12T14:35:00.000Z',
+    symbol: 'AAPL',
+    direction: 'long',
+    contract_type: 'call',
+    entry_price: 2.15,
+    exit_price: 3.4,
+    position_size: 3,
+    pnl: 375,
+    pnl_percentage: 58.2,
+    is_winner: true,
+    is_open: false,
+    entry_timestamp: '2026-03-12T14:35:00.000Z',
+    exit_timestamp: '2026-03-12T15:16:00.000Z',
+    stop_loss: 1.7,
+    initial_target: 3.1,
+    hold_duration_min: 41,
+    mfe_percent: 62.4,
+    mae_percent: -8.3,
+    strike_price: 205,
+    expiration_date: '2026-03-20',
+    dte_at_entry: 8,
+    iv_at_entry: 24.7,
+    delta_at_entry: 0.42,
+    theta_at_entry: -0.08,
+    gamma_at_entry: 0.03,
+    vega_at_entry: 0.12,
+    underlying_at_entry: 203.9,
+    underlying_at_exit: 205.4,
+    mood_before: 'confident',
+    mood_after: 'excited',
+    discipline_score: 5,
+    followed_plan: true,
+    deviation_notes: null,
+    strategy: 'Bullish breakout at open',
+    setup_notes: 'Held above VWAP and reclaimed premarket high.',
+    execution_notes: 'Scaled out into momentum and left a runner.',
+    lessons_learned: 'The early confirmation reduced hesitation.',
+    tags: ['breakout', 'opening-drive'],
+    rating: 5,
+    screenshot_url: null,
+    screenshot_storage_path: null,
+    ai_analysis: {
+      grade: 'A',
+      entry_quality: 'Entered at confirmation.',
+      exit_quality: 'Scaled out efficiently.',
+      risk_management: 'Risk was defined before entry.',
+      lessons: ['Keep waiting for confirmation'],
+      scored_at: '2026-03-12T16:00:00.000Z',
+    },
+    market_context: null,
+    import_id: null,
+    is_favorite: true,
+    setup_type: 'Opening Breakout',
+    is_draft: false,
+    draft_status: null,
+    draft_expires_at: null,
+    coach_review_status: 'completed',
+    coach_review_requested_at: '2026-03-12T15:20:00.000Z',
+    created_at: '2026-03-12T15:20:00.000Z',
+    updated_at: '2026-03-12T16:00:00.000Z',
+    member_display_name: 'Trader Nate',
+  },
+  {
+    id: '22222222-2222-4222-8222-222222222222',
+    user_id: DIRECTORY_ROW.linked_user_id,
+    trade_date: '2026-03-11T16:05:00.000Z',
+    symbol: 'TSLA',
+    direction: 'short',
+    contract_type: 'put',
+    entry_price: 4.8,
+    exit_price: 3.9,
+    position_size: 2,
+    pnl: -180,
+    pnl_percentage: -18.75,
+    is_winner: false,
+    is_open: false,
+    entry_timestamp: '2026-03-11T16:05:00.000Z',
+    exit_timestamp: '2026-03-11T17:02:00.000Z',
+    stop_loss: 5.4,
+    initial_target: 3.6,
+    hold_duration_min: 57,
+    mfe_percent: 11.2,
+    mae_percent: -20.4,
+    strike_price: 180,
+    expiration_date: '2026-03-20',
+    dte_at_entry: 9,
+    iv_at_entry: 38.1,
+    delta_at_entry: -0.35,
+    theta_at_entry: -0.11,
+    gamma_at_entry: 0.04,
+    vega_at_entry: 0.18,
+    underlying_at_entry: 182.4,
+    underlying_at_exit: 184.1,
+    mood_before: 'neutral',
+    mood_after: 'frustrated',
+    discipline_score: 2,
+    followed_plan: false,
+    deviation_notes: 'Held after invalidation instead of stopping out.',
+    strategy: 'Fade failed bounce',
+    setup_notes: 'Countertrend setup into resistance.',
+    execution_notes: 'Missed the stop and let the trade extend.',
+    lessons_learned: 'Respect invalidation levels immediately.',
+    tags: ['fade'],
+    rating: 2,
+    screenshot_url: null,
+    screenshot_storage_path: null,
+    ai_analysis: null,
+    market_context: null,
+    import_id: null,
+    is_favorite: false,
+    setup_type: 'Failed Bounce',
+    is_draft: false,
+    draft_status: null,
+    draft_expires_at: null,
+    coach_review_status: 'pending',
+    coach_review_requested_at: '2026-03-11T17:10:00.000Z',
+    created_at: '2026-03-11T17:10:00.000Z',
+    updated_at: '2026-03-11T17:10:00.000Z',
+    member_display_name: 'Trader Nate',
+  },
+]
+
 async function setupMembersAccessMocks(page: Page) {
   await page.route('/api/admin/members/directory*', async (route: Route) => {
     await route.fulfill({
@@ -109,6 +235,18 @@ async function setupMembersAccessMocks(page: Page) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(DETAIL_RESPONSE),
+    })
+  })
+
+  await page.route('/api/admin/trade-review/browse*', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: MEMBER_TRADES,
+        meta: { total: MEMBER_TRADES.length },
+      }),
     })
   })
 
@@ -245,5 +383,16 @@ test.describe('Admin: Member Access Control Center', () => {
     await expect(page.getByTestId('member-role-preview')).toBeVisible()
     await expect(page.getByTestId('member-role-preview')).toContainText('Role Change Preview')
     await expect(page.getByTestId('member-role-preview')).toContainText('Admin')
+  })
+
+  test('shows member logged trades and trade detail in the workspace', async ({ page }) => {
+    await page.goto('/admin/members-access')
+    await page.getByRole('tab', { name: 'Trades' }).click()
+
+    await expect(page.getByTestId('member-trades-panel')).toBeVisible()
+    await expect(page.getByText('Logged Trades')).toBeVisible()
+    await expect(page.getByTestId(`member-trade-row-${MEMBER_TRADES[0].id}`)).toBeVisible()
+    await expect(page.getByTestId('member-trade-detail-link')).toHaveAttribute('href', `/admin/trade-review/${MEMBER_TRADES[0].id}`)
+    await expect(page.getByText('Bullish breakout at open')).toBeVisible()
   })
 })
