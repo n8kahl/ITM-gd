@@ -39,6 +39,7 @@ function buildCSP(nonce: string): string {
     'https://*.supabase.co',
     'wss://*.supabase.co',
     'https://api.openai.com',
+    'https://api.getrewardful.com',
     'https://*.up.railway.app',
     'wss://*.up.railway.app',
     'https://*.ingest.sentry.io',
