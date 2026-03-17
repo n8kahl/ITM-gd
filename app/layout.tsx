@@ -13,6 +13,7 @@ import './globals.css'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://tradeitm.com'
 const REWARDFUL_CAMPAIGN_ID = process.env.NEXT_PUBLIC_REWARDFUL_CAMPAIGN_ID || '6deccb'
+const REWARDFUL_ENABLED = process.env.NODE_ENV === 'production'
 const PWA_ASSET_VERSION = '20260301'
 const withPwaAssetVersion = (assetPath: string) => `${assetPath}?v=${PWA_ASSET_VERSION}`
 const rewardfulSiteHost = (() => {
@@ -184,19 +185,23 @@ export default async function RootLayout({
         ))}
       </head>
       <body className="font-sans antialiased">
-        <Script id="rewardful-queue" strategy="beforeInteractive" nonce={nonce}>
-          {`(function(w,r){w._rwq=r;w[r]=w[r]||function(){(w[r].q=w[r].q||[]).push(arguments)}})(window,'rewardful');`}
-        </Script>
-        <Script
-          src="https://r.wdfl.co/rw.js"
-          data-rewardful={REWARDFUL_CAMPAIGN_ID}
-          data-domains={rewardfulDomains}
-          strategy="afterInteractive"
-          nonce={nonce}
-        />
+        {REWARDFUL_ENABLED ? (
+          <>
+            <Script id="rewardful-queue" strategy="beforeInteractive" nonce={nonce}>
+              {`(function(w,r){w._rwq=r;w[r]=w[r]||function(){(w[r].q=w[r].q||[]).push(arguments)}})(window,'rewardful');`}
+            </Script>
+            <Script
+              src="https://r.wdfl.co/rw.js"
+              data-rewardful={REWARDFUL_CAMPAIGN_ID}
+              data-domains={rewardfulDomains}
+              strategy="afterInteractive"
+              nonce={nonce}
+            />
+          </>
+        ) : null}
         <ServiceWorkerRegister />
         <AnalyticsProvider />
-        <RewardfulReferralSync />
+        {REWARDFUL_ENABLED ? <RewardfulReferralSync /> : null}
         {/* Mobile Header Login Icon - visible only on mobile, hidden when navbar is present */}
         <Link
           href="/login"

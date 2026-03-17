@@ -63,6 +63,16 @@ export const MEMBER_TABS = [
 
 export type MemberTab = (typeof MEMBER_TABS)[number]
 
+const NAVIGATION_TAB_CONFIGS = [
+  { tab_id: 'dashboard', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 1, label: 'Dashboard', icon: 'home', path: '/members' },
+  { tab_id: 'journal', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 2, label: 'Journal', icon: 'book', path: '/members/journal' },
+  { tab_id: 'ai-coach', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 3, label: 'AI Coach', icon: 'bot', path: '/members/ai-coach' },
+  { tab_id: 'library', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 4, label: 'Academy', icon: 'book-open', path: '/members/academy' },
+  { tab_id: 'profile', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 5, label: 'Profile', icon: 'user', path: '/members/profile' },
+  { tab_id: 'spx-command-center', required_tier: 'pro', is_active: true, is_required: false, mobile_visible: true, sort_order: 6, label: 'SPX', icon: 'target', path: '/members/spx-command-center' },
+  { tab_id: 'social', required_tier: 'core', is_active: true, is_required: false, mobile_visible: false, sort_order: 7, label: 'Social', icon: 'users', path: '/members/social' },
+] as const
+
 // ---------------------------------------------------------------------------
 // Performance Metrics Collection
 // ---------------------------------------------------------------------------
@@ -166,15 +176,44 @@ export async function setupNavigationShellMocks(page: Page): Promise<void> {
       contentType: 'application/json',
       body: JSON.stringify({
         success: true,
-        data: [
-          { tab_id: 'dashboard', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 1, label: 'Dashboard', icon: 'home', path: '/members' },
-          { tab_id: 'journal', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 2, label: 'Journal', icon: 'book', path: '/members/journal' },
-          { tab_id: 'ai-coach', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 3, label: 'AI Coach', icon: 'bot', path: '/members/ai-coach' },
-          { tab_id: 'library', required_tier: 'core', is_active: true, is_required: false, mobile_visible: true, sort_order: 4, label: 'Academy', icon: 'book-open', path: '/members/academy' },
-          { tab_id: 'profile', required_tier: 'core', is_active: true, is_required: true, mobile_visible: true, sort_order: 5, label: 'Profile', icon: 'user', path: '/members/profile' },
-          { tab_id: 'spx-command-center', required_tier: 'pro', is_active: true, is_required: false, mobile_visible: true, sort_order: 6, label: 'SPX', icon: 'target', path: '/members/spx-command-center' },
-          { tab_id: 'social', required_tier: 'core', is_active: true, is_required: false, mobile_visible: false, sort_order: 7, label: 'Social', icon: 'users', path: '/members/social' },
-        ],
+        data: NAVIGATION_TAB_CONFIGS,
+      }),
+    })
+  })
+
+  await page.route('**/api/members/access-snapshot*', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          profile: {
+            id: E2E_USER_ID,
+            email: 'e2e@example.com',
+            discord_user_id: '000000000000000001',
+            discord_username: 'E2ETrader',
+            discord_avatar: null,
+            discord_roles: ['role-core-sniper', 'role-pro'],
+            discord_role_titles: {
+              'role-core-sniper': 'Core Sniper',
+              'role-pro': 'Pro',
+            },
+            membership_tier: 'pro',
+            role: null,
+          },
+          permissions: [],
+          allowedTabs: NAVIGATION_TAB_CONFIGS.map((tab) => tab.tab_id),
+          tabConfigs: NAVIGATION_TAB_CONFIGS,
+          access: {
+            isAdmin: false,
+            hasMembersAccess: true,
+            linkStatus: 'linked',
+            tabDecisions: [],
+            activeOverrides: [],
+            healthWarnings: [],
+          },
+        },
       }),
     })
   })
@@ -344,6 +383,7 @@ export async function setupAllPageMocks(page: Page): Promise<void> {
     const delegatedPrefixes = [
       '/api/config/roles',
       '/api/config/tabs',
+      '/api/members/access-snapshot',
       '/api/members/profile',
       '/api/members/dashboard/stats',
       '/api/members/dashboard/equity-curve',
