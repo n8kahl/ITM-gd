@@ -1,0 +1,49 @@
+name: Unit And Contract Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-and-contract:
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install root dependencies
+        run: pnpm install
+
+      - name: Install backend dependencies
+        run: npm --prefix backend ci
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Journal release-scope lint
+        run: pnpm lint:journal:release
+
+      - name: Frontend unit coverage
+        run: pnpm test:coverage
+
+      - name: Backend journal-linked contract tests
+        run: pnpm test:backend:journal-contract
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage
+          path: coverage/
+          retention-days: 14

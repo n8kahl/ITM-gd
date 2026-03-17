@@ -28,10 +28,6 @@ function createSupabaseAdminMock(input: MockInput) {
     data: input.rolePermissionRows,
     error: null,
   }))
-  const pricingTierNotMock = vi.fn(async () => ({
-    data: input.pricingTierRows || [],
-    error: null,
-  }))
   const appPermissionInMock = vi.fn(async () => ({
     data: input.appPermissionRows || [],
     error: null,
@@ -96,10 +92,14 @@ function createSupabaseAdminMock(input: MockInput) {
       }
 
       if (table === 'pricing_tiers') {
-        return {
-          select: vi.fn(() => ({
-            not: pricingTierNotMock,
+        const chain: any = {
+          order: vi.fn(async () => ({
+            data: input.pricingTierRows || [],
+            error: null,
           })),
+        }
+        return {
+          select: vi.fn(() => chain),
         }
       }
 

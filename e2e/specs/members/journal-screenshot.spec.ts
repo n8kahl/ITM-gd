@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Route } from '@playwright/test'
 import {
   E2E_USER_ID,
   enableMemberBypass,
@@ -117,13 +117,55 @@ async function setupScreenshotPipelineMocks(page: Page) {
       }),
     })
   })
+
+  await page.route('**/api/ai-coach-proxy/screenshot/analyze', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback()
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        positions: [
+          {
+            symbol: 'SPX',
+            type: 'call',
+            strike: 6100,
+            expiry: '2026-02-20',
+            quantity: 1,
+            entryPrice: 22.5,
+            currentPrice: 24.1,
+            pnl: 160,
+            confidence: 0.88,
+          },
+        ],
+        positionCount: 1,
+        intent: 'single_position',
+        suggestedActions: [
+          {
+            id: 'analyze_next_steps',
+            label: 'Analyze Next Steps',
+            description: 'Get a tactical next-step plan based on current position context.',
+          },
+          {
+            id: 'log_trade',
+            label: 'Log Trade',
+            description: 'Create or update journal entries from this screenshot.',
+          },
+        ],
+        warnings: [],
+      }),
+    })
+  })
 }
 
 async function mockScreenshotAnalyze(
   page: Page,
   payload: Record<string, unknown>,
 ) {
-  await page.route('**/api/screenshot/analyze', async (route) => {
+  const fulfillAnalyze = async (route: Route) => {
     if (route.request().method() !== 'POST') {
       await route.fallback()
       return
@@ -134,7 +176,10 @@ async function mockScreenshotAnalyze(
       contentType: 'application/json',
       body: JSON.stringify(payload),
     })
-  })
+  }
+
+  await page.route('**/api/screenshot/analyze', fulfillAnalyze)
+  await page.route('**/api/ai-coach-proxy/screenshot/analyze', fulfillAnalyze)
 }
 
 test.describe('Trade Journal Screenshot UI', () => {
@@ -200,11 +245,12 @@ test.describe('Trade Journal Screenshot UI', () => {
       buffer: Buffer.from('mock-png', 'utf-8'),
     })
 
-    await expect(page.getByText('Found 1 position')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Analyze Next Steps' })).toBeVisible()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText(/Found\s+1\s+position/i)).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Analyze Next Steps' })).toBeVisible()
 
-    await page.getByRole('dialog').getByRole('button', { name: 'Use' }).click()
-    await expect(page.locator('[role="dialog"] input[placeholder="e.g., AAPL"]')).toHaveValue('SPX')
+    await dialog.getByRole('button', { name: 'Use' }).click()
+    await expect(dialog.locator('input[placeholder="e.g., AAPL"]')).toHaveValue('SPX')
   })
 
   test('creates entry from quick screenshot flow with persisted screenshot path', async ({ page }) => {

@@ -86,6 +86,12 @@ test.describe('Trade Journal Accessibility', () => {
     await expect(newEntryButton).toBeFocused()
     await page.keyboard.press('Enter')
 
+    const quickFormButton = page.getByRole('button', { name: 'Quick Form' })
+    await expect(quickFormButton).toBeVisible()
+    await quickFormButton.focus()
+    await expect(quickFormButton).toBeFocused()
+    await page.keyboard.press('Enter')
+
     // Quick form should open — fill symbol via keyboard
     const symbolInput = page.locator('input[placeholder="AAPL"]')
     await expect(symbolInput).toBeVisible()

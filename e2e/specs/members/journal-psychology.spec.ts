@@ -11,6 +11,7 @@ async function createClosedTradeAndOpenPrompt(page: Page, symbol: string) {
   await page.goto(JOURNAL_URL, { waitUntil: 'domcontentloaded' })
 
   await page.getByRole('button', { name: 'New Entry' }).click()
+  await page.getByRole('button', { name: 'Quick Form' }).click()
   await page.locator('input[placeholder="AAPL"]').fill(symbol)
   await page.locator('input[placeholder="0.00"]').first().fill('100')
   await page.locator('input[placeholder="0.00"]').nth(1).fill('102')

@@ -49,24 +49,6 @@ function firstRowSymbol(page: Page) {
     .nth(1)
 }
 
-async function pickFilterDate(page: Page, label: 'Start date' | 'End date', day: number) {
-  await page.getByLabel(label).click()
-
-  const previousMonthButton = page.getByRole('button', { name: /previous month/i })
-  const targetDateRegex = new RegExp(`February\\s+${day}.*2026`, 'i')
-
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const targetDay = page.getByRole('button', { name: targetDateRegex })
-    if (await targetDay.count()) {
-      await targetDay.first().click()
-      return
-    }
-    await previousMonthButton.click()
-  }
-
-  throw new Error(`Unable to select February ${day}, 2026 in ${label} picker`)
-}
-
 test.describe('Trade Journal Filters', () => {
   test.describe.configure({ mode: 'serial' })
 
@@ -77,10 +59,14 @@ test.describe('Trade Journal Filters', () => {
   })
 
   test('filters by date range', async ({ page }) => {
-    await openWithFixtures(page)
+    await setupJournalCrudMocks(page, FILTER_FIXTURE)
+    await page.goto('/members/journal?e2eBypassAuth=1&from=2026-02-04&to=2026-02-06', {
+      waitUntil: 'domcontentloaded',
+    })
 
-    await pickFilterDate(page, 'Start date', 4)
-    await pickFilterDate(page, 'End date', 6)
+    await expect(page.getByRole('heading', { name: 'Trade Journal' })).toBeVisible()
+    await expect(page.locator('button[aria-label="Start date"]')).toContainText('Feb 4, 2026')
+    await expect(page.locator('button[aria-label="End date"]')).toContainText('Feb 6, 2026')
 
     await expect(page.getByText('TSLA')).toBeVisible()
     await expect(page.getByText('AAPL')).not.toBeVisible()

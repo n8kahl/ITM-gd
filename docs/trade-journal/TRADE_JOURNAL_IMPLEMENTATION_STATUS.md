@@ -53,3 +53,8 @@ Status date: 2026-02-10
   - `components/journal/journal-summary-stats.tsx`
   - `components/journal/import-wizard.tsx`
   - `components/journal/analytics-dashboard.tsx`
+
+## QE Governance
+- QE traceability matrix: `docs/trade-journal/TRADE_JOURNAL_QE_TRACEABILITY_MATRIX_2026-03-17.md`
+- Staging gate runbook: `docs/trade-journal/TRADE_JOURNAL_STAGING_GATE_RUNBOOK_2026-03-17.md`
+- Release evidence template: `docs/trade-journal/TRADE_JOURNAL_RELEASE_EVIDENCE_TEMPLATE_2026-03-17.md`

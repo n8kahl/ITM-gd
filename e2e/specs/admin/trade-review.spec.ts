@@ -3,6 +3,8 @@ import { Buffer } from 'node:buffer'
 import { authenticateAsAdmin } from '../../helpers/admin-auth'
 import { setupTradeReviewApiMocks, TRADE_REVIEW_ENTRY_ID } from './trade-review-test-helpers'
 
+const MODIFIER_KEY = process.platform === 'darwin' ? 'Meta' : 'Control'
+
 test.describe('Admin: Trade Review', () => {
   test.beforeEach(async ({ context }) => {
     await authenticateAsAdmin(context)
@@ -56,29 +58,17 @@ test.describe('Admin: Trade Review', () => {
 
     await page.goto(`/admin/trade-review/${TRADE_REVIEW_ENTRY_ID}`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: 'Trade Review Detail' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Generate AI Analysis' })).toBeVisible()
 
-    await page.evaluate(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'g',
-        ctrlKey: true,
-        bubbles: true,
-        cancelable: true,
-      }))
-    })
+    await page.locator('body').focus()
+    await page.keyboard.press(`${MODIFIER_KEY}+g`)
     await expect.poll(() => state.aiGeneratedCount, { timeout: 10_000 }).toBe(1)
     await expect(page.getByRole('button', { name: 'Regenerate AI Analysis' })).toBeVisible()
 
     const privateNotes = page.getByPlaceholder('Private coach notes. Never shown to members.')
     await privateNotes.fill('Keyboard shortcut save attempt.')
 
-    await page.evaluate(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 's',
-        ctrlKey: true,
-        bubbles: true,
-        cancelable: true,
-      }))
-    })
+    await page.keyboard.press(`${MODIFIER_KEY}+s`)
     await expect.poll(() => state.saveCount, { timeout: 10_000 }).toBeGreaterThan(0)
 
     await expect(page.getByText('Cmd/Ctrl+S save · Cmd/Ctrl+G generate · Cmd/Ctrl+Enter publish · Esc queue')).toBeVisible()

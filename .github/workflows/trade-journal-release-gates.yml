@@ -1,0 +1,61 @@
+name: Trade Journal Release Gates
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release-gates:
+    timeout-minutes: 75
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+      PLAYWRIGHT_BASE_URL: http://localhost:3000
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install root dependencies
+        run: pnpm install
+
+      - name: Install backend dependencies
+        run: npm --prefix backend ci
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Trade Journal release gates
+        run: pnpm test:journal:release
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trade-journal-playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trade-journal-test-results
+          path: test-results/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trade-journal-coverage
+          path: |
+            coverage/
+            backend/coverage/
+          retention-days: 14
