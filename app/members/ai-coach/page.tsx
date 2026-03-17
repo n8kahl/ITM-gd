@@ -515,7 +515,7 @@ export default function AICoachPage() {
     <AICoachErrorBoundary fallbackTitle="AI Coach encountered an error">
       <AICoachWorkflowProvider onSendPrompt={handleSendPrompt}>
         {/* Full-height container — fills available space inside member layout */}
-        <div className="flex flex-col h-[calc(100dvh-var(--members-topbar-h)-var(--members-bottomnav-h))] lg:h-[calc(100dvh-3.5rem)]">
+        <div className="flex flex-col h-[calc(100dvh-var(--members-topbar-h)-var(--members-bottomnav-h)-1rem)] lg:h-[calc(100dvh-3.5rem)]">
           {/* Main Content — full remaining height */}
           <div className="flex-1 min-h-0 overflow-hidden">
             {/* Desktop: Resizable Split Panels */}
@@ -1108,15 +1108,29 @@ function ChatArea({
       className="flex h-full bg-[radial-gradient(120%_120%_at_50%_-10%,rgba(16,185,129,0.08),rgba(10,10,11,1)_52%)]"
       ref={chatContainerRef}
     >
-      {/* Sessions Sidebar */}
       <AnimatePresence>
         {showSessions && (
           <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 240, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="border-r border-white/5 overflow-hidden flex flex-col bg-[#0A0A0B]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-20 bg-black/55 backdrop-blur-sm lg:hidden"
+            onClick={() => setShowSessions(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sessions Sidebar */}
+      <AnimatePresence>
+        {showSessions && (
+          <motion.aside
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -20, opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            aria-label="Chat sessions"
+            data-testid="ai-coach-sessions-panel"
+            className="fixed left-4 top-[calc(var(--members-topbar-h)+0.75rem)] bottom-[calc(var(--members-bottomnav-h)+0.75rem)] z-30 flex w-[min(84vw,20rem)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0A0A0B] shadow-2xl lg:static lg:top-auto lg:bottom-auto lg:left-auto lg:z-auto lg:w-[240px] lg:rounded-none lg:border-0 lg:border-r lg:border-white/5 lg:shadow-none"
           >
             <div className="p-3 border-b border-white/5 flex items-center justify-between">
               <span className="text-xs font-medium text-white/50 uppercase tracking-wider">Sessions</span>
@@ -1124,6 +1138,9 @@ function ChatArea({
                 onClick={() => {
                   Analytics.trackAICoachAction('new_session')
                   onNewSession()
+                  if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                    setShowSessions(false)
+                  }
                 }}
                 className="p-1 rounded hover:bg-white/5 text-white/40 hover:text-emerald-500 transition-colors"
                 title="New session"
@@ -1157,6 +1174,9 @@ function ChatArea({
                     onClick={() => {
                       Analytics.trackAICoachAction('open_session')
                       onSelectSession(s.id)
+                      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                        setShowSessions(false)
+                      }
                     }}
                   >
                     <MessageSquare className={cn('w-3.5 h-3.5 shrink-0', s.id === currentSessionId ? 'text-emerald-500' : 'text-white/30')} />
@@ -1178,7 +1198,7 @@ function ChatArea({
                 ))
               )}
             </div>
-          </motion.div>
+          </motion.aside>
         )}
       </AnimatePresence>
 
@@ -1331,7 +1351,10 @@ function ChatArea({
         </div>
 
         {/* Input Area */}
-        <div className="relative border-t border-white/10 bg-black/30 px-4 py-3 backdrop-blur-md">
+        <div
+          data-testid="ai-coach-composer"
+          className="relative border-t border-white/10 bg-black/30 px-4 py-3 backdrop-blur-md"
+        >
           {/* Image preview strip */}
           <ChatImageUpload
             onImageReady={handleImageReady}
@@ -1373,6 +1396,7 @@ function ChatArea({
 
           <form onSubmit={handleSubmit} className="flex items-end gap-2">
             <textarea
+              data-testid="ai-coach-chat-input"
               ref={inputRef}
               value={inputValue}
               onChange={(e) => {

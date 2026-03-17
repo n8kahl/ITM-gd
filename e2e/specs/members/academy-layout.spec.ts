@@ -51,4 +51,23 @@ test.describe('Academy layout and routing', () => {
     await expect(page.getByRole('heading', { name: 'Lesson Viewer' })).toBeVisible()
     await expect(page.getByText('Execution Sequence')).toBeVisible()
   })
+
+  test('lesson outline behaves like a mobile overlay', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await setupAcademyV3Mocks(page)
+
+    await page.goto(`/members/academy/lessons/${ACADEMY_V3_FIXTURES.lessonIds.executionOne}`)
+
+    const outlineToggle = page.getByRole('button', { name: 'Open lesson outline' })
+    await expect(outlineToggle).toBeVisible()
+    await outlineToggle.click()
+
+    const outline = page.getByTestId('academy-lesson-sidebar')
+    await expect(outline).toBeVisible()
+    await expect(outline).toHaveCSS('position', 'fixed')
+
+    await page.locator('[role="presentation"]').click({ position: { x: 10, y: 10 } })
+    await expect(outline).toHaveAttribute('data-open', 'false')
+    await expect(outline).toHaveAttribute('aria-hidden', 'true')
+  })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
 import type { MobileToolView } from '@/hooks/use-mobile-tool-sheet'
@@ -20,6 +20,7 @@ const SHEET_LABELS: Record<MobileToolView, string> = {
 
 export function MobileToolSheet({ activeSheet, onClose, contextText, children }: MobileToolSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null)
+  const dragStartYRef = useRef<number | null>(null)
   const shouldReduceMotion = useReducedMotion()
 
   useEffect(() => {
@@ -39,6 +40,37 @@ export function MobileToolSheet({ activeSheet, onClose, contextText, children }:
     firstFocusable?.focus()
   }, [activeSheet])
 
+  useEffect(() => {
+    if (!activeSheet || typeof document === 'undefined') return
+    const previousBodyOverflow = document.body.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+    }
+  }, [activeSheet])
+
+  const handleSwipeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    dragStartYRef.current = event.clientY
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const handleSwipeEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragStartY = dragStartYRef.current
+    dragStartYRef.current = null
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    if (dragStartY != null && event.clientY - dragStartY > 72) {
+      onClose()
+    }
+  }
+
   return (
     <AnimatePresence>
       {activeSheet && (
@@ -48,17 +80,26 @@ export function MobileToolSheet({ activeSheet, onClose, contextText, children }:
           animate={shouldReduceMotion ? { opacity: 1 } : { y: 0 }}
           exit={shouldReduceMotion ? { opacity: 0 } : { y: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          drag={shouldReduceMotion ? false : 'y'}
-          dragConstraints={{ top: 0, bottom: 0 }}
-          dragElastic={0.2}
-          onDragEnd={(_, info) => {
-            if (info.offset.y > 100) onClose()
-          }}
-          className="lg:hidden fixed inset-0 z-50 flex flex-col bg-[#0A0A0B]"
+          className="fixed inset-0 z-50 flex flex-col bg-[#0A0A0B] lg:hidden"
           role="dialog"
           aria-modal="true"
           aria-label={SHEET_LABELS[activeSheet]}
         >
+          <div className="flex justify-center px-4 pt-2 pb-1">
+            <div
+              role="presentation"
+              data-testid="mobile-tool-sheet-handle"
+              onPointerDown={handleSwipeStart}
+              onPointerUp={handleSwipeEnd}
+              onPointerCancel={() => {
+                dragStartYRef.current = null
+              }}
+              className="flex h-7 w-20 touch-pan-y items-center justify-center"
+            >
+              <span className="h-1 w-10 rounded-full bg-white/20" />
+            </div>
+          </div>
+
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
             <h3 className="text-sm font-medium text-white">
               {SHEET_LABELS[activeSheet]}
@@ -88,7 +129,7 @@ export function MobileToolSheet({ activeSheet, onClose, contextText, children }:
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden overscroll-contain">
             {children}
           </div>
         </motion.div>

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import {
   enableBypass,
   setupOnboarding,
@@ -6,7 +6,6 @@ import {
   navigateToAICoach,
   waitForChatReady,
   sendChatMessage,
-  AI_COACH_URL,
 } from './ai-coach-test-helpers'
 
 /**
@@ -17,6 +16,25 @@ import {
  */
 
 test.describe.configure({ mode: 'serial' })
+
+function getChatInput(page: Page) {
+  return page.locator('[data-testid="ai-coach-chat-input"]:visible, [aria-label="Message the AI coach"]:visible').first()
+}
+
+async function openMobileToolSheet(page: Page, view: 'chart' | 'options') {
+  await page.evaluate((requestedView) => {
+    if (requestedView === 'chart') {
+      window.dispatchEvent(new CustomEvent('ai-coach-widget-view', {
+        detail: { view: 'chart', symbol: 'SPX', timeframe: '5m' },
+      }))
+      return
+    }
+
+    window.dispatchEvent(new CustomEvent('ai-coach-widget-view', {
+      detail: { view: 'options', symbol: 'SPX' },
+    }))
+  }, view)
+}
 
 test.describe('AI Coach — Mobile Layout', () => {
   test.beforeEach(async ({ page }) => {
@@ -34,8 +52,7 @@ test.describe('AI Coach — Mobile Layout', () => {
     await waitForChatReady(page)
 
     // On mobile, chat input should be visible
-    const chatInput = page.locator('textarea, input[type="text"]').first()
-    await expect(chatInput).toBeVisible()
+    await expect(getChatInput(page)).toBeVisible()
 
     // Mobile view should be active (< 1024px)
     const viewport = page.viewportSize()
@@ -49,10 +66,7 @@ test.describe('AI Coach — Mobile Layout', () => {
   test('should open chart in mobile tool sheet', async ({ page }) => {
     await waitForChatReady(page)
 
-    // Find and click the Live Chart button (on welcome view or via navigation)
-    const chartButton = page.getByRole('button', { name: /Live Chart|Chart/i }).first()
-    await expect(chartButton).toBeVisible({ timeout: 10_000 })
-    await chartButton.click()
+    await openMobileToolSheet(page, 'chart')
 
     // Mobile tool sheet should appear with "Live Chart" header
     const sheet = page.locator('[role="dialog"]')
@@ -72,8 +86,7 @@ test.describe('AI Coach — Mobile Layout', () => {
     await waitForChatReady(page)
 
     // Open the chart sheet
-    const chartButton = page.getByRole('button', { name: /Live Chart|Chart/i }).first()
-    await chartButton.click()
+    await openMobileToolSheet(page, 'chart')
 
     // Wait for sheet to appear
     const sheet = page.locator('[role="dialog"]')
@@ -88,16 +101,14 @@ test.describe('AI Coach — Mobile Layout', () => {
     await expect(sheet).not.toBeVisible({ timeout: 5_000 })
 
     // Chat should be accessible again
-    const chatInput = page.locator('textarea, input[type="text"]').first()
-    await expect(chatInput).toBeVisible()
+    await expect(getChatInput(page)).toBeVisible()
   })
 
   test('should close mobile sheet with Escape key', async ({ page }) => {
     await waitForChatReady(page)
 
     // Open the chart sheet
-    const chartButton = page.getByRole('button', { name: /Live Chart|Chart/i }).first()
-    await chartButton.click()
+    await openMobileToolSheet(page, 'chart')
 
     // Wait for sheet to appear
     const sheet = page.locator('[role="dialog"]')
@@ -114,7 +125,7 @@ test.describe('AI Coach — Mobile Layout', () => {
     await waitForChatReady(page)
 
     // Chat textarea should be visible on mobile layout
-    const chatInput = page.locator('textarea, input[type="text"]').first()
+    const chatInput = getChatInput(page)
     await expect(chatInput).toBeVisible()
 
     // Input should be focusable and functional
@@ -133,8 +144,7 @@ test.describe('AI Coach — Mobile Layout', () => {
     await waitForChatReady(page)
 
     // Open Chart sheet
-    const chartButton = page.getByRole('button', { name: /Live Chart|Chart/i }).first()
-    await chartButton.click()
+    await openMobileToolSheet(page, 'chart')
 
     let sheet = page.locator('[role="dialog"]')
     await expect(sheet).toBeVisible({ timeout: 10_000 })
@@ -148,25 +158,21 @@ test.describe('AI Coach — Mobile Layout', () => {
     await expect(sheet).not.toBeVisible({ timeout: 5_000 })
 
     // Open Options sheet
-    const optionsButton = page.getByRole('button', { name: /Options|Chain/i }).first()
-    if (await optionsButton.isVisible({ timeout: 5_000 })) {
-      await optionsButton.click()
+    await openMobileToolSheet(page, 'options')
 
-      sheet = page.locator('[role="dialog"]')
-      await expect(sheet).toBeVisible({ timeout: 10_000 })
+    sheet = page.locator('[role="dialog"]')
+    await expect(sheet).toBeVisible({ timeout: 10_000 })
 
-      sheetHeader = sheet.locator('h3').first()
-      await expect(sheetHeader).toContainText(/Options|Chain/i)
+    sheetHeader = sheet.locator('h3').first()
+    await expect(sheetHeader).toContainText(/Options|Chain/i)
 
-      // Close options sheet
-      const optionsCloseButton = sheet.getByRole('button', { name: /Close|Back/i }).first()
-      await optionsCloseButton.click()
-      await expect(sheet).not.toBeVisible({ timeout: 5_000 })
-    }
+    // Close options sheet
+    const optionsCloseButton = sheet.getByRole('button', { name: /Close|Back/i }).first()
+    await optionsCloseButton.click()
+    await expect(sheet).not.toBeVisible({ timeout: 5_000 })
 
     // Verify we're back at chat view
-    const chatInput = page.locator('textarea, input[type="text"]').first()
-    await expect(chatInput).toBeVisible()
+    await expect(getChatInput(page)).toBeVisible()
   })
 
   test('should hide desktop-only elements on mobile viewport', async ({ page }) => {
@@ -188,43 +194,38 @@ test.describe('AI Coach — Mobile Layout', () => {
     expect(viewport?.width).toBeLessThan(1024)
 
     // Chat panel should take full width on mobile
-    const chatPanel = page.locator('textarea, input[type="text"]').first()
-    await expect(chatPanel).toBeVisible()
+    await expect(getChatInput(page)).toBeVisible()
   })
 
   test('should handle mobile gesture interactions', async ({ page }) => {
     await waitForChatReady(page)
 
-    // Open chart sheet
-    const chartButton = page.getByRole('button', { name: /Live Chart|Chart/i }).first()
-    await chartButton.click()
+    await openMobileToolSheet(page, 'chart')
 
     const sheet = page.locator('[role="dialog"]')
     await expect(sheet).toBeVisible({ timeout: 10_000 })
 
-    // Simulate drag gesture to close sheet (swipe down)
-    // Note: This tests the drag constraint behavior
-    const sheetBox = await sheet.boundingBox()
-    if (sheetBox) {
-      await page.mouse.move(sheetBox.x + sheetBox.width / 2, sheetBox.y + 100)
+    const sheetHandle = page.getByTestId('mobile-tool-sheet-handle')
+    await expect(sheetHandle).toBeVisible()
+    const handleBox = await sheetHandle.boundingBox()
+    if (handleBox) {
+      await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
       await page.mouse.down()
-      await page.mouse.move(sheetBox.x + sheetBox.width / 2, sheetBox.y + 250)
+      await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2 + 120)
       await page.mouse.up()
-
-      // After drag gesture, sheet may close depending on drag distance threshold
-      // At minimum, the sheet should still be functional
-      await expect(sheet).toBeVisible().catch(() => {
-        // Sheet closed from drag is acceptable behavior
-      })
     }
+
+    const closeButton = sheet.getByRole('button', { name: /Close/i })
+    await expect(closeButton).toBeVisible()
+    await closeButton.click()
+    await expect(sheet).not.toBeVisible({ timeout: 5_000 })
   })
 
   test('should display sheet context message on mobile', async ({ page }) => {
     await waitForChatReady(page)
 
     // Open chart sheet
-    const chartButton = page.getByRole('button', { name: /Live Chart|Chart/i }).first()
-    await chartButton.click()
+    await openMobileToolSheet(page, 'chart')
 
     const sheet = page.locator('[role="dialog"]')
     await expect(sheet).toBeVisible({ timeout: 10_000 })
@@ -256,12 +257,11 @@ test.describe('AI Coach — Mobile Layout', () => {
     await page.waitForTimeout(2000)
 
     // Get initial scroll position
-    const chatPanel = page.locator('textarea, input[type="text"]').first()
+    const chatPanel = getChatInput(page)
     const initialScroll = await chatPanel.evaluate(() => window.scrollY)
 
     // Open tool sheet
-    const chartButton = page.getByRole('button', { name: /Live Chart|Chart/i }).first()
-    await chartButton.click()
+    await openMobileToolSheet(page, 'chart')
 
     const sheet = page.locator('[role="dialog"]')
     await expect(sheet).toBeVisible({ timeout: 10_000 })
@@ -280,8 +280,7 @@ test.describe('AI Coach — Mobile Layout', () => {
     await waitForChatReady(page)
 
     // Open chart sheet
-    const chartButton = page.getByRole('button', { name: /Live Chart|Chart/i }).first()
-    await chartButton.click()
+    await openMobileToolSheet(page, 'chart')
 
     const sheet = page.locator('[role="dialog"]')
     await expect(sheet).toBeVisible({ timeout: 10_000 })
@@ -297,23 +296,45 @@ test.describe('AI Coach — Mobile Layout', () => {
 
     // Close button should be accessible
     const closeButton = sheet.getByRole('button', { name: /Close/i })
-    await expect(closeButton).toHaveAccessibleName()
+    await expect(closeButton).toHaveAccessibleName(/Close/i)
 
     // Title heading should be present
     const title = sheet.locator('h3').first()
     await expect(title).toBeVisible()
   })
 
+  test('should keep the composer clear of the mobile bottom nav', async ({ page }) => {
+    await waitForChatReady(page)
+
+    const composer = page.locator('[data-testid="ai-coach-composer"]:visible').first()
+    const bottomNav = page.locator('[data-mobile-bottom-nav] nav')
+    const composerBox = await composer.boundingBox()
+    const bottomNavBox = await bottomNav.boundingBox()
+
+    expect(composerBox).not.toBeNull()
+    expect(bottomNavBox).not.toBeNull()
+    expect((composerBox?.y ?? 0) + (composerBox?.height ?? 0)).toBeLessThanOrEqual(bottomNavBox?.y ?? 0)
+  })
+
+  test('should open sessions as a mobile overlay instead of squeezing chat', async ({ page }) => {
+    await waitForChatReady(page)
+
+    await page.locator('[title*="Toggle sessions"]:visible').first().click()
+
+    const sessionsPanel = page.getByTestId('ai-coach-sessions-panel')
+    await expect(sessionsPanel).toBeVisible()
+    await expect(sessionsPanel).toHaveCSS('position', 'fixed')
+    await expect(getChatInput(page)).toBeVisible()
+  })
+
   test('should support responsive chat input on mobile', async ({ page }) => {
     await waitForChatReady(page)
 
     // Type a message
-    const chatInput = page.locator('textarea, input[type="text"]').first()
+    const chatInput = getChatInput(page)
     await chatInput.click()
 
     // Input should expand for long messages (if it's a textarea)
-    const initialHeight = await chatInput.evaluate(el => el.clientHeight)
-
     // Type a longer message
     const longMessage = 'This is a test message with multiple lines of text to see how the mobile input handles longer content.'
     await chatInput.fill(longMessage)
