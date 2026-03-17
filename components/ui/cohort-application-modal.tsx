@@ -560,8 +560,8 @@ export function CohortApplicationModal({
                   <div className="px-6 pb-6">
                     <p className="text-xs text-center text-ivory/40">
                       {programType === 'cohort'
-                        ? 'Limited to 20 traders per cohort. Applications reviewed within 24-48 hours.'
-                        : 'Limited spots available. Applications reviewed within 24-48 hours.'}
+                        ? 'Small cohort sizes help preserve focused mentorship. Applications are typically reviewed within 24-48 hours.'
+                        : 'Applications are typically reviewed within 24-48 hours.'}
                     </p>
                   </div>
                 )}

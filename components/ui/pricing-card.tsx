@@ -157,7 +157,7 @@ function TierTitleCard({ tier, name, isHovered }: { tier: "trial" | "core" | "pr
         <div className="absolute inset-0 flex items-center justify-center">
           <span
             className={cn(
-              "text-2xl md:text-3xl font-serif font-medium tracking-wide drop-shadow-lg",
+              "text-xl md:text-[1.7rem] font-serif font-medium tracking-wide drop-shadow-lg",
               tier === "pro" ? "text-onyx" : "text-white"
             )}
             style={{
@@ -357,7 +357,7 @@ export function PricingCard({
 
         {/* Card Container */}
         <div
-          className="relative h-full p-6 md:p-8 rounded-2xl border overflow-hidden bg-[rgba(8,8,8,0.95)] backdrop-blur-xl"
+          className="relative h-full rounded-2xl border overflow-hidden bg-[rgba(8,8,8,0.95)] p-5 backdrop-blur-xl md:p-6 xl:p-7"
           style={{ borderColor: styles.borderColor }}
         >
           {/* Premium Frosted glass overlay */}
@@ -371,14 +371,14 @@ export function PricingCard({
           {/* Card Content */}
           <div className="relative z-10 flex flex-col h-full">
             {/* Tier Title Card Visual */}
-            <div className="relative w-full mb-6 flex items-center justify-center px-4">
+            <div className="relative mb-5 flex w-full items-center justify-center px-2 md:px-4">
               <TierTitleCard tier={tier} name={name} isHovered={isHovered} />
             </div>
 
             {/* Header */}
-            <div className="text-center mb-6">
+            <div className="mb-5 text-center">
               {/* NOW AVAILABLE Tag */}
-              <div className="space-y-3 mb-4">
+              <div className="mb-4 space-y-3">
                 <div
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border"
                   style={{
@@ -444,7 +444,7 @@ export function PricingCard({
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: -20, opacity: 0 }}
                     transition={{ duration: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
-                    className="text-6xl md:text-7xl font-serif font-semibold tracking-tight"
+                    className="text-5xl font-serif font-semibold tracking-tight md:text-6xl"
                     style={{ color: styles.accentColor }}
                   >
                     {price.replace('$', '')}
@@ -486,12 +486,12 @@ export function PricingCard({
               </AnimatePresence>
 
               {/* Description */}
-              <p className="text-sm text-muted-foreground">{description}</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
             </div>
 
             {/* Divider */}
             <div
-              className="h-px w-full mb-6"
+              className="mb-5 h-px w-full"
               style={{
                 background: `linear-gradient(to right, transparent, ${styles.accentColor}50, transparent)`,
               }}
@@ -500,7 +500,7 @@ export function PricingCard({
             {/* Tagline if present */}
             {tagline && (
               <p
-                className="text-xs text-center mb-4 italic"
+                className="mb-4 text-center text-xs italic"
                 style={{ color: `${styles.accentColor}99` }}
               >
                 {tagline}
@@ -508,7 +508,7 @@ export function PricingCard({
             )}
 
             {/* Features List */}
-            <ul className="space-y-3 flex-grow mb-8">
+            <ul className="mb-6 flex-grow space-y-2.5">
               {features.map((feature, idx) => (
                 <li key={idx} className="flex items-start gap-3">
                   <div
@@ -530,7 +530,7 @@ export function PricingCard({
             <div className="space-y-3 relative z-[100]">
               <div
                 className={cn(
-                  "w-full h-14 text-base font-bold rounded-xl transition-all duration-500",
+                  "h-12 w-full rounded-xl text-sm font-bold transition-all duration-500 md:h-14 md:text-base",
                   "bg-gradient-to-r hover:-translate-y-0.5",
                   "flex items-center justify-center gap-2 tracking-wide cursor-pointer",
                   styles.buttonGradient,

@@ -12,7 +12,7 @@ export function RibbonDivider({ className, flip = false }: RibbonDividerProps) {
   return (
     <motion.div
       className={cn(
-        "relative w-full h-20 md:h-28 overflow-hidden",
+        "relative w-full h-14 md:h-20 overflow-hidden",
         flip && "scale-y-[-1]",
         className
       )}
@@ -109,10 +109,10 @@ export function RibbonDivider({ className, flip = false }: RibbonDividerProps) {
       </div>
 
       {/* Edge Fades */}
-      <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-void to-transparent" />
-      <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-void to-transparent" />
-      <div className="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-void to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-void to-transparent" />
+      <div className="absolute inset-y-0 left-0 w-24 md:w-32 bg-gradient-to-r from-void to-transparent" />
+      <div className="absolute inset-y-0 right-0 w-24 md:w-32 bg-gradient-to-l from-void to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-void to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-void to-transparent" />
     </motion.div>
   );
 }

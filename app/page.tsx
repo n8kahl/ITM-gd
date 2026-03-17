@@ -2,21 +2,18 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Check, TrendingUp, Users, BookOpen, Target, Zap, Shield, BarChart3 } from "lucide-react";
 import { GradientMeshBackground } from "@/components/ui/gradient-mesh-background";
 import { AuroraBackground } from "@/components/ui/aurora-background";
 import { BentoCard } from "@/components/ui/bento-card";
 import { PricingCard } from "@/components/ui/pricing-card";
 import { RevealHeading, RevealContent, StaggerContainer, StaggerItem } from "@/components/ui/scroll-animations";
-import { TestimonialMarquee } from "@/components/ui/testimonial-marquee";
 import { RibbonDivider } from "@/components/ui/ribbon-divider";
 import { DiscordMock } from "@/components/ui/discord-mock";
-import { HeroWinsBadge, LiveWinsTicker } from "@/components/ui/live-wins-ticker";
 import { Analytics } from "@/lib/analytics";
 import { LAUNCHPASS_URLS } from "@/lib/rewardful";
 import { getPricingTiers, PricingTier } from "@/lib/supabase";
@@ -61,10 +58,6 @@ const SparkleLog = dynamic(() => import("@/components/ui/sparkle-logo"), {
 });
 const CandlestickChart = dynamic(
   () => import("@/components/ui/mini-chart").then((mod) => mod.CandlestickChart),
-  { ssr: false },
-);
-const WinRateChart = dynamic(
-  () => import("@/components/ui/mini-chart").then((mod) => mod.WinRateChart),
   { ssr: false },
 );
 
@@ -136,13 +129,13 @@ export default function Home() {
       <MobileStickyCtA />
 
       {/* Hero Section - Cinematic Brand Reveal */}
-      <section className="relative min-h-[100vh] flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden">
+      <section className="relative flex min-h-[92svh] items-center justify-center overflow-hidden px-4 pb-16 pt-24 md:pb-20 lg:min-h-[96vh]">
         {/* Aurora Liquid Light Background */}
         <AuroraBackground />
 
         {/* Main Content - Logo Centered */}
-        <div className="container mx-auto relative z-20">
-          <div className="flex flex-col items-center justify-center text-center space-y-10">
+        <div className="container relative z-20 mx-auto">
+          <div className="flex flex-col items-center justify-center space-y-8 text-center md:space-y-10">
             {/* Logo with Sparkle Effects */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -165,37 +158,28 @@ export default function Home() {
 
             {/* Powerful Value Proposition */}
             <motion.div
-              className="space-y-4 max-w-3xl"
+              className="max-w-4xl space-y-4"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
             >
               {/* Main Headline */}
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-ivory leading-tight">
+              <h1 className="text-[clamp(2rem,5vw,4.35rem)] font-bold leading-[1.08] text-ivory">
                 <span className="text-gradient-champagne">High Quality Setups</span>{" "}
                 <span className="text-ivory/90">- Entries, Stop Loss, and Take Profits -</span>{" "}
                 <span className="text-gradient-champagne">Every Day</span>
               </h1>
 
               {/* Supporting Copy */}
-              <p className="text-sm sm:text-base md:text-lg text-platinum/70 max-w-xl mx-auto leading-relaxed">
-                Targeting 100%+ returns per trade. Get exact entries, stop losses, and take profit levels.
-                <span className="text-champagne/80"> No fluff. Just profits.</span>
+              <p className="mx-auto max-w-2xl text-sm leading-relaxed text-platinum/70 sm:text-base md:text-lg">
+                Options trading education with real-time setups, entries, stop losses, and take profit levels.
+                <span className="text-champagne/80"> Learn to trade with precision.</span>
               </p>
-            </motion.div>
-
-            {/* Live Wins Badge */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.8, ease: [0.25, 0.4, 0.25, 1] }}
-            >
-              <HeroWinsBadge />
             </motion.div>
 
             {/* CTA Button - Centered */}
             <motion.div
-              className="pt-4 flex flex-col items-center gap-3"
+              className="flex flex-col items-center gap-3 pt-2 md:pt-4"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.9, ease: [0.25, 0.4, 0.25, 1] }}
@@ -240,7 +224,7 @@ export default function Home() {
 
         {/* Subtle Scroll Indicator */}
         <motion.div
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20"
+          className="absolute bottom-6 left-1/2 z-20 -translate-x-1/2 md:bottom-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 1, delay: 1.5 }}
@@ -257,19 +241,24 @@ export default function Home() {
       <RibbonDivider />
 
       {/* Stats Section */}
-      <section className="container mx-auto px-4 py-12">
-        <StaggerContainer className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-5xl mx-auto" staggerDelay={0.1}>
+      <section className="container mx-auto px-4 py-10 md:py-12">
+        <StaggerContainer className="mx-auto grid max-w-5xl grid-cols-2 gap-4 md:grid-cols-4 md:gap-6" staggerDelay={0.1}>
           {[
-            { label: "Win Rate", value: "87%", icon: "📈" },
-            { label: "Avg. Weekly Gain", value: "100%", icon: "💰" },
-            { label: "Prime Setups", value: "Daily", icon: "⚡" },
-            { label: "Years Experience", value: "8+", icon: "🏆" },
+            { label: "Trade Alerts", value: "Real-Time", support: "Delivered live in Discord", icon: "⚡" },
+            { label: "Market Focus", value: "SPX + NDX", support: "Index-first execution", icon: "📈" },
+            { label: "Daily Prep", value: "Every AM", support: "Watchlist and key levels", icon: "🎯" },
+            { label: "Trading Experience", value: "8+ Years", support: "Process over hype", icon: "🏆" },
           ].map((stat, idx) => (
             <StaggerItem key={idx}>
               <Card className="bg-card/50 backdrop-blur border-border/40 h-full hover:border-primary/30 transition-colors duration-300">
-                <CardContent className="pt-6 text-center">
-                  <div className="text-3xl md:text-4xl stat-value text-primary mb-2">{stat.value}</div>
-                  <div className="text-sm text-muted-foreground">{stat.label}</div>
+                <CardContent className="flex h-full flex-col justify-between p-5 text-center md:p-6">
+                  <div className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-primary/55">
+                    {stat.icon} {stat.label}
+                  </div>
+                  <div className="mb-2 text-[1.9rem] font-semibold tracking-tight text-primary md:text-[2.35rem]">
+                    {stat.value}
+                  </div>
+                  <div className="text-sm text-muted-foreground/90">{stat.support}</div>
                 </CardContent>
               </Card>
             </StaggerItem>
@@ -278,45 +267,44 @@ export default function Home() {
       </section>
 
       {/* Features Section - Bento Grid */}
-      <section id="features" className="container mx-auto px-4 py-16">
+      <section id="features" className="container mx-auto px-4 py-14 md:py-16">
         <div className="max-w-6xl mx-auto">
           {/* Section Header */}
-          <div className="text-center mb-16 space-y-4">
+          <div className="mb-12 space-y-4 text-center md:mb-14">
             <RevealHeading>
-              <h2 className="text-3xl md:text-5xl font-bold">
+              <h2 className="text-3xl font-bold md:text-4xl xl:text-5xl">
                 Everything You Need To{" "}
                 <span className="text-gradient-champagne">Succeed</span>
               </h2>
             </RevealHeading>
             <RevealContent delay={0.2}>
-              <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto">
+              <p className="mx-auto max-w-2xl text-lg text-muted-foreground text-pretty md:text-xl">
                 Comprehensive tools and resources designed to transform your trading journey
               </p>
             </RevealContent>
           </div>
 
           {/* Bento Grid Layout - Clean 2x3 grid */}
-          <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8" staggerDelay={0.1}>
+          <StaggerContainer className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-3" staggerDelay={0.1}>
             {/* Row 1 */}
             {/* Real-Time Trade Alerts with Live Candlestick */}
             <StaggerItem>
               <BentoCard
                 icon={TrendingUp}
                 title="Real-Time Trade Alerts"
-                description="Get instant trade alerts with detailed entry, exit, and stop-loss levels backed by proven strategies."
+                description="Get instant trade alerts with structured entry, exit, and stop-loss levels for educational use."
                 spotlight="emerald"
                 graphic={<CandlestickChart className="absolute inset-0" />}
               />
             </StaggerItem>
 
-            {/* 87% Success Rate with Win Rate Chart */}
             <StaggerItem>
               <BentoCard
                 icon={Target}
-                title="87% Success Rate"
+                title="Proven Strategies"
                 description="Detailed market analysis with charts, indicators, and actionable trade setups updated daily."
                 spotlight="emerald"
-                graphic={<WinRateChart className="absolute inset-0" percentage={87} />}
+                graphic={<CandlestickChart className="absolute inset-0" />}
               />
             </StaggerItem>
 
@@ -325,7 +313,7 @@ export default function Home() {
               <BentoCard
                 icon={Users}
                 title="Active Community"
-                description="Join thousands of traders sharing real-time wins in our exclusive Discord server."
+                description="Join a serious Discord community focused on setups, trade rationale, and disciplined execution."
                 spotlight="emerald"
                 graphic={<DiscordMock />}
                 graphicClassName="!bg-transparent !border-0"
@@ -349,7 +337,7 @@ export default function Home() {
               <BentoCard
                 icon={Zap}
                 title="Lightning Fast"
-                description="Receive trade alerts instantly via Discord notifications so you never miss a profitable opportunity."
+                description="Receive trade alerts instantly via Discord notifications so you can stay aligned with market-moving setups."
                 spotlight="emerald"
                 image="/icon-lightning.png"
               />
@@ -373,18 +361,18 @@ export default function Home() {
       <RibbonDivider flip />
 
       {/* Pricing Section - Membership Cards */}
-      <section id="pricing" className="container mx-auto px-4 py-16">
-        <div className="max-w-6xl mx-auto">
+      <section id="pricing" className="container mx-auto px-4 py-14 md:py-16">
+        <div className="max-w-7xl mx-auto">
           {/* Section Header */}
-          <div className="text-center mb-16 space-y-4">
+          <div className="mb-12 space-y-4 text-center md:mb-14">
             <RevealHeading>
-              <h2 className="text-3xl md:text-5xl font-bold">
+              <h2 className="text-3xl font-bold md:text-4xl xl:text-5xl">
                 Choose Your{" "}
                 <span className="text-gradient-champagne">Plan</span>
               </h2>
             </RevealHeading>
             <RevealContent delay={0.2}>
-              <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto">
+              <p className="mx-auto max-w-2xl text-lg text-muted-foreground text-pretty md:text-xl">
                 Select the plan that fits your trading goals and budget
               </p>
             </RevealContent>
@@ -392,7 +380,7 @@ export default function Home() {
 
           {/* Pricing Cards Grid - Core → Pro → Execute */}
           <StaggerContainer
-            className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8 items-stretch"
+            className="grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-4 xl:gap-7"
             staggerDelay={0.15}
           >
             <StaggerItem>
@@ -406,7 +394,7 @@ export default function Home() {
                   "👀 Morning Watchlist Access",
                   "🧠 Educational Commentary",
                   "💬 Community Access",
-                  "📊 81% Win Rate Track Record",
+                  "📊 Daily Performance Recaps",
                 ]}
                 whopLink={LAUNCHPASS_URLS.trial}
                 tier="trial"
@@ -481,7 +469,7 @@ export default function Home() {
 
           {/* Trust Badges & Guarantee */}
           <RevealContent delay={0.5}>
-            <div className="mt-12 space-y-6">
+            <div className="mt-10 space-y-5 md:mt-12">
               {/* Main Guarantee */}
               <div className="text-center">
                 <div className="inline-flex flex-col sm:flex-row items-center gap-4 px-6 py-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 backdrop-blur-sm">
@@ -534,160 +522,78 @@ export default function Home() {
       {/* 1 on 1 Mentorship Section */}
       <MentorshipSection />
 
-      {/* Testimonials Section - Infinite Marquee */}
-      <section id="testimonials" className="py-14 overflow-hidden">
-        <div className="container mx-auto px-4 mb-12">
-          <div className="text-center space-y-4">
-            <RevealHeading>
-              <h2 className="text-3xl md:text-5xl font-bold">
-                Trusted By Traders{" "}
-                <span className="text-gradient-champagne">Worldwide</span>
-              </h2>
-            </RevealHeading>
-            <RevealContent delay={0.2}>
-              <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto">
-                See what our community members have to say about their success
-              </p>
-            </RevealContent>
-          </div>
-        </div>
-
-        {/* Marquee Row 1 - Left to Right */}
-        <TestimonialMarquee
-          testimonials={[
-            {
-              name: "Michael C.",
-              role: "Executive Sniper Member",
-              content: "Turned $2,500 into $11,200 in my first month. The NVDA call alone was +203%. TITM alerts are the real deal.",
-              avatar: "MC"
-            },
-            {
-              name: "Sarah R.",
-              role: "Pro Sniper Member",
-              content: "Made back my entire membership cost in 2 days. Last week's TSLA play hit +156%. These guys know what they're doing.",
-              avatar: "SR"
-            },
-            {
-              name: "David P.",
-              role: "Executive Sniper Member",
-              content: "$8,400 profit this month following the trade alerts. My account has grown 180% in 6 months. Best investment I've ever made.",
-              avatar: "DP"
-            },
-            {
-              name: "Emily W.",
-              role: "Pro Sniper Member",
-              content: "Went from -$4k to +$12k in 3 months. The risk management education saved me from blowing up my account.",
-              avatar: "EW"
-            },
-            {
-              name: "James M.",
-              role: "Core Sniper Member",
-              content: "3 trades, $5,700 profit last week alone. The AMD call was +167%. This community delivers every single week.",
-              avatar: "JM"
-            },
-          ]}
-          direction="left"
-          speed={25}
-          className="mb-6"
-        />
-
-        {/* Marquee Row 2 - Right to Left */}
-        <TestimonialMarquee
-          testimonials={[
-            {
-              name: "Alex T.",
-              role: "Core Sniper Member",
-              content: "Work full-time but still caught +$3,200 last month just from mobile alerts. These trade alerts fit around any schedule.",
-              avatar: "AT"
-            },
-            {
-              name: "Lisa K.",
-              role: "Executive Sniper Member",
-              content: "$15k account to $41k in 4 months. The 1-on-1 mentorship sessions are invaluable. Worth every penny.",
-              avatar: "LK"
-            },
-            {
-              name: "Robert G.",
-              role: "Executive Sniper Member",
-              content: "Tried 5 other communities before TITM. None compare. +$22,000 in my first quarter. The speed of alerts is unmatched.",
-              avatar: "RG"
-            },
-            {
-              name: "Jennifer L.",
-              role: "Pro Sniper Member",
-              content: "Membership paid for itself in the first week with one trade. +142% on SPY calls. Now I'm up $7,800 total.",
-              avatar: "JL"
-            },
-            {
-              name: "Marcus B.",
-              role: "Core Sniper Member",
-              content: "Watch trades live, learn the strategy, bank profits. Simple. $4,200 last week following along. Life-changing.",
-              avatar: "MB"
-            },
-          ]}
-          direction="right"
-          speed={30}
-        />
-      </section>
-
       {/* Ribbon Divider */}
       <RibbonDivider />
 
       {/* Post-Purchase Instructions Section */}
-      <section className="container mx-auto px-4 py-14">
+      <section className="container mx-auto px-4 py-12 md:py-14">
         <RevealContent>
-          <div className="max-w-3xl mx-auto">
-            <Card className="glass-card-heavy border-primary/30">
-              <CardHeader className="text-center pb-8">
-                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <BarChart3 className="h-8 w-8 text-primary" />
-                </div>
-                <CardTitle className="text-3xl mb-3">What Happens After Purchase?</CardTitle>
-                <CardDescription className="text-lg leading-relaxed">
-                  Getting started is quick and easy. Here&apos;s what to expect:
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <StaggerContainer className="space-y-6" staggerDelay={0.1} initialDelay={0.2}>
-                  {[
-                    {
-                      step: "1",
-                      title: "Complete Your Purchase",
-                      description: "Click any 'Get Started' button above to be redirected to our secure LaunchPass checkout page."
-                    },
-                    {
-                      step: "2",
-                      title: "Receive Instant Access",
-                      description: "After payment, you'll immediately receive an email with your Discord invite link and login credentials."
-                    },
-                    {
-                      step: "3",
-                      title: "Join Our Discord Community",
-                      description: "Click the invite link to join our exclusive Discord server. Your role will be automatically assigned based on your plan."
-                    },
-                    {
-                      step: "4",
-                      title: "Start Trading",
-                      description: "Explore the channels, introduce yourself, and start receiving real-time trade alerts immediately!"
-                    }
-                  ].map((step, idx) => (
-                    <StaggerItem key={idx}>
-                      <div className="flex gap-4">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-wealth-emerald-dark flex items-center justify-center font-bold text-primary-foreground shrink-0">
-                          {step.step}
-                        </div>
-                        <div className="flex-1 pt-1">
-                          <h4 className="font-semibold text-lg mb-1">{step.title}</h4>
-                          <p className="text-muted-foreground leading-relaxed">{step.description}</p>
-                        </div>
-                      </div>
-                    </StaggerItem>
-                  ))}
-                </StaggerContainer>
-                <div className="pt-6 border-t border-border/40">
-                  <p className="text-sm text-muted-foreground text-center">
-                    Need help? <button onClick={() => setIsContactModalOpen(true)} className="text-primary hover:underline">Contact us</button>
-                  </p>
+          <div className="mx-auto max-w-6xl">
+            <Card className="glass-card-heavy overflow-hidden border-primary/25">
+              <CardContent className="p-0">
+                <div className="grid lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+                  <div className="border-b border-border/40 p-8 md:p-10 lg:border-b-0 lg:border-r lg:p-12">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                      <BarChart3 className="h-7 w-7 text-primary" />
+                    </div>
+                    <div className="mt-6 space-y-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary/70">
+                        Onboarding Flow
+                      </p>
+                      <h2 className="text-3xl font-semibold md:text-4xl">
+                        What Happens After Purchase?
+                      </h2>
+                      <p className="max-w-md text-base leading-relaxed text-muted-foreground md:text-lg">
+                        Getting started is quick and deliberate. Here&apos;s the path from checkout to your first session inside.
+                      </p>
+                    </div>
+                    <div className="mt-8 border-t border-border/40 pt-5">
+                      <p className="text-sm text-muted-foreground">
+                        Need help? <button onClick={() => setIsContactModalOpen(true)} className="text-primary hover:underline">Contact us</button>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-8 md:p-10 lg:p-12">
+                    <StaggerContainer className="grid gap-4 sm:grid-cols-2 md:gap-5" staggerDelay={0.1} initialDelay={0.2}>
+                      {[
+                        {
+                          step: "1",
+                          title: "Complete Your Purchase",
+                          description: "Click any 'Get Started' button above to be redirected to our secure LaunchPass checkout page."
+                        },
+                        {
+                          step: "2",
+                          title: "Receive Instant Access",
+                          description: "After payment, you'll immediately receive an email with your Discord invite link and login credentials."
+                        },
+                        {
+                          step: "3",
+                          title: "Join Our Discord Community",
+                          description: "Click the invite link to join our exclusive Discord server. Your role will be automatically assigned based on your plan."
+                        },
+                        {
+                          step: "4",
+                          title: "Start Learning Inside",
+                          description: "Explore the channels, introduce yourself, and start reviewing the day's setups and commentary."
+                        }
+                      ].map((step, idx) => (
+                        <StaggerItem key={idx}>
+                          <div className="h-full rounded-2xl border border-border/40 bg-background/20 p-5 md:p-6">
+                            <div className="flex gap-4">
+                              <div className="h-10 w-10 shrink-0 rounded-full bg-gradient-to-br from-primary to-wealth-emerald-dark flex items-center justify-center font-bold text-primary-foreground">
+                                {step.step}
+                              </div>
+                              <div className="flex-1 pt-1">
+                                <h4 className="mb-2 text-lg font-semibold">{step.title}</h4>
+                                <p className="leading-relaxed text-muted-foreground">{step.description}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </StaggerItem>
+                      ))}
+                    </StaggerContainer>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -696,63 +602,60 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="container mx-auto px-4 py-14">
+      <section className="container mx-auto px-4 py-12 md:py-14">
         <RevealContent>
-          <div className="max-w-4xl mx-auto text-center glass-card-heavy rounded-2xl border-champagne-glow p-12 md:p-16 space-y-6 relative overflow-hidden">
+          <div className="relative mx-auto max-w-5xl overflow-hidden rounded-2xl border-champagne-glow glass-card-heavy p-8 md:p-10 lg:p-12">
             {/* Background gradient accent */}
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-champagne/5 pointer-events-none" />
 
-            <div className="relative z-10">
-              <h2 className="text-3xl md:text-5xl font-bold">
-                Stop Missing{" "}
-                <span className="text-gradient-champagne">Winning Trades</span>
-              </h2>
-              <p className="text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed mt-4">
-                Every day you wait is another 100%+ trade you&apos;re missing. Get the exact entries elite traders use.
-              </p>
-
-              {/* Urgency Element */}
-              <div className="flex items-center justify-center gap-2 mt-6">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
-                </span>
-                <span className="text-sm text-red-400 font-medium">
-                  Only 7 Executive Sniper spots remaining this month
-                </span>
+            <div className="relative z-10 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-2xl text-center lg:text-left">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-champagne/70">
+                  Ready When You Are
+                </p>
+                <h2 className="mt-3 text-3xl font-bold md:text-4xl xl:text-5xl">
+                  Start Trading{" "}
+                  <span className="text-gradient-champagne">With an Edge</span>
+                </h2>
+                <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground text-pretty md:text-xl lg:mx-0">
+                  Get daily trade setups, educational commentary, and a community of serious traders.
+                  Learn the strategies that matter.
+                </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-6">
-                <Button
-                  asChild
-                  size="xl"
-                  variant="luxury-champagne"
-                  className="rounded-sm min-w-[220px]"
-                >
-                  <a href="#pricing">Choose Your Plan →</a>
-                </Button>
+              <div className="flex flex-col items-center gap-4 lg:items-end">
+                <div className="flex flex-col items-center gap-4 sm:flex-row lg:flex-col xl:flex-row">
+                  <Button
+                    asChild
+                    size="xl"
+                    variant="luxury-champagne"
+                    className="min-w-[220px] rounded-sm"
+                  >
+                    <a href="#pricing">Choose Your Plan →</a>
+                  </Button>
 
-                <>
-                  <span className="text-sm text-muted-foreground/40 font-medium">or</span>
                   <a
                     href={trialSignupUrl}
                     className={cn(
-                      "inline-flex items-center justify-center min-w-[220px]",
-                      "px-8 py-4 rounded-sm text-sm font-semibold tracking-wider uppercase",
-                      "bg-transparent border border-trial-blue text-trial-blue-light",
-                      "hover:bg-trial-blue/10 hover:shadow-[0_0_24px_rgba(59,130,246,0.2)]",
-                      "transition-all duration-300"
+                      "inline-flex min-w-[220px] items-center justify-center",
+                      "rounded-sm border border-trial-blue px-8 py-4 text-sm font-semibold tracking-wider uppercase",
+                      "bg-transparent text-trial-blue-light",
+                      "transition-all duration-300 hover:bg-trial-blue/10 hover:shadow-[0_0_24px_rgba(59,130,246,0.2)]"
                     )}
                     onClick={() => Analytics.trackCTAClick("Final CTA Trial Button")}
                   >
                     Try 7 Days for $49.99 →
                   </a>
-                </>
-              </div>
+                </div>
 
-              <p className="text-xs text-muted-foreground/60 mt-4">
-                All sales final. No refund obligation.
-              </p>
+                <p className="max-w-md text-center text-xs text-muted-foreground/60 lg:text-right">
+                  All sales are final per our{" "}
+                  <Link href="/refund-policy" className="underline hover:text-champagne/60">
+                    Refund Policy
+                  </Link>.
+                  {" "}Trading involves substantial risk of loss. Content is for educational purposes only.
+                </p>
+              </div>
             </div>
           </div>
         </RevealContent>
@@ -784,9 +687,14 @@ export default function Home() {
               <button onClick={() => setIsContactModalOpen(true)} className="hover:text-champagne transition-colors duration-300">Contact</button>
             </div>
           </div>
-          <div className="mt-6 text-center text-xs text-muted-foreground">
+          <div className="mt-6 text-center text-xs text-muted-foreground space-y-1 max-w-3xl mx-auto">
             <p>
-              Trading involves risk. Past performance does not guarantee future results. Always trade responsibly.
+              Trading options and other financial instruments involves substantial risk of loss and is not suitable for all investors.
+              You could lose some or all of your invested capital. Past performance does not guarantee future results.
+            </p>
+            <p>
+              Trade In The Money provides educational content only and is not a registered investment advisor.
+              Nothing on this site constitutes personalized investment advice. Consult a licensed financial advisor before making investment decisions.
             </p>
           </div>
         </div>

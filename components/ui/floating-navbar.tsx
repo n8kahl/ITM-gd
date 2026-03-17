@@ -40,7 +40,7 @@ export function FloatingNavbar() {
   const navLinks = [
     { href: "#features", label: "Features" },
     { href: "#pricing", label: "Pricing" },
-    { href: "#testimonials", label: "Reviews" },
+    { href: "#cohort", label: "Cohort" },
   ];
 
   return (

@@ -64,6 +64,8 @@ export function ChatWidget() {
   const [isEscalated, setIsEscalated] = useState(false)
   const [teamTyping, setTeamTyping] = useState<string | null>(null)
   const [chatVisible, setChatVisible] = useState(true) // Chat visibility setting
+  const [isMobile, setIsMobile] = useState(false)
+  const [scrollY, setScrollY] = useState(0)
   const [visitorId] = useState(() => {
     // Generate or retrieve visitor ID from localStorage
     if (typeof window !== 'undefined') {
@@ -265,6 +267,22 @@ export function ChatWidget() {
     return () => window.removeEventListener('open-chat-widget', handleOpen)
   }, [])
 
+  useEffect(() => {
+    const updateViewportState = () => {
+      setIsMobile(window.innerWidth < 768)
+      setScrollY(window.scrollY)
+    }
+
+    updateViewportState()
+    window.addEventListener('resize', updateViewportState)
+    window.addEventListener('scroll', updateViewportState, { passive: true })
+
+    return () => {
+      window.removeEventListener('resize', updateViewportState)
+      window.removeEventListener('scroll', updateViewportState)
+    }
+  }, [])
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -348,11 +366,13 @@ export function ChatWidget() {
     return null
   }
 
+  const shouldHideLauncher = isMobile && scrollY > 600
+
   return (
     <>
       {/* Minimized Widget - Bottom Right */}
       <AnimatePresence>
-        {!isOpen && (
+        {!isOpen && !shouldHideLauncher && (
           <motion.button
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
