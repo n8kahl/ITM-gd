@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef } from 'react'
+import { MoneyMakerWorkspaceResponse } from '@/lib/money-maker/types'
 import { useMoneyMaker } from '@/components/money-maker/money-maker-provider'
 import { useMemberSession } from '@/contexts/MemberAuthContext'
 
@@ -30,40 +31,53 @@ export function useMoneyMakerWorkspace() {
         setWorkspaceError,
         setIsWorkspaceLoading,
     } = useMoneyMaker()
-    const requestRef = useRef<Promise<void> | null>(null)
+    const activeRequestRef = useRef<{ id: number; controller: AbortController } | null>(null)
+    const requestSequenceRef = useRef(0)
 
     const loadWorkspace = useCallback(async (symbol: string) => {
         if (!session?.access_token || !symbol) return
-        if (requestRef.current) {
-            return requestRef.current
+        const requestId = requestSequenceRef.current + 1
+        requestSequenceRef.current = requestId
+
+        activeRequestRef.current?.controller.abort()
+        const controller = new AbortController()
+        activeRequestRef.current = {
+            id: requestId,
+            controller,
         }
 
-        const requestPromise = (async () => {
-            setIsWorkspaceLoading(true)
-            setWorkspaceError(null)
+        setIsWorkspaceLoading(true)
+        setWorkspaceError(null)
 
-            try {
-                const response = await fetch(`${WORKSPACE_ENDPOINT}?symbol=${encodeURIComponent(symbol)}`, {
-                    headers: { Authorization: `Bearer ${session.access_token}` },
-                    cache: 'no-store',
-                })
+        try {
+            const response = await fetch(`${WORKSPACE_ENDPOINT}?symbol=${encodeURIComponent(symbol)}`, {
+                headers: { Authorization: `Bearer ${session.access_token}` },
+                cache: 'no-store',
+                signal: controller.signal,
+            })
 
-                if (!response.ok) {
-                    throw new Error(await readErrorMessage(response, 'Failed to load Money Maker workspace'))
-                }
-
-                const payload = await response.json()
-                setWorkspace(payload)
-            } catch (error: any) {
-                setWorkspaceError(error?.message || 'Failed to load Money Maker workspace')
-            } finally {
-                setIsWorkspaceLoading(false)
-                requestRef.current = null
+            if (!response.ok) {
+                throw new Error(await readErrorMessage(response, 'Failed to load Money Maker workspace'))
             }
-        })()
 
-        requestRef.current = requestPromise
-        return requestPromise
+            const payload = await response.json() as MoneyMakerWorkspaceResponse
+            if (activeRequestRef.current?.id !== requestId) {
+                return
+            }
+
+            setWorkspace(payload)
+        } catch (error: any) {
+            if (controller.signal.aborted || activeRequestRef.current?.id !== requestId) {
+                return
+            }
+
+            setWorkspaceError(error?.message || 'Failed to load Money Maker workspace')
+        } finally {
+            if (activeRequestRef.current?.id === requestId) {
+                setIsWorkspaceLoading(false)
+                activeRequestRef.current = null
+            }
+        }
     }, [session?.access_token, setIsWorkspaceLoading, setWorkspace, setWorkspaceError])
 
     useEffect(() => {
@@ -72,7 +86,7 @@ export function useMoneyMakerWorkspace() {
         }
 
         const currentSymbol = state.workspace?.symbolSnapshot.symbol
-        if (currentSymbol === state.workspaceSymbol && !state.workspaceError) {
+        if (state.workspace && currentSymbol === state.workspaceSymbol && !state.workspaceError) {
             return
         }
 
@@ -85,6 +99,22 @@ export function useMoneyMakerWorkspace() {
         state.workspaceError,
         state.workspaceSymbol,
     ])
+
+    useEffect(() => {
+        if (state.isWorkspaceOpen) {
+            return
+        }
+
+        activeRequestRef.current?.controller.abort()
+        activeRequestRef.current = null
+    }, [state.isWorkspaceOpen])
+
+    useEffect(() => {
+        return () => {
+            activeRequestRef.current?.controller.abort()
+            activeRequestRef.current = null
+        }
+    }, [])
 
     return {
         refreshWorkspace: () => state.workspaceSymbol ? loadWorkspace(state.workspaceSymbol) : Promise.resolve(),
