@@ -86,6 +86,7 @@ import {
 import { mergeRealtimePriceIntoBars } from './chart-realtime'
 import { InfoTip } from '@/components/ui/info-tip'
 import { setActiveChartSymbol } from '@/lib/ai-coach-chart-context'
+import { loadSpxTickerSnapshot } from '@/lib/ai-coach-spx-ticker'
 
 // ============================================
 // TYPES
@@ -1996,30 +1997,13 @@ function WelcomeView({
     }))
 
     try {
-      let chartData = await getChartData('SPX', '1m', accessToken)
-      if (chartData.bars.length === 0) {
-        chartData = await getChartData('SPX', '1D', accessToken)
-      }
-
-      if (chartData.bars.length === 0) {
-        throw new Error('No bars returned')
-      }
-
-      const last = chartData.bars[chartData.bars.length - 1]
-      const previous = chartData.bars.length > 1 ? chartData.bars[chartData.bars.length - 2] : null
-      const change = previous ? last.close - previous.close : 0
-      const changePct = previous && previous.close !== 0 ? (change / previous.close) * 100 : null
-      const timestampMs = last.time > 1_000_000_000_000 ? last.time : last.time * 1000
+      const snapshot = await loadSpxTickerSnapshot(accessToken)
 
       setSpxTicker({
-        price: Number(last.close.toFixed(2)),
-        change: Number(change.toFixed(2)),
-        changePct: changePct !== null ? Number(changePct.toFixed(2)) : null,
-        asOf: new Date(timestampMs).toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'America/New_York',
-        }),
+        price: snapshot.price,
+        change: snapshot.change,
+        changePct: snapshot.changePct,
+        asOf: snapshot.asOf,
         isLoading: false,
         error: null,
       })

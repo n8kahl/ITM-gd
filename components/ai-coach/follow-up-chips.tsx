@@ -14,6 +14,7 @@ type FollowUpChip = {
 const SYMBOL_PATTERN = /\b[A-Z]{2,5}\b/g
 const SYMBOL_BLACKLIST = new Set([
   'THE', 'WITH', 'FROM', 'THIS', 'THAT', 'YOUR', 'WHAT', 'WHEN', 'OPEN', 'CLOSE', 'RISK', 'PLAN',
+  'HERE', 'THERE', 'THESE', 'THOSE',
 ])
 
 function extractPrimarySymbol(
@@ -42,7 +43,7 @@ function extractPrimarySymbol(
   return firstSymbol || getActiveChartSymbol('SPX')
 }
 
-function buildFollowUps(
+export function buildFollowUps(
   content: string,
   functionCalls?: ChatMessageResponse['functionCalls'],
 ): FollowUpChip[] {
