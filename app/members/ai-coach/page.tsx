@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { useAICoachChat } from '@/hooks/use-ai-coach-chat'
+import { useAICoachChat, type AICoachSendMessageOptions } from '@/hooks/use-ai-coach-chat'
 import { ChatMessageBubble, TypingIndicator } from '@/components/ai-coach/chat-message'
 import { ChatImageUpload, ChatDropOverlay } from '@/components/ai-coach/chat-image-upload'
 import { CenterPanel, type ChartRequest, type CenterView } from '@/components/ai-coach/center-panel'
@@ -29,7 +29,6 @@ import { useMemberAccess, useMemberSession } from '@/contexts/MemberAuthContext'
 import { AICoachWorkflowProvider } from '@/contexts/AICoachWorkflowContext'
 import {
   analyzeScreenshot as apiAnalyzeScreenshot,
-  getChartData,
   type ExtractedPosition,
   type ScreenshotActionId,
   type ScreenshotSuggestedAction,
@@ -41,6 +40,7 @@ import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
 import { Analytics } from '@/lib/analytics'
 import { getActiveChartSymbol, subscribeActiveChartSymbol } from '@/lib/ai-coach-chart-context'
+import { loadSpxTickerSnapshot } from '@/lib/ai-coach-spx-ticker'
 
 type PlaceholderBucket = 'pre_market' | 'session' | 'after_hours' | 'closed'
 type LearnerLevel = 'beginner' | 'intermediate' | 'advanced'
@@ -653,7 +653,11 @@ interface ChatAreaProps {
   isLoadingMessages: boolean
   error: string | null
   rateLimitInfo: { queryCount?: number; queryLimit?: number; resetDate?: string } | null
-  onSendMessage: (text: string, imagePayload?: { image: string; imageMimeType: string }) => void
+  onSendMessage: (
+    text: string,
+    imagePayload?: { image: string; imageMimeType: string },
+    options?: AICoachSendMessageOptions,
+  ) => Promise<void> | void
   onNewSession: () => void
   onSelectSession: (id: string) => void
   onDeleteSession: (id: string) => void
@@ -779,24 +783,12 @@ function ChatArea({
     headerTickerAbortRef.current = controller
 
     try {
-      let data = await getChartData('SPX', '1m', session.access_token, controller.signal)
-      if (data.bars.length < 2) {
-        data = await getChartData('SPX', '1D', session.access_token, controller.signal)
-      }
-
-      if (data.bars.length === 0) {
-        throw new Error('No SPX bars available')
-      }
-
-      const last = data.bars[data.bars.length - 1]
-      const previous = data.bars.length > 1 ? data.bars[data.bars.length - 2] : null
-      const change = previous ? last.close - previous.close : 0
-      const changePct = previous && previous.close !== 0 ? (change / previous.close) * 100 : null
+      const snapshot = await loadSpxTickerSnapshot(session.access_token, controller.signal)
 
       setSpxHeaderTicker({
-        price: Number(last.close.toFixed(2)),
-        change: Number(change.toFixed(2)),
-        changePct: changePct != null ? Number(changePct.toFixed(2)) : null,
+        price: snapshot.price,
+        change: snapshot.change,
+        changePct: snapshot.changePct,
         isLoading: false,
         error: null,
       })
@@ -932,7 +924,11 @@ function ChatArea({
 
     // Send the image directly to the chat LLM so it can see and discuss it
     setIsAnalyzingImage(false)
-    onSendMessage(msg, { image: staged.base64, imageMimeType: staged.mimeType })
+    onSendMessage(
+      msg,
+      { image: staged.base64, imageMimeType: staged.mimeType },
+      { initialStreamStatus: 'Analyzing screenshot...' },
+    )
   }
 
   const handleCsvAnalysis = async (userMessage: string) => {

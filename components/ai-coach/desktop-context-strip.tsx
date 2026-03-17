@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getChartData } from '@/lib/api/ai-coach'
+import { loadSpxTickerSnapshot } from '@/lib/ai-coach-spx-ticker'
 
 interface DesktopContextStripProps {
   accessToken?: string
@@ -64,23 +64,11 @@ export function DesktopContextStrip({ accessToken, onSendPrompt }: DesktopContex
   const loadSPX = useCallback(async () => {
     if (!accessToken) return
     try {
-      let data = await getChartData('SPX', '1m', accessToken)
-      if (data.bars.length < 2) {
-        data = await getChartData('SPX', '1D', accessToken)
-      }
-      if (data.bars.length === 0) {
-        throw new Error('No bars')
-      }
-      const last = data.bars[data.bars.length - 1]
-      const previous = data.bars.length > 1 ? data.bars[data.bars.length - 2] : null
-      const change = previous ? last.close - previous.close : 0
-      const changePct = previous && previous.close !== 0
-        ? (change / previous.close) * 100
-        : null
+      const snapshot = await loadSpxTickerSnapshot(accessToken)
       setSpx({
-        price: Number(last.close.toFixed(2)),
-        change: Number(change.toFixed(2)),
-        changePct: changePct == null ? null : Number(changePct.toFixed(2)),
+        price: snapshot.price,
+        change: snapshot.change,
+        changePct: snapshot.changePct,
         isLoading: false,
       })
     } catch {

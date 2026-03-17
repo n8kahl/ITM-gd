@@ -25,9 +25,11 @@ import {
   buildIntentRoutingDirective,
   buildIntentRoutingPlan,
   evaluateResponseContract,
+  sanitizeToolArgumentsForRoutingPlan,
   shouldAttemptContractRewrite,
 } from './intentRouter';
 import { backfillRequiredFunctionCalls } from './requiredBackfill';
+import { extractPromptContextSymbols } from './symbolExtraction';
 
 /**
  * Streaming Chat Service
@@ -80,10 +82,6 @@ const MAX_FUNCTION_CALL_ITERATIONS_CAP = 8;
 const MAX_OPENAI_RATE_LIMIT_RETRIES = 3;
 const MIN_RATE_LIMIT_RETRY_MS = 1200;
 
-interface StreamHistoryMessage {
-  content: string;
-}
-
 function sendSSE(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
@@ -99,38 +97,6 @@ function summarizeFunctionResult(result: unknown): string {
     return `Returned fields: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', ...' : ''}.`;
   }
   return 'Tool execution completed.';
-}
-
-function normalizeSymbolCandidate(value: string | null | undefined): string | null {
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim().toUpperCase();
-  if (!/^[A-Z0-9._:-]{1,10}$/.test(normalized)) return null;
-  return normalized;
-}
-
-function extractSymbolsFromHistory(
-  history: StreamHistoryMessage[],
-  latestMessage: string,
-  activeChartSymbol?: string,
-): string[] {
-  const combined = [
-    ...history.slice(-5).map((message) => message.content || ''),
-    latestMessage,
-  ].join(' ');
-
-  const matches = combined.match(/\b\$?[A-Za-z]{1,6}\b/g) || [];
-  const stopwords = new Set([
-    'THE', 'AND', 'FOR', 'WITH', 'THIS', 'THAT', 'YOUR', 'WHAT', 'WHEN', 'HOW', 'MARKET', 'PRICE',
-    'LEVEL', 'LEVELS', 'PLAN', 'SETUP', 'RISK', 'OPEN', 'CLOSE', 'TODAY', 'WEEK', 'MONTH',
-  ]);
-
-  const normalized = matches
-    .map((raw) => raw.replace(/^\$/, '').toUpperCase())
-    .filter((symbol) => symbol.length >= 1 && symbol.length <= 6)
-    .filter((symbol) => !stopwords.has(symbol));
-
-  const contextSymbol = normalizeSymbolCandidate(activeChartSymbol);
-  return [...new Set([...(contextSymbol ? [contextSymbol] : []), ...normalized])].slice(0, 10);
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -330,7 +296,7 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
 
     // Get conversation history
     const history = await getConversationHistory(sessionId);
-    const recentSymbols = extractSymbolsFromHistory(history, sanitizedMessage, context?.activeChartSymbol);
+    const recentSymbols = extractPromptContextSymbols(history, sanitizedMessage, context?.activeChartSymbol);
 
     const systemPrompt = await buildSystemPromptForUser(userId, {
       isMobile: context?.isMobile,
@@ -395,13 +361,25 @@ export async function streamChatMessage(request: StreamRequest, res: Response): 
         sendSSE(res, 'status', { phase: 'thinking', resetContent: true });
       }
 
+      const sanitizedToolCalls = streamed.toolCalls.map((toolCall) => {
+        const parsedArgs = JSON.parse(toolCall.function.arguments || '{}') as Record<string, unknown>;
+        const sanitizedArgs = sanitizeToolArgumentsForRoutingPlan(toolCall.function.name, parsedArgs, routingPlan);
+        return {
+          ...toolCall,
+          function: {
+            ...toolCall.function,
+            arguments: JSON.stringify(sanitizedArgs),
+          },
+        };
+      });
+
       messages.push({
         role: 'assistant',
         content: streamed.content || '',
-        tool_calls: streamed.toolCalls as any,
+        tool_calls: sanitizedToolCalls as any,
       });
 
-      for (const toolCall of streamed.toolCalls) {
+      for (const toolCall of sanitizedToolCalls) {
         const functionName = toolCall.function.name;
         sendSSE(res, 'status', { phase: 'calling', function: functionName });
 
