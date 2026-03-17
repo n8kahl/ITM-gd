@@ -55,19 +55,25 @@ export default function TermsOfService() {
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold text-ivory mb-3">2. NOT FINANCIAL ADVICE</h2>
+                <h2 className="text-xl font-semibold text-ivory mb-3">2. EDUCATIONAL CONTENT - NOT INVESTMENT ADVICE</h2>
                 <p className="font-semibold text-amber-400">
-                  THE CONTENT PROVIDED BY TRADE IN THE MONEY IS FOR EDUCATIONAL AND INFORMATIONAL PURPOSES ONLY.
+                  ALL CONTENT PROVIDED BY TRADE IN THE MONEY IS FOR EDUCATIONAL AND INFORMATIONAL PURPOSES ONLY.
                 </p>
                 <p className="mt-3">
-                  We are NOT registered investment advisors, broker-dealers, or financial planners. Our trading signals, analysis, educational content, and any other information provided:
+                  Trade In The Money is an educational platform. We are NOT registered investment advisors, broker-dealers, or financial planners.
+                  No content, commentary, trade setup discussion, or market analysis provided through our service constitutes:
                 </p>
-                <p className="mt-2">- Do NOT constitute personalized investment advice</p>
-                <p>- Do NOT constitute recommendations to buy, sell, or hold any securities</p>
-                <p>- Should NOT be the sole basis for any investment decisions</p>
-                <p>- Are NOT tailored to your individual financial situation, objectives, or risk tolerance</p>
+                <p className="mt-2">- Personalized investment advice tailored to your financial situation</p>
+                <p>- A recommendation or solicitation to buy, sell, or hold any security</p>
+                <p>- A guarantee or promise of any specific financial outcome</p>
+                <p>- Professional financial planning, tax, or legal advice</p>
+                <p className="mt-3">
+                  All trade setups, market commentary, and educational content shared through our Discord channels, website, or any other medium are presented as educational analysis.
+                  They are not instructions to execute trades.
+                </p>
                 <p className="mt-3">
                   You acknowledge that you are solely responsible for your own investment decisions and that you should consult with a licensed financial advisor before making any investment decisions.
+                  Past performance of any strategy or educational content does not guarantee future results.
                 </p>
               </section>
 

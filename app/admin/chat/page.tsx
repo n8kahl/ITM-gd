@@ -69,14 +69,16 @@ const DEFAULT_CANNED_RESPONSES: CannedResponse[] = [
 All sales are final. Refunds are not required under our Refund Policy.`
   },
   {
-    label: 'Win Rate Stats',
+    label: 'Trade Alert Details',
     shortcut: '/stats',
-    text: `Our verified performance:
+    text: `Our educational trade alerts typically include:
 
-• 87% win rate over 8+ years
-• Target 100%+ returns per trade
+• Structured setups with entries, invalidation levels, and take-profit planning
 • 1-3 alerts daily during market hours (9:30am-4pm ET)
-• Exact entries, stop losses, and take profits on every alert`
+• Exact entries, stop losses, and take profits when a setup is published
+• Educational commentary and market context around the setup
+
+Trading involves substantial risk of loss. Past performance does not guarantee future results.`
   },
   {
     label: 'How to Join',

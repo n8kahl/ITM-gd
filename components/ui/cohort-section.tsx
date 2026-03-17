@@ -28,7 +28,7 @@ const pillars = [
   {
     icon: TrendingUp,
     title: "Portfolio Engineering",
-    description: "Develop a complete portfolio strategy tailored to your capital and goals",
+    description: "Develop a portfolio framework built around disciplined allocation and risk management",
   },
   {
     icon: Brain,
@@ -58,7 +58,7 @@ export function CohortSection({ }: CohortSectionProps = {}) {
   };
 
   return (
-    <section id="cohort" className="container mx-auto px-4 py-16">
+    <section id="cohort" className="container mx-auto px-4 py-12 md:py-14">
       <motion.div
         ref={sectionRef}
         onMouseMove={handleMouseMove}
@@ -97,25 +97,25 @@ export function CohortSection({ }: CohortSectionProps = {}) {
         <div className="absolute -top-20 -left-20 w-60 h-60 bg-primary/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-champagne/10 rounded-full blur-[100px] pointer-events-none" />
 
-        <div className="relative z-10 p-8 md:p-12 lg:p-16">
+        <div className="relative z-10 p-6 md:p-8 lg:p-10 xl:p-12">
           {/* Two-column layout */}
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-10 xl:gap-12">
 
             {/* Left Column - Header + Price */}
-            <div className="space-y-6">
+            <div className="space-y-5 lg:space-y-6">
               {/* Badge */}
               <RevealContent>
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-champagne/30 bg-champagne/5">
                   <Users className="w-4 h-4 text-champagne" />
                   <span className="text-xs font-semibold uppercase tracking-wider text-champagne">
-                    Limited to 20 Traders
+                    Small Group Mentorship
                   </span>
                 </div>
               </RevealContent>
 
               {/* Title */}
               <RevealHeading>
-                <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-semibold">
+                <h2 className="text-3xl md:text-4xl xl:text-[3.25rem] font-serif font-semibold leading-tight">
                   <span className="text-ivory">Precision</span>{" "}
                   <span className="text-gradient-champagne">Cohort</span>
                 </h2>
@@ -123,98 +123,106 @@ export function CohortSection({ }: CohortSectionProps = {}) {
 
               {/* Subtitle */}
               <RevealContent delay={0.1}>
-                <p className="text-lg text-ivory/70 leading-relaxed max-w-md">
-                  The Next Cohort is starting soon! Our exclusive 90 day mentorship program for traders ready to
+                <p className="max-w-lg text-base leading-relaxed text-ivory/70 md:text-lg">
+                  Our 90 day mentorship program is built for traders ready to
                   <span className="text-champagne"> develop their own edge</span>.
                 </p>
               </RevealContent>
 
-              {/* Price Display */}
+              {/* Price Panel */}
               <RevealContent delay={0.2}>
-                <div className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-5xl md:text-6xl font-serif font-bold text-champagne">
-                      $1,500
-                    </span>
-                    <span className="text-lg text-ivory/60">/90 days</span>
-                  </div>
-                  <p className="text-sm text-ivory/50 italic">
-                    Mentorship, not Signals
-                  </p>
-                </div>
-              </RevealContent>
+                <div className="max-w-md rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 md:p-6">
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-5xl md:text-6xl font-serif font-bold text-champagne">
+                          $1,500
+                        </span>
+                        <span className="text-lg text-ivory/60">/90 days</span>
+                      </div>
+                      <p className="text-sm text-ivory/50 italic">
+                        Mentorship, not Signals
+                      </p>
+                    </div>
 
-              {/* CTA Button */}
-              <RevealContent delay={0.3}>
-                <motion.div
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="inline-block"
-                >
-                  <motion.div
-                    animate={{
-                      boxShadow: [
-                        "0 0 20px rgba(232, 228, 217, 0.2)",
-                        "0 0 40px rgba(232, 228, 217, 0.35)",
-                        "0 0 20px rgba(232, 228, 217, 0.2)",
-                      ],
-                    }}
-                    transition={{
-                      duration: 2.5,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                    className="rounded-sm"
-                  >
-                    <Button
-                      onClick={handleApplyClick}
-                      variant="luxury-champagne"
-                      size="xl"
-                      className="rounded-sm min-w-[200px]"
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="inline-block"
                     >
-                      Join Today
-                    </Button>
-                  </motion.div>
-                </motion.div>
-              </RevealContent>
+                      <motion.div
+                        animate={{
+                          boxShadow: [
+                            "0 0 20px rgba(232, 228, 217, 0.2)",
+                            "0 0 40px rgba(232, 228, 217, 0.35)",
+                            "0 0 20px rgba(232, 228, 217, 0.2)",
+                          ],
+                        }}
+                        transition={{
+                          duration: 2.5,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        }}
+                        className="rounded-sm"
+                      >
+                        <Button
+                          onClick={handleApplyClick}
+                          variant="luxury-champagne"
+                          size="xl"
+                          className="min-w-[200px] rounded-sm"
+                        >
+                          Join Today
+                        </Button>
+                      </motion.div>
+                    </motion.div>
 
-              {/* Scarcity indicator */}
-              <RevealContent delay={0.4}>
-                <div className="flex items-center gap-2 text-sm text-red-400">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
-                  </span>
-                  <span>Only 20 seats per cohort - Applications reviewed personally</span>
+                    <p className="text-sm leading-relaxed text-ivory/50">
+                      Cohort sizes are kept small to support focused mentorship and direct feedback.
+                    </p>
+                  </div>
                 </div>
               </RevealContent>
             </div>
 
             {/* Right Column - 4 Pillars */}
-            <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 gap-6" staggerDelay={0.1}>
-              {pillars.map((pillar) => (
-                <StaggerItem key={pillar.title}>
-                  <motion.div
-                    className={cn(
-                      "p-6 rounded-xl h-full",
-                      "bg-[rgba(10,10,11,0.5)] border border-white/[0.06]",
-                      "hover:border-champagne/20 transition-all duration-500"
-                    )}
-                    whileHover={{ y: -4 }}
-                  >
-                    <div className="w-12 h-12 rounded-lg flex items-center justify-center mb-4 bg-gradient-to-br from-champagne/10 to-primary/10 border border-champagne/20">
-                      <pillar.icon className="w-6 h-6 text-champagne" strokeWidth={1.5} />
-                    </div>
-                    <h3 className="text-lg font-semibold text-ivory mb-2">
-                      {pillar.title}
-                    </h3>
-                    <p className="text-sm text-ivory/60 leading-relaxed">
-                      {pillar.description}
+            <div className="space-y-4">
+              <RevealContent delay={0.15}>
+                <div className="flex items-center justify-between gap-4 px-1">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-champagne/70">
+                      What Defines The Cohort
                     </p>
-                  </motion.div>
-                </StaggerItem>
-              ))}
-            </StaggerContainer>
+                    <p className="mt-2 max-w-xl text-sm leading-relaxed text-ivory/55">
+                      Structured coaching across live sessions, trade construction, portfolio risk, and trader psychology.
+                    </p>
+                  </div>
+                </div>
+              </RevealContent>
+
+              <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5" staggerDelay={0.1}>
+                {pillars.map((pillar) => (
+                  <StaggerItem key={pillar.title}>
+                    <motion.div
+                      className={cn(
+                        "h-full rounded-xl border border-white/[0.06] bg-[rgba(10,10,11,0.5)] p-5 md:p-6",
+                        "transition-all duration-500 hover:border-champagne/20"
+                      )}
+                      whileHover={{ y: -4 }}
+                    >
+                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-champagne/20 bg-gradient-to-br from-champagne/10 to-primary/10">
+                        <pillar.icon className="h-6 w-6 text-champagne" strokeWidth={1.5} />
+                      </div>
+                      <h3 className="mb-2 text-lg font-semibold text-ivory">
+                        {pillar.title}
+                      </h3>
+                      <p className="text-sm leading-relaxed text-ivory/60">
+                        {pillar.description}
+                      </p>
+                    </motion.div>
+                  </StaggerItem>
+                ))}
+              </StaggerContainer>
+            </div>
           </div>
         </div>
 

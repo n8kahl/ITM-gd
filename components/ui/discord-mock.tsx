@@ -19,7 +19,7 @@ const messages: DiscordMessage[] = [
     type: "bot",
     username: "ITM Alerts",
     avatar: "🤖",
-    content: "🚨 TRADE ALERT: buy NVDA 1000C @ 2.50",
+    content: "🗓️ MORNING PLAN: Watching SPX, NVDA, and QQQ around key levels and liquidity zones.",
     timestamp: "Today at 9:32 AM",
     highlight: true,
   },
@@ -28,7 +28,7 @@ const messages: DiscordMessage[] = [
     type: "user",
     username: "TraderMike",
     avatar: "TM",
-    content: "In! 🔥",
+    content: "Noting the 9:45 liquidity sweep on SPX before any entry.",
     timestamp: "Today at 9:32 AM",
   },
   {
@@ -36,7 +36,7 @@ const messages: DiscordMessage[] = [
     type: "user",
     username: "StockQueen",
     avatar: "SQ",
-    content: "Got 5 contracts! Let's go",
+    content: "Watching how NVDA reacts at yesterday's high first.",
     timestamp: "Today at 9:33 AM",
   },
   {
@@ -44,7 +44,7 @@ const messages: DiscordMessage[] = [
     type: "bot",
     username: "ITM Alerts",
     avatar: "🤖",
-    content: "✅ TARGET HIT: NVDA now 3.20 (+28%) 💰",
+    content: "📍 SETUP UPDATE: Confirmation came in. Entry, invalidation, and take-profit plan posted in thread.",
     timestamp: "Today at 10:45 AM",
     highlight: true,
   },
@@ -53,7 +53,7 @@ const messages: DiscordMessage[] = [
     type: "user",
     username: "TraderMike",
     avatar: "TM",
-    content: "Just printed $500 thanks! 🎉",
+    content: "The reasoning on entry vs invalidation helped a lot.",
     timestamp: "Today at 10:46 AM",
   },
 ];
@@ -82,7 +82,7 @@ export function DiscordMock({ className }: DiscordMockProps) {
         <span className="text-[#8e9297] text-sm font-medium">#</span>
         <span className="text-white text-sm font-semibold flex items-center gap-1.5">
           <span>🚀</span>
-          <span>winning-trades</span>
+          <span>market-lab</span>
         </span>
         <div className="ml-auto flex items-center gap-1">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -168,7 +168,7 @@ export function DiscordMock({ className }: DiscordMockProps) {
           className="rounded px-3 py-1.5 text-[#72767d] text-[10px]"
           style={{ backgroundColor: "#40444b" }}
         >
-          Message #winning-trades
+          Message #market-lab
         </div>
       </div>
     </div>
