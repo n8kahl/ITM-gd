@@ -2,7 +2,7 @@ import { massiveClient } from '../../config/massive'
 
 export interface SymbolDataFetcherOptions {
     symbol: string
-    timeframe: '1Min' | '5Min' | '10Min' | '1H' | '1D'
+    timeframe: '1Min' | '2Min' | '5Min' | '10Min' | '1H' | '1D'
     limit?: number
 }
 
@@ -24,6 +24,7 @@ export async function fetchSymbolBars(options: SymbolDataFetcherOptions): Promis
 
         switch (timeframe) {
             case '1Min': multiplier = 1; timespan = 'minute'; break;
+            case '2Min': multiplier = 2; timespan = 'minute'; break;
             case '5Min': multiplier = 5; timespan = 'minute'; break;
             case '10Min': multiplier = 10; timespan = 'minute'; break;
             case '1H': multiplier = 1; timespan = 'hour'; break;
@@ -88,7 +89,7 @@ export async function fetchSymbolBars(options: SymbolDataFetcherOptions): Promis
  */
 export async function fetchAllSymbolData(symbols: string[]) {
     // We need 5-min, 10-min, 1-hour, and 1-day (for previous day range) for the strategy engine.
-    const timeframes: SymbolDataFetcherOptions['timeframe'][] = ['5Min', '10Min', '1H', '1D']
+    const timeframes: SymbolDataFetcherOptions['timeframe'][] = ['2Min', '5Min', '10Min', '1H', '1D']
 
     const results: Record<string, Record<string, any[]>> = {}
 

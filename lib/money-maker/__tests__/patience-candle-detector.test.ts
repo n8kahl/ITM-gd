@@ -40,6 +40,24 @@ describe('detectPatienceCandle - Bullish (Long)', () => {
         expect(result.dominantWickRatio).toBeCloseTo(0.777, 2)
     })
 
+    test('accepts a candle whose low lands inside a confluence zone range', () => {
+        const candle: CandleBar = {
+            timestamp: 6,
+            open: 100.80,
+            close: 100.90,
+            low: 100.18,
+            high: 101.00,
+            volume: 1200
+        }
+
+        const result = detectPatienceCandle(candle, 'long', recentCandles, {
+            priceLow: 100.00,
+            priceHigh: 100.20,
+        })
+
+        expect(result.isPatienceCandle).toBe(true)
+    })
+
     test('valid bullish hammer (red body)', () => {
         const candle: CandleBar = {
             timestamp: 6,
@@ -161,6 +179,24 @@ describe('detectPatienceCandle - Bearish (Short)', () => {
         const result = detectPatienceCandle(candle, 'short', recentCandles, baseLevel)
         expect(result.isPatienceCandle).toBe(true)
         expect(result.pattern).toBe('inverted_hammer')
+    })
+
+    test('accepts a candle whose high lands inside a resistance zone range', () => {
+        const candle: CandleBar = {
+            timestamp: 6,
+            open: 199.10,
+            close: 199.20,
+            low: 199.00,
+            high: 199.88,
+            volume: 1200
+        }
+
+        const result = detectPatienceCandle(candle, 'short', recentCandles, {
+            priceLow: 199.70,
+            priceHigh: 200.00,
+        })
+
+        expect(result.isPatienceCandle).toBe(true)
     })
 
     test('fails if not at key level', () => {

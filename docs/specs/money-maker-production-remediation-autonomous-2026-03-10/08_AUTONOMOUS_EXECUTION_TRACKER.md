@@ -12,7 +12,7 @@ Update this tracker at the end of each implementation session.
 |---|---|---|---|---|---|---|
 | 0 | Baseline Lock And Failure Inventory | P0 | Done | Eng | 2026-03-10 | None |
 | 1 | Security Boundary Restoration | P0 | Done | Eng | 2026-03-10 | None |
-| 2 | Engine Correctness Restoration | P0 | In Progress | Eng | 2026-03-10 | Remaining phase-level fixture expansion beyond the baseline harness |
+| 2 | Engine Correctness Restoration | P0 | Done | Eng | 2026-03-16 | None |
 | 3 | Polling And UI Hardening | P1 | Done | Eng | 2026-03-10 | None |
 | 4 | End-To-End And Deployment Hardening | P0 | In Progress | Eng | 2026-03-10 | Deployed-environment smoke evidence still pending |
 | 5 | Release, Runbook, And Rollout Closeout | P0 | Planned | Eng | 2026-03-10 | Depends on Phase 4 |
@@ -47,6 +47,11 @@ Update this tracker at the end of each implementation session.
 - Goal: Correct ORB, open price, hourly target selection, and Fibonacci wiring.
 - Target outcome:
   - engine outputs conform to the strategy spec in fixtures
+
+### P2-S2
+- Goal: Harden the live detector so it uses real confluence zones, completed-bar scanning, and derived strategy-context inputs instead of placeholders.
+- Target outcome:
+  - live routing covers Advanced VWAP, EMA bounce, fib, cloud, and hourly-trend gating with deterministic tests
 
 ### P3-S1
 - Goal: Remove overlapping polling races and preserve last known good UI state.
@@ -193,5 +198,53 @@ Update this tracker at the end of each implementation session.
   - Money Maker now has executable Playwright proof for the authorized and denied member flows
 - Next slice:
   - `P4-S1` deployment smoke and release evidence closure
+- Blockers:
+  - release still blocked on post-deploy smoke evidence and deployed-SHA verification
+
+### Session 2026-03-16 00:34 CT
+- Goal: Execute `P2-S2` and remove the remaining placeholder detector behavior from the live setup engine.
+- Completed:
+  - added detector-context helpers in:
+    - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/detectorContext.ts`
+  - rotated the live detector across `2Min`, `5Min`, and `10Min` data based on time of day in:
+    - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/snapshotBuilder.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/symbolDataFetcher.ts`
+  - added source-backed Ripster 34/50 cloud inputs on the active 10-minute chart in:
+    - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/snapshotBuilder.ts`
+  - changed patience-candle detection to accept confluence zones instead of a single close price in:
+    - `/Users/natekahl/ITM-gd/backend/src/lib/money-maker/patience-candle-detector.ts`
+    - `/Users/natekahl/ITM-gd/lib/money-maker/patience-candle-detector.ts`
+  - replaced hardcoded router flags with derived context for VWAP reclaim, previous-day trend, steep trend, morning trend, and hourly-trend filtering in:
+    - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/snapshotBuilder.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/lib/money-maker/kcu-strategy-router.ts`
+    - `/Users/natekahl/ITM-gd/lib/money-maker/kcu-strategy-router.ts`
+  - added detector-context, zone-aware patience-candle, router, and fetcher regressions in:
+    - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/__tests__/detectorContext.test.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/__tests__/snapshotBuilder.test.ts`
+    - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/__tests__/symbolDataFetcher.test.ts`
+    - `/Users/natekahl/ITM-gd/lib/money-maker/__tests__/patience-candle-detector.test.ts`
+    - `/Users/natekahl/ITM-gd/lib/money-maker/__tests__/kcu-strategy-router.test.ts`
+- Tests added:
+  - detector timeframe/context helper suite
+  - confluence-zone patience-candle cases
+  - advanced VWAP and hourly-trend router cases
+  - latest-valid-completed-bar snapshot regression
+  - afternoon Ripster-cloud snapshot regression
+  - `2Min` fetch coverage
+- Tests run:
+  - `pnpm exec vitest run lib/money-maker/__tests__/patience-candle-detector.test.ts lib/money-maker/__tests__/kcu-strategy-router.test.ts lib/money-maker/__tests__/confluence-detector.test.ts lib/money-maker/__tests__/rr-calculator.test.ts lib/money-maker/__tests__/signal-ranker.test.ts lib/money-maker/__tests__/orb-calculator.test.ts`
+  - `pnpm --dir backend exec jest src/services/money-maker/__tests__/detectorContext.test.ts src/services/money-maker/__tests__/snapshotBuilder.test.ts src/services/money-maker/__tests__/symbolDataFetcher.test.ts --runInBand`
+  - `pnpm exec tsc --noEmit`
+  - `pnpm --dir backend exec tsc --noEmit`
+  - `pnpm exec eslint --no-warn-ignored lib/money-maker/patience-candle-detector.ts lib/money-maker/kcu-strategy-router.ts lib/money-maker/__tests__/patience-candle-detector.test.ts lib/money-maker/__tests__/kcu-strategy-router.test.ts`
+  - `pnpm exec eslint --no-warn-ignored backend/src/services/money-maker/snapshotBuilder.ts backend/src/services/money-maker/symbolDataFetcher.ts backend/src/services/money-maker/detectorContext.ts backend/src/services/money-maker/__tests__/snapshotBuilder.test.ts backend/src/services/money-maker/__tests__/symbolDataFetcher.test.ts backend/src/services/money-maker/__tests__/detectorContext.test.ts backend/src/lib/money-maker/patience-candle-detector.ts backend/src/lib/money-maker/kcu-strategy-router.ts`
+- Risks found:
+  - release smoke and deployed-SHA proof are still pending
+- Risks mitigated:
+  - patience-candle detection now checks the real confluence zone
+  - latest valid completed candles can now fire without being masked by the newest bar
+  - Advanced VWAP, EMA bounce, fib, cloud, and hourly-trend gating no longer depend on placeholder context flags
+- Next slice:
+  - `P4-S1`
 - Blockers:
   - release still blocked on post-deploy smoke evidence and deployed-SHA verification

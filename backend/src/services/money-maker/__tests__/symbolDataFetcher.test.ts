@@ -73,11 +73,12 @@ describe('SymbolDataFetcher', () => {
 
             expect(results['SPY']).toHaveProperty('5Min')
             expect(results['SPY']).toHaveProperty('10Min')
+            expect(results['SPY']).toHaveProperty('2Min')
             expect(results['SPY']).toHaveProperty('1H')
             expect(results['SPY']).toHaveProperty('1D')
 
-            // 2 symbols * 4 timeframes = 8 calls
-            expect(massiveClient.get).toHaveBeenCalledTimes(8)
+            // 2 symbols * 5 timeframes = 10 calls
+            expect(massiveClient.get).toHaveBeenCalledTimes(10)
         })
     })
 })

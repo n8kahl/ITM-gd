@@ -6,6 +6,7 @@ export interface StrategyRouterContext {
     orbRegime: ORBRegime
     confluenceZone: ConfluenceZone
     direction?: 'long' | 'short'
+    passesHourlyTrendFilter?: boolean
     isVwapCrossFromBelow?: boolean
     isMorningTrend?: boolean
     isPrevDayTrend?: boolean
@@ -43,6 +44,14 @@ export function determineStrategy(context: StrategyRouterContext): RouterResult 
 
     const { confluenceZone, orbRegime } = context
     const hasVwap = confluenceZone.isKingQueen
+    const hasFib = confluenceZone.levels.some(l => l.source.includes('Fib'))
+    const hasFibConfluence = hasFib && confluenceZone.levels.some(l => !l.source.includes('Fib'))
+    const hasCloud = confluenceZone.levels.some(l => l.source.includes('Cloud'))
+    const has8Ema = confluenceZone.levels.some(l => l.source.includes('8 EMA'))
+
+    if (context.passesHourlyTrendFilter === false) {
+        return { isValid: false, reason: 'Hourly 21 EMA trend filter failed' }
+    }
 
     if (orbRegime === 'choppy' && !hasVwap) {
         return { isValid: false, reason: "Choppy regime requires VWAP confluence" }
@@ -56,7 +65,7 @@ export function determineStrategy(context: StrategyRouterContext): RouterResult 
     }
 
     // Advanced VWAP: Cross from below. 10:00+ ET. Any regime.
-    if (context.isVwapCrossFromBelow && timeStr >= "10:00") {
+    if (context.direction === 'long' && context.isVwapCrossFromBelow && timeStr >= "10:00") {
         return { isValid: true, strategyType: 'ADVANCED_VWAP', strategyLabel: 'Advanced VWAP' }
     }
 
@@ -66,20 +75,17 @@ export function determineStrategy(context: StrategyRouterContext): RouterResult 
     }
 
     // Cloud Strategy: Ripster cloud zone. 1:00-3:00 PM ET. Trending morning.
-    const hasCloud = confluenceZone.levels.some(l => l.source.includes('Cloud'))
     if (hasCloud && timeStr >= "13:00" && timeStr < "15:00" && context.isMorningTrend) {
         return { isValid: true, strategyType: 'CLOUD_STRATEGY', strategyLabel: 'Cloud Strategy' }
     }
 
     // Fib Bounce/Reject: Fib level. Trending prev day.
-    const hasFib = confluenceZone.levels.some(l => l.source.includes('Fib'))
-    if (hasFib && context.isPrevDayTrend) {
+    if (hasFibConfluence && context.isPrevDayTrend) {
         const type = context.direction === 'short' ? 'FIB_REJECT' : 'FIB_BOUNCE'
         return { isValid: true, strategyType: type, strategyLabel: 'Fibonacci Strategy' }
     }
 
     // EMA Bounce: 8 EMA. Trending regime. Steep trend.
-    const has8Ema = confluenceZone.levels.some(l => l.source.includes('8 EMA'))
     if (has8Ema && orbRegime !== 'choppy' && context.isSteepTrend) {
         return { isValid: true, strategyType: 'EMA_BOUNCE', strategyLabel: 'EMA Bounce' }
     }

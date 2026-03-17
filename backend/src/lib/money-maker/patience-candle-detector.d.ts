@@ -1,4 +1,8 @@
 import { CandleBar, PatienceCandleConfig } from './types';
+export interface PatienceLevelZone {
+    priceLow: number;
+    priceHigh: number;
+}
 export interface PatienceCandleResult {
     isPatienceCandle: boolean;
     pattern?: 'hammer' | 'inverted_hammer';
@@ -29,5 +33,5 @@ export declare function getDynamicBandTolerance(price: number): number;
  * @param levelPrice The price of the confluence zone or level to bounce off
  * @param config The threshold configuration object
  */
-export declare function detectPatienceCandle(candle: CandleBar, direction: 'long' | 'short', recentCandles: CandleBar[], levelPrice: number, config?: PatienceCandleConfig): PatienceCandleResult;
+export declare function detectPatienceCandle(candle: CandleBar, direction: 'long' | 'short', recentCandles: CandleBar[], levelReference: number | PatienceLevelZone, config?: PatienceCandleConfig): PatienceCandleResult;
 //# sourceMappingURL=patience-candle-detector.d.ts.map

@@ -5,6 +5,7 @@ export interface StrategyRouterContext {
     orbRegime: ORBRegime;
     confluenceZone: ConfluenceZone;
     direction?: 'long' | 'short';
+    passesHourlyTrendFilter?: boolean;
     isVwapCrossFromBelow?: boolean;
     isMorningTrend?: boolean;
     isPrevDayTrend?: boolean;
