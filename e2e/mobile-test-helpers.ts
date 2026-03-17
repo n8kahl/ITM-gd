@@ -86,6 +86,43 @@ export async function setupMobileShellMocks(page: Page): Promise<void> {
     })
   })
 
+  await page.route('**/api/members/access-snapshot*', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          profile: {
+            id: '00000000-0000-4000-8000-000000000001',
+            email: 'e2e@example.com',
+            discord_user_id: '000000000000000001',
+            discord_username: 'E2ETrader',
+            discord_avatar: null,
+            discord_roles: ['role-core-sniper', 'role-pro'],
+            discord_role_titles: {
+              'role-core-sniper': 'Core Sniper',
+              'role-pro': 'Pro',
+            },
+            membership_tier: 'pro',
+            role: null,
+          },
+          permissions: [],
+          allowedTabs: MOBILE_TABS.map((tab) => tab.tab_id),
+          tabConfigs: MOBILE_TABS,
+          access: {
+            isAdmin: false,
+            hasMembersAccess: true,
+            linkStatus: 'linked',
+            tabDecisions: [],
+            activeOverrides: [],
+            healthWarnings: [],
+          },
+        },
+      }),
+    })
+  })
+
   await page.route('**/api/members/profile*', async (route: Route) => {
     if (route.request().method() !== 'GET') {
       await route.fallback()

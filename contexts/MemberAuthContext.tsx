@@ -337,6 +337,33 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     applyAccessSnapshot(user, session, payload.data)
   }, [applyAccessSnapshot])
 
+  const hydrateE2EBypassAccessSnapshot = useCallback(async (
+    fallbackState: MemberAuthState = createE2EBypassAuthState(),
+  ) => {
+    const { user, session } = fallbackState
+    if (!user || !session) return
+
+    try {
+      const response = await fetchWithTimeout(
+        '/api/members/access-snapshot',
+        {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'include',
+        },
+      )
+
+      const payload = await response.json().catch(() => null) as AccessSnapshotResponse | null
+      if (!response.ok || !payload?.success) {
+        return
+      }
+
+      applyAccessSnapshot(user, session, payload.data)
+    } catch {
+      // Keep the static E2E bypass state when a richer snapshot is unavailable.
+    }
+  }, [applyAccessSnapshot])
+
   const initializeAuth = useCallback(async () => {
     if (isInitializingRef.current) return
     isInitializingRef.current = true
@@ -403,14 +430,16 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (E2E_BYPASS_AUTH_ENABLED) {
-      setState(createE2EBypassAuthState())
+      const bypassState = createE2EBypassAuthState()
+      setState(bypassState)
+      void hydrateE2EBypassAccessSnapshot(bypassState)
       return
     }
 
     setState((prev) => ({ ...prev, isLoading: true }))
     isInitializingRef.current = false
     await initializeAuth()
-  }, [initializeAuth])
+  }, [hydrateE2EBypassAccessSnapshot, initializeAuth])
 
   const syncDiscordRoles = useCallback(async (): Promise<DiscordSyncResult | null> => {
     if (!state.session || !state.user) return null
@@ -503,7 +532,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (E2E_BYPASS_AUTH_ENABLED) {
       isAuthenticatedRef.current = true
-      setState(createE2EBypassAuthState())
+      const bypassState = createE2EBypassAuthState()
+      setState(bypassState)
+      void hydrateE2EBypassAccessSnapshot(bypassState)
       return
     }
 
@@ -542,7 +573,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [initializeAuth])
+  }, [hydrateE2EBypassAccessSnapshot, initializeAuth])
 
   useEffect(() => {
     isAuthenticatedRef.current = state.isAuthenticated

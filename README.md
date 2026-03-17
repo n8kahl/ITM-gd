@@ -51,6 +51,19 @@ pnpm dev
 ## Testing
 
 ```bash
+pnpm typecheck
+pnpm lint:journal:release
+pnpm test:coverage
+pnpm test:backend:journal-contract
+pnpm test:journal:e2e
+pnpm test:journal:release
+pnpm trade-journal:release:preflight
+pnpm trade-journal:release:run
 pnpm test:unit
 pnpm test:e2e
 ```
+
+Trade Journal QE docs:
+- `docs/trade-journal/TRADE_JOURNAL_QE_TRACEABILITY_MATRIX_2026-03-17.md`
+- `docs/trade-journal/TRADE_JOURNAL_STAGING_GATE_RUNBOOK_2026-03-17.md`
+- `docs/trade-journal/TRADE_JOURNAL_RELEASE_EVIDENCE_TEMPLATE_2026-03-17.md`

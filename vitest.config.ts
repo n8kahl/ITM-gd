@@ -27,6 +27,12 @@ export default defineConfig({
         'lib/rate-limit.ts',
         'lib/validation/journal-entry.ts',
       ],
+      thresholds: {
+        statements: 80,
+        branches: 65,
+        functions: 85,
+        lines: 80,
+      },
     },
   },
   resolve: {
