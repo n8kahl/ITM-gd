@@ -565,13 +565,12 @@ export async function navigateToAICoach(page: Page): Promise<void> {
 }
 
 export async function waitForChatReady(page: Page, timeout = 15000): Promise<void> {
-  // Wait for either chat input or welcome view to be visible
-  const chatInput = page.locator('textarea, input[type="text"]').first()
+  const chatInput = page.locator('[data-testid="ai-coach-chat-input"]:visible, [aria-label="Message the AI coach"]:visible').first()
   await chatInput.waitFor({ state: 'visible', timeout })
 }
 
 export async function sendChatMessage(page: Page, text: string): Promise<void> {
-  const input = page.locator('textarea, input[type="text"]').first()
+  const input = page.locator('[data-testid="ai-coach-chat-input"]:visible, [aria-label="Message the AI coach"]:visible').first()
   await input.fill(text)
   const sendButton = page.getByRole('button', { name: /send/i })
   await sendButton.click()

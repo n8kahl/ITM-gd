@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeft,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Block type display helpers
@@ -138,13 +139,13 @@ export function LessonSidebar({
 
   return (
     <>
-      {/* Toggle button — visible in both states */}
+      {/* Toggle button — mobile only */}
       <button
         type="button"
         onClick={onToggle}
         aria-label={isOpen ? 'Close lesson outline' : 'Open lesson outline'}
         aria-expanded={isOpen}
-        className="fixed right-4 top-20 z-30 flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-[#0f1117] text-white/60 shadow-lg transition-colors hover:border-white/25 hover:text-white md:static md:z-auto md:h-auto md:w-auto md:rounded-none md:border-none md:bg-transparent md:p-0 md:shadow-none"
+        className="fixed right-4 top-[calc(var(--members-topbar-h)+0.75rem)] z-40 flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-[#0f1117] text-white/60 shadow-lg transition-colors hover:border-white/25 hover:text-white md:hidden"
       >
         {isOpen ? (
           <PanelLeftClose className="h-4 w-4" strokeWidth={1.5} />
@@ -156,43 +157,51 @@ export function LessonSidebar({
       {/* Sidebar panel */}
       <aside
         data-open={isOpen}
-        className={`glass-card-heavy flex h-full flex-col rounded-xl border border-white/10 transition-all duration-300 ${
-          isOpen ? 'w-72 opacity-100' : 'w-0 overflow-hidden opacity-0 pointer-events-none'
-        }`}
+        data-testid="academy-lesson-sidebar"
+        className={cn(
+          'glass-card-heavy fixed right-4 top-[calc(var(--members-topbar-h)+0.75rem)] bottom-[calc(var(--members-bottomnav-h)+0.75rem)] z-30 flex w-[min(88vw,20rem)] max-w-[20rem] flex-col rounded-2xl border border-white/10 shadow-2xl transition-all duration-300 md:inset-auto md:static md:z-auto md:h-full md:max-w-none md:rounded-xl md:shadow-none',
+          isOpen
+            ? 'translate-x-0 opacity-100 md:w-72 md:opacity-100'
+            : 'pointer-events-none translate-x-[calc(100%+1.25rem)] opacity-0 md:w-0 md:translate-x-0 md:overflow-hidden md:opacity-0'
+        )}
         aria-label="Lesson outline"
         aria-hidden={!isOpen}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 p-4">
-          <h2 className="text-sm font-semibold text-white">Lesson Outline</h2>
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-label="Close lesson outline"
-            className="text-white/40 transition-colors hover:text-white"
-          >
-            <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
-          </button>
+        <div className="shrink-0 border-b border-white/10 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-white">Lesson Outline</h2>
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-label="Close lesson outline"
+              className="text-white/40 transition-colors hover:text-white"
+            >
+              <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
 
         {/* Stats row */}
-        <div className="flex items-center gap-4 border-b border-white/10 px-4 py-3">
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" strokeWidth={1.5} />
-            <span className="text-xs text-white/60">
-              {completedCount}/{blocks.length} done
-            </span>
-          </div>
-          {remainingMinutes > 0 && (
+        <div className="shrink-0 border-b border-white/10 px-4 py-3">
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-white/40" strokeWidth={1.5} />
-              <span className="text-xs text-white/50">~{remainingMinutes} min left</span>
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" strokeWidth={1.5} />
+              <span className="text-xs text-white/60">
+                {completedCount}/{blocks.length} done
+              </span>
             </div>
-          )}
+            {remainingMinutes > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-white/40" strokeWidth={1.5} />
+                <span className="text-xs text-white/50">~{remainingMinutes} min left</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+        <div className="flex-1 space-y-1 overflow-y-auto overscroll-contain p-3">
           {/* Block list */}
           {blocks.map((block, index) => (
             <SidebarBlockItem
@@ -207,7 +216,7 @@ export function LessonSidebar({
 
         {/* Objectives section */}
         {objectives.length > 0 && (
-          <div className="border-t border-white/10 p-4">
+          <div className="shrink-0 border-t border-white/10 p-4">
             <div className="mb-2.5 flex items-center gap-2">
               <Target className="h-3.5 w-3.5 text-emerald-400/70" strokeWidth={1.5} />
               <span className="text-xs font-semibold uppercase tracking-widest text-white/40">
@@ -249,7 +258,7 @@ export function LessonSidebarBackdrop({
     <div
       role="presentation"
       onClick={onClose}
-      className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm md:hidden"
+      className="fixed inset-0 z-20 bg-black/60 backdrop-blur-sm md:hidden"
     />
   )
 }
