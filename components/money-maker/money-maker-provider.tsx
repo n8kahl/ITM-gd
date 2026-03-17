@@ -87,6 +87,8 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
             ...prev,
             isWorkspaceOpen: true,
             workspaceSymbol: symbol,
+            workspace: null,
+            isWorkspaceLoading: true,
             workspaceError: null,
         }))
     }, [])
@@ -95,6 +97,9 @@ export function MoneyMakerProvider({ children }: { children: ReactNode }) {
         setState(prev => ({
             ...prev,
             isWorkspaceOpen: false,
+            workspaceSymbol: null,
+            workspace: null,
+            isWorkspaceLoading: false,
             workspaceError: null,
         }))
     }, [])

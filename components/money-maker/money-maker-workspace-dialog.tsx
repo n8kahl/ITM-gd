@@ -46,6 +46,7 @@ export function MoneyMakerWorkspaceDialog() {
     const { refreshWorkspace } = useMoneyMakerWorkspace()
     const { state, closeWorkspace } = useMoneyMaker()
     const workspace = state.workspace
+    const contracts = Array.isArray(workspace?.contracts) ? workspace.contracts : []
     const executionPlan = workspace?.executionPlan ?? null
     const symbolSnapshot = workspace?.symbolSnapshot ?? null
     const zoneSummary = describeMoneyMakerZone(symbolSnapshot?.strongestConfluence ?? null, symbolSnapshot?.price ?? null)
@@ -212,7 +213,9 @@ export function MoneyMakerWorkspaceDialog() {
                                             </div>
                                             <div>
                                                 <p className="text-white/45">Regime</p>
-                                                <p className="mt-1 font-semibold capitalize">{symbolSnapshot?.orbRegime.replace(/_/g, ' ')}</p>
+                                                <p className="mt-1 font-semibold capitalize">
+                                                    {symbolSnapshot?.orbRegime ? symbolSnapshot.orbRegime.replace(/_/g, ' ') : '--'}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -276,9 +279,9 @@ export function MoneyMakerWorkspaceDialog() {
                         </TabsContent>
 
                         <TabsContent value="contracts" forceMount className="space-y-4">
-                            {workspace.contracts.length > 0 ? (
+                            {contracts.length > 0 ? (
                                 <div className="grid gap-4 lg:grid-cols-3">
-                                    {workspace.contracts.map((contract) => (
+                                    {contracts.map((contract) => (
                                         <div key={`${contract.label}-${contract.optionSymbol}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                                             <div className="flex items-center justify-between">
                                                 <div>
