@@ -218,6 +218,70 @@ A slice cannot merge unless:
   - revert engine correction slice as a unit
 - Evidence:
   - fixture assertions and sample outputs
+
+### Slice: P2-S2
+- Objective: Harden the live setup detector so it evaluates real confluence zones, recent completed bars, and strategy-context gates instead of placeholder routing inputs.
+- Status: done
+- Scope:
+  - active intraday detection-timeframe selection (`2m` -> `5m` -> `10m`)
+  - completed-bar filtering so in-progress bars do not drive signals
+  - patience-candle proximity detection against confluence zones instead of raw close price
+  - recent-bar scan for the latest valid completed setup
+  - live router context derivation for advanced VWAP, EMA bounce, fib, and hourly trend gating
+  - Ripster 34/50 EMA cloud inputs on the afternoon 10-minute chart
+  - deterministic trend-strength calculation
+  - `2Min` fetch support and detector-context unit coverage
+- Out of scope:
+  - UI/execution-plan rendering changes
+  - deployed-environment smoke verification
+- Files:
+  - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/detectorContext.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/snapshotBuilder.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/symbolDataFetcher.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/__tests__/detectorContext.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/__tests__/snapshotBuilder.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/services/money-maker/__tests__/symbolDataFetcher.test.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/lib/money-maker/patience-candle-detector.ts`
+  - `/Users/natekahl/ITM-gd/backend/src/lib/money-maker/kcu-strategy-router.ts`
+  - `/Users/natekahl/ITM-gd/lib/money-maker/patience-candle-detector.ts`
+  - `/Users/natekahl/ITM-gd/lib/money-maker/kcu-strategy-router.ts`
+  - `/Users/natekahl/ITM-gd/lib/money-maker/patience-candle-detector.js`
+  - `/Users/natekahl/ITM-gd/lib/money-maker/kcu-strategy-router.js`
+- Tests added:
+  - detector timeframe and context-helper unit tests
+  - zone-aware patience-candle tests
+  - router tests for hourly trend gating and advanced VWAP directionality
+  - snapshot regression for scanning the most recent valid completed bar
+  - snapshot regression for afternoon Ripster cloud inputs on 10-minute detection
+  - fetcher regression for `2Min` timeframe coverage
+- Tests run:
+  - `pnpm exec vitest run lib/money-maker/__tests__/patience-candle-detector.test.ts lib/money-maker/__tests__/kcu-strategy-router.test.ts lib/money-maker/__tests__/confluence-detector.test.ts lib/money-maker/__tests__/rr-calculator.test.ts lib/money-maker/__tests__/signal-ranker.test.ts lib/money-maker/__tests__/orb-calculator.test.ts`
+  - Result: 6 files passed / 37 tests passed / 0 failed
+  - `pnpm --dir backend exec jest src/services/money-maker/__tests__/detectorContext.test.ts src/services/money-maker/__tests__/snapshotBuilder.test.ts src/services/money-maker/__tests__/symbolDataFetcher.test.ts --runInBand`
+  - Result: 3 suites passed / 16 tests passed / 0 failed
+  - `pnpm exec tsc --noEmit`
+  - Result: passed
+  - `pnpm --dir backend exec tsc --noEmit`
+  - Result: passed
+  - `pnpm exec eslint --no-warn-ignored lib/money-maker/patience-candle-detector.ts lib/money-maker/kcu-strategy-router.ts lib/money-maker/__tests__/patience-candle-detector.test.ts lib/money-maker/__tests__/kcu-strategy-router.test.ts`
+  - Result: passed
+  - `pnpm exec eslint --no-warn-ignored backend/src/services/money-maker/snapshotBuilder.ts backend/src/services/money-maker/symbolDataFetcher.ts backend/src/services/money-maker/detectorContext.ts backend/src/services/money-maker/__tests__/snapshotBuilder.test.ts backend/src/services/money-maker/__tests__/symbolDataFetcher.test.ts backend/src/services/money-maker/__tests__/detectorContext.test.ts backend/src/lib/money-maker/patience-candle-detector.ts backend/src/lib/money-maker/kcu-strategy-router.ts`
+  - Result: passed
+- Risks introduced:
+  - signal volume and strategy mix can change after real context flags replace placeholders
+  - timeframe rotation can produce different setup timing than the prior 5-minute-only baseline
+- Mitigations:
+  - helper-level deterministic tests lock the new routing inputs
+  - snapshot regressions assert zone-aware patience detection and completed-bar scanning
+  - snapshot regression asserts the 34/50 Ripster cloud inputs are present when afternoon 10-minute history exists
+- Rollback:
+  - revert the detector-context helper, snapshot-builder wiring, and associated tests as one slice
+- Evidence:
+  - green helper, snapshot, and fetcher suites
+  - green root detector-unit suites
+  - compile and lint gates
+- Notes:
+  - This slice closes the raw-close patience-candle defect, the hardcoded router-context defect, and the missing live cloud-input path.
   - live local snapshot sample returned `symbolSnapshotCount: 5` with current-session `lastCandleAt` and `orbRegime`
 - Notes:
   - Release-blocking slice.

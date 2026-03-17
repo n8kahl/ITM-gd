@@ -17,6 +17,17 @@ import { rankSignals } from '../../lib/money-maker/signal-ranker'
 import { v4 as uuidv4, v5 as uuidv5 } from 'uuid'
 import { supabase } from '../../config/database'
 import { toEasternTime } from '../marketHours'
+import {
+    buildRunningVwapSeries,
+    computeMorningTrend,
+    computePreviousDayTrend,
+    computeSteepTrend,
+    computeTrendStrength,
+    detectVwapReclaimFromBelow,
+    getCompletedBars,
+    passesHourlyTrendFilter,
+    resolveDetectionTimeframe,
+} from './detectorContext'
 
 const SIGNAL_NAMESPACE = '1b671a64-40d5-491e-99b0-da01ff1f3341'
 
@@ -78,6 +89,10 @@ function summarizeHourlyLevels(
     }
 }
 
+function getHistoricalBarsThrough<T extends { timestamp: number }>(bars: T[], timestamp: number): T[] {
+    return bars.filter((bar) => bar.timestamp <= timestamp)
+}
+
 function selectNextHourlyLevel(
     bars: Array<{ high: number; low: number }>,
     currentPrice: number,
@@ -119,39 +134,52 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
 
         const bars5m = data['5Min']
         const sessionBars5m = getCurrentSessionBars(bars5m)
+        const latest5mBar = sessionBars5m[sessionBars5m.length - 1] || bars5m[bars5m.length - 1]
+        const preferredDetectionConfig = resolveDetectionTimeframe(latest5mBar.timestamp)
+        const detectionBars = data[preferredDetectionConfig.dataKey]?.length
+            ? data[preferredDetectionConfig.dataKey]
+            : bars5m
+        const detectionConfig = data[preferredDetectionConfig.dataKey]?.length
+            ? preferredDetectionConfig
+            : {
+                label: '5m' as const,
+                dataKey: '5Min' as const,
+                timeframeMs: 5 * 60 * 1000,
+            }
+        const sessionDetectionBars = getCurrentSessionBars(detectionBars)
+        const completedDetectionBars = getCompletedBars(sessionDetectionBars, detectionConfig.timeframeMs)
+        const workingDetectionBars = completedDetectionBars.length > 0
+            ? completedDetectionBars
+            : sessionDetectionBars.length > 0
+                ? sessionDetectionBars
+                : bars5m
         const bars1D = data['1D'] || []
         const bars1H = data['1H'] || []
-        const currentBar = sessionBars5m[sessionBars5m.length - 1] || bars5m[bars5m.length - 1]
-        const previousBar = sessionBars5m.length >= 2
-            ? sessionBars5m[sessionBars5m.length - 2]
-            : bars5m.length >= 2
-                ? bars5m[bars5m.length - 2]
+        const currentBar = workingDetectionBars[workingDetectionBars.length - 1] || latest5mBar
+        const previousBar = workingDetectionBars.length >= 2
+            ? workingDetectionBars[workingDetectionBars.length - 2]
+            : detectionBars.length >= 2
+                ? detectionBars[detectionBars.length - 2]
                 : null
+        const indicatorBars = getHistoricalBarsThrough(detectionBars, currentBar.timestamp)
 
         // 2. Compute Indicators
-        const vwap = computeVWAP(sessionBars5m)
-        const ema8 = bars5m.length >= 8 ? computeEMA(bars5m, 8) : null
-        const ema21 = bars5m.length >= 21 ? computeEMA(bars5m, 21) : null
-        const ema34 = bars5m.length >= 34 ? computeEMA(bars5m, 34) : null
-        const sma200 = bars5m.length >= 200 ? computeSMA(bars5m, 200) : null
+        const vwap = computeVWAP(workingDetectionBars)
+        const ema8 = indicatorBars.length >= 8 ? computeEMA(indicatorBars, 8) : null
+        const ema21 = indicatorBars.length >= 21 ? computeEMA(indicatorBars, 21) : null
+        const ema34 = indicatorBars.length >= 34 ? computeEMA(indicatorBars, 34) : null
+        const ema50 = indicatorBars.length >= 50 ? computeEMA(indicatorBars, 50) : null
+        const sma200 = indicatorBars.length >= 200 ? computeSMA(indicatorBars, 200) : null
 
         let fibLevels: Record<string, number> | null = null
+        const previousDay = bars1D.length >= 2 ? bars1D[bars1D.length - 2] : null
         if (bars1D.length >= 2) {
             const prevDay = bars1D[bars1D.length - 2]
             fibLevels = computeFibonacciLevels(prevDay.high, prevDay.low)
         }
 
-        // Regime
-        const mappedCandles = sessionBars5m.map((b: any) => ({
-            ...b,
-            body: Math.abs(b.close - b.open),
-            wickUpper: b.high - Math.max(b.close, b.open),
-            wickLower: Math.min(b.close, b.open) - b.low,
-            isGreen: b.close > b.open
-        }))
-
         const orb = computeORB(sessionBars5m.slice(0, 3))
-        const openPrice = sessionBars5m.length > 0 ? sessionBars5m[0].open : null
+        const openPrice = sessionDetectionBars.length > 0 ? sessionDetectionBars[0].open : null
 
         const regime = determineRegime(currentBar.close, orb)
 
@@ -164,6 +192,11 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
         if (ema8 !== null) rawLevels.push({ source: '8 EMA', price: ema8, weight: 1.2 })
         if (ema21 !== null) rawLevels.push({ source: '21 EMA', price: ema21, weight: 1.0 })
         if (ema34 !== null) rawLevels.push({ source: '34 EMA', price: ema34, weight: 1.0 })
+        // Ripster's afternoon cloud setup is modeled as the 34/50 EMA cloud on the active 10-minute chart.
+        if (detectionConfig.label === '10m' && ema34 !== null && ema50 !== null) {
+            rawLevels.push({ source: 'Ripster Cloud 34 EMA', price: ema34, weight: 1.0 })
+            rawLevels.push({ source: 'Ripster Cloud 50 EMA', price: ema50, weight: 1.0 })
+        }
         if (sma200 !== null) rawLevels.push({ source: '200 SMA', price: sma200, weight: 1.3 })
         if (orb) {
             rawLevels.push({ source: 'ORB High', price: orb.high, weight: 1.2 })
@@ -180,7 +213,7 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
         }
 
         // Build zones
-        const zones = buildConfluenceZones(rawLevels, currentBar.close, '5m')
+        const zones = buildConfluenceZones(rawLevels, currentBar.close, detectionConfig.label)
         const strongestConfluence = zones.length > 0
             ? [...zones].sort((left, right) => {
                 if (right.score !== left.score) return right.score - left.score
@@ -210,71 +243,92 @@ export async function buildSnapshot(symbols: string[], userId?: string): Promise
             lastCandleAt: currentBar.timestamp,
         })
 
+        const runningVwaps = buildRunningVwapSeries(workingDetectionBars)
+        const candidateIndexes = Array.from(
+            { length: Math.min(3, workingDetectionBars.length) },
+            (_, index) => workingDetectionBars.length - 1 - index,
+        ).filter((index) => index > 0)
+        const seenSignalKeys = new Set<string>()
+
         // For each zone, check both directions for patience candle
         for (const zone of zones) {
-            for (const dir of ['long', 'short'] as ('long' | 'short')[]) {
-                const pcDetection = detectPatienceCandle(currentBar, dir, mappedCandles.slice(0, -1), currentBar.close, pcConfig)
+            for (const candidateIndex of candidateIndexes) {
+                const candidateBar = workingDetectionBars[candidateIndex]
+                const candidateRegime = determineRegime(candidateBar.close, orb)
+                const priorBars = workingDetectionBars.slice(0, candidateIndex)
 
-                if (pcDetection.isPatienceCandle) {
-                    // 4. Route Strategy
-                    const routerCtx: StrategyRouterContext = {
-                        timestamp: currentBar.timestamp,
-                        orbRegime: regime,
-                        confluenceZone: zone,
-                        direction: dir,
-                        isVwapCrossFromBelow: false,
-                        isMorningTrend: regime === 'trending_up',
-                        isPrevDayTrend: false,
-                        isSteepTrend: false
-                    }
+                for (const dir of ['long', 'short'] as ('long' | 'short')[]) {
+                    const pcDetection = detectPatienceCandle(candidateBar, dir, priorBars, zone, pcConfig)
 
-                    const routing = determineStrategy(routerCtx)
-
-                    if (routing.isValid && routing.strategyType) {
-                        // 5. Calculate R:R
-                        const nextLevel = selectNextHourlyLevel(bars1H, currentBar.close, dir)
-                        if (nextLevel === null) {
-                            continue
+                    if (pcDetection.isPatienceCandle) {
+                        // 4. Route Strategy
+                        const routerCtx: StrategyRouterContext = {
+                            timestamp: candidateBar.timestamp,
+                            orbRegime: candidateRegime,
+                            confluenceZone: zone,
+                            direction: dir,
+                            isVwapCrossFromBelow: detectVwapReclaimFromBelow(workingDetectionBars, runningVwaps, candidateIndex, dir),
+                            isMorningTrend: computeMorningTrend(sessionBars5m, dir),
+                            isPrevDayTrend: computePreviousDayTrend(previousDay, dir),
+                            isSteepTrend: computeSteepTrend(workingDetectionBars, candidateIndex, dir),
+                            passesHourlyTrendFilter: passesHourlyTrendFilter(bars1H, candidateBar.close, dir),
                         }
 
-                        const rr = calculateRR({
-                            patienceCandle: currentBar,
-                            direction: dir,
-                            nextLevel
-                        })
+                        const routing = determineStrategy(routerCtx)
 
-                        if (rr.isValid) {
-                            const zoneKey = `${zone.priceLow.toFixed(4)}-${zone.priceHigh.toFixed(4)}-${routing.strategyType}`
-                            const signalId = userId
-                                ? uuidv5(`${userId}-${symbol}-${currentBar.timestamp}-${dir}-${zoneKey}`, SIGNAL_NAMESPACE)
-                                : uuidv4()
+                        if (routing.isValid && routing.strategyType) {
+                            // 5. Calculate R:R
+                            const nextLevel = selectNextHourlyLevel(bars1H, candidateBar.close, dir)
+                            if (nextLevel === null) {
+                                continue
+                            }
 
-                            signalCandidates.push({
-                                id: signalId,
-                                symbol,
-                                timestamp: currentBar.timestamp,
-                                strategyType: routing.strategyType,
-                                strategyLabel: routing.strategyLabel || routing.strategyType,
+                            const rr = calculateRR({
+                                patienceCandle: candidateBar,
                                 direction: dir,
-                                patienceCandle: {
-                                    pattern: pcDetection.pattern as 'hammer' | 'inverted_hammer',
-                                    bar: currentBar,
-                                    timeframe: '5m',
-                                    bodyToRangeRatio: pcDetection.bodyToRangeRatio || 0,
-                                    dominantWickRatio: pcDetection.dominantWickRatio || 0
-                                },
-                                confluenceZone: zone,
-                                entry: rr.entry,
-                                stop: rr.stop,
-                                target: rr.target,
-                                riskRewardRatio: rr.riskRewardRatio,
-                                orbRegime: regime,
-                                trendStrength: 50,
-                                signalRank: 0,
-                                status: 'ready',
-                                ttlSeconds: 300,
-                                expiresAt: currentBar.timestamp + 300 * 1000
+                                nextLevel
                             })
+
+                            if (rr.isValid) {
+                                const zoneKey = `${zone.priceLow.toFixed(4)}-${zone.priceHigh.toFixed(4)}-${routing.strategyType}`
+                                const dedupeKey = `${symbol}-${dir}-${routing.strategyType}-${zoneKey}`
+                                if (seenSignalKeys.has(dedupeKey)) {
+                                    continue
+                                }
+
+                                seenSignalKeys.add(dedupeKey)
+
+                                const signalId = userId
+                                    ? uuidv5(`${userId}-${symbol}-${candidateBar.timestamp}-${dir}-${zoneKey}`, SIGNAL_NAMESPACE)
+                                    : uuidv4()
+
+                                signalCandidates.push({
+                                    id: signalId,
+                                    symbol,
+                                    timestamp: candidateBar.timestamp,
+                                    strategyType: routing.strategyType,
+                                    strategyLabel: routing.strategyLabel || routing.strategyType,
+                                    direction: dir,
+                                    patienceCandle: {
+                                        pattern: pcDetection.pattern as 'hammer' | 'inverted_hammer',
+                                        bar: candidateBar,
+                                        timeframe: detectionConfig.label,
+                                        bodyToRangeRatio: pcDetection.bodyToRangeRatio || 0,
+                                        dominantWickRatio: pcDetection.dominantWickRatio || 0
+                                    },
+                                    confluenceZone: zone,
+                                    entry: rr.entry,
+                                    stop: rr.stop,
+                                    target: rr.target,
+                                    riskRewardRatio: rr.riskRewardRatio,
+                                    orbRegime: candidateRegime,
+                                    trendStrength: computeTrendStrength(workingDetectionBars, candidateIndex, dir),
+                                    signalRank: 0,
+                                    status: 'ready',
+                                    ttlSeconds: 300,
+                                    expiresAt: candidateBar.timestamp + 300 * 1000
+                                })
+                            }
                         }
                     }
                 }

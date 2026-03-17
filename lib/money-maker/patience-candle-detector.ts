@@ -1,5 +1,10 @@
 import { CandleBar, PatienceCandleConfig, DEFAULT_CONFIG } from './types'
 
+export interface PatienceLevelZone {
+    priceLow: number
+    priceHigh: number
+}
+
 export interface PatienceCandleResult {
     isPatienceCandle: boolean
     pattern?: 'hammer' | 'inverted_hammer'
@@ -44,7 +49,7 @@ export function detectPatienceCandle(
     candle: CandleBar,
     direction: 'long' | 'short',
     recentCandles: CandleBar[],
-    levelPrice: number,
+    levelReference: number | PatienceLevelZone,
     config: PatienceCandleConfig = DEFAULT_CONFIG
 ): PatienceCandleResult {
     const range = candle.high - candle.low
@@ -78,7 +83,10 @@ export function detectPatienceCandle(
         // For hammer, the candle low should be within the band tolerance of the level
         // That implies the level is near the bottom of the candle (acting as support)
         // Absolute difference between candle low and the level price
-        isAtLevel = Math.abs(candle.low - levelPrice) <= bandTolerance
+        isAtLevel = typeof levelReference === 'number'
+            ? Math.abs(candle.low - levelReference) <= bandTolerance
+            : candle.low >= levelReference.priceLow - bandTolerance
+                && candle.low <= levelReference.priceHigh + bandTolerance
     } else {
         // Inverted hammer logic
         dominantWickRatio = upperWickRatio
@@ -86,7 +94,10 @@ export function detectPatienceCandle(
         // For inverted hammer, the candle high should be within the band tolerance of the level
         // That implies the level is near the top of the candle (acting as resistance)
         // Absolute difference between candle high and the level price
-        isAtLevel = Math.abs(candle.high - levelPrice) <= bandTolerance
+        isAtLevel = typeof levelReference === 'number'
+            ? Math.abs(candle.high - levelReference) <= bandTolerance
+            : candle.high >= levelReference.priceLow - bandTolerance
+                && candle.high <= levelReference.priceHigh + bandTolerance
     }
 
     // Calculate volume ratio

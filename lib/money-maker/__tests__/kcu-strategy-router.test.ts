@@ -61,6 +61,7 @@ describe('Strategy Router', () => {
             const ctx: StrategyRouterContext = {
                 timestamp: createDateAtET('09:45'),
                 orbRegime: 'choppy', // allowed because it has VWAP
+                passesHourlyTrendFilter: true,
                 confluenceZone: {
                     ...baseZone,
                     isKingQueen: true,
@@ -77,6 +78,7 @@ describe('Strategy Router', () => {
                 timestamp: createDateAtET('13:30'),
                 orbRegime: 'trending_up',
                 isMorningTrend: true,
+                passesHourlyTrendFilter: true,
                 confluenceZone: {
                     ...baseZone,
                     levels: [{ source: 'Ripster Cloud', price: 100, weight: 1.0 }]
@@ -93,14 +95,56 @@ describe('Strategy Router', () => {
                 orbRegime: 'trending_down',
                 isPrevDayTrend: true,
                 direction: 'short',
+                passesHourlyTrendFilter: true,
                 confluenceZone: {
                     ...baseZone,
-                    levels: [{ source: 'Fib 0.382', price: 100, weight: 1.1 }]
+                    levels: [
+                        { source: 'Fib 0.382', price: 100, weight: 1.1 },
+                        { source: 'Hourly High', price: 100.05, weight: 1.4 },
+                    ]
                 }
             }
             const res = determineStrategy(ctx)
             expect(res.isValid).toBe(true)
             expect(res.strategyType).toBe('FIB_REJECT')
+        })
+
+        test('blocks strategy assignment when the hourly trend filter fails', () => {
+            const ctx: StrategyRouterContext = {
+                timestamp: createDateAtET('10:15'),
+                orbRegime: 'trending_up',
+                passesHourlyTrendFilter: false,
+                confluenceZone: {
+                    ...baseZone,
+                    isKingQueen: true,
+                    levels: [{ source: 'VWAP', price: 100, weight: 1.5 }, { source: '8 EMA', price: 100.05, weight: 1.2 }],
+                },
+            }
+
+            const res = determineStrategy(ctx)
+
+            expect(res.isValid).toBe(false)
+            expect(res.reason).toContain('Hourly 21 EMA')
+        })
+
+        test('advanced VWAP only validates upside reclaims', () => {
+            const shortCtx: StrategyRouterContext = {
+                timestamp: createDateAtET('10:15'),
+                orbRegime: 'trending_down',
+                direction: 'short',
+                isVwapCrossFromBelow: true,
+                passesHourlyTrendFilter: true,
+                confluenceZone: {
+                    ...baseZone,
+                    isKingQueen: true,
+                    levels: [{ source: 'VWAP', price: 100, weight: 1.5 }],
+                },
+            }
+
+            const shortRes = determineStrategy(shortCtx)
+
+            expect(shortRes.isValid).toBe(true)
+            expect(shortRes.strategyType).toBe('VWAP_STRATEGY')
         })
     })
 })
