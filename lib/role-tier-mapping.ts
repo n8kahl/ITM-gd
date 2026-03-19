@@ -45,7 +45,35 @@ export function parseRoleTierMapping(rawValue: unknown): RoleTierMapping {
   return mapping
 }
 
+async function fetchRoleTierMappingFromSettings(
+  supabase: SupabaseClient,
+): Promise<RoleTierMapping> {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'role_tier_mapping')
+      .maybeSingle()
+
+    if (error || !data) {
+      return {}
+    }
+
+    return parseRoleTierMapping(data.value)
+  } catch {
+    return {}
+  }
+}
+
 export async function fetchRoleTierMapping(supabase: SupabaseClient): Promise<RoleTierMapping> {
-  const pricingTiers = await fetchPricingTiers(supabase)
-  return buildRoleTierMapping(pricingTiers)
+  const [pricingTiers, settingsMapping] = await Promise.all([
+    fetchPricingTiers(supabase),
+    fetchRoleTierMappingFromSettings(supabase),
+  ])
+
+  // pricing_tiers remains source-of-truth when both mappings define the same role id.
+  return {
+    ...settingsMapping,
+    ...buildRoleTierMapping(pricingTiers),
+  }
 }

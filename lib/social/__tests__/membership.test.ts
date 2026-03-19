@@ -7,6 +7,7 @@ import {
 
 function createSupabaseMock(config: {
   pricingTierRows?: any[]
+  roleTierMappingSetting?: unknown
   profiles?: any[]
   discordProfiles?: any[]
   guildRoles?: any[]
@@ -23,6 +24,21 @@ function createSupabaseMock(config: {
         }
         return {
           select: vi.fn(() => chain),
+        }
+      }
+
+      if (table === 'app_settings') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn(async () => ({
+                data: config.roleTierMappingSetting === undefined
+                  ? null
+                  : { value: config.roleTierMappingSetting },
+                error: null,
+              })),
+            })),
+          })),
         }
       }
 
@@ -88,6 +104,23 @@ describe('social membership metadata', () => {
     expect(mapping).toEqual({
       role_core: 'core',
       role_pro: 'pro',
+    })
+  })
+
+  it('merges legacy app_settings role mapping with pricing tiers', async () => {
+    const supabase = createSupabaseMock({
+      pricingTierRows: [
+        { id: 'core', name: 'Core', discord_role_id: 'role_core', is_active: true, display_order: 1 },
+      ],
+      roleTierMappingSetting: JSON.stringify({
+        role_legacy_pro: 'pro',
+      }),
+    })
+
+    const mapping = await fetchRoleTierMapping(supabase)
+    expect(mapping).toEqual({
+      role_legacy_pro: 'pro',
+      role_core: 'core',
     })
   })
 
