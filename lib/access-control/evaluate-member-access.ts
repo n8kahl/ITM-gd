@@ -13,10 +13,11 @@ import {
   resolveRoleTitlesById,
 } from '@/lib/access-control/roles'
 import {
-  buildRoleTierMapping,
-  fetchPricingTiers,
   resolveTierFromRoleIds,
 } from '@/lib/access-control/tiers'
+import {
+  fetchRoleTierMapping,
+} from '@/lib/role-tier-mapping'
 import {
   evaluateTabAccess,
   fetchActiveTabConfigurations,
@@ -27,13 +28,11 @@ import type {
   ActiveMemberAccessOverride,
   MemberAccessEvaluation,
   MemberAccessHealthWarning,
-  PricingTierRecord,
   TabConfigRecord,
 } from '@/lib/access-control/types'
 
 type LoadedAccessResources = {
   settings: AccessControlSettings
-  pricingTiers: PricingTierRecord[]
   roleTierMapping: Record<string, 'core' | 'pro' | 'executive'>
   tabs: TabConfigRecord[]
   roleTitlesById: Record<string, string>
@@ -99,29 +98,25 @@ export async function loadAccessControlResources(
   supabase: SupabaseClient,
   roleIds: string[],
 ): Promise<LoadedAccessResources> {
-  const [settings, pricingTiers, tabs] = await Promise.all([
+  const [settings, tabs, roleTierMapping] = await Promise.all([
     resolveAccessControlSettings(supabase),
-    fetchPricingTiers(supabase),
     fetchActiveTabConfigurations(supabase),
+    fetchRoleTierMapping(supabase),
   ])
 
-  const roleTierMapping = buildRoleTierMapping(pricingTiers)
   const roleIdsForCatalog = Array.from(new Set([
     ...roleIds,
     ...settings.membersAllowedRoleIds,
     ...settings.privilegedRoleIds,
     ...settings.adminRoleIds,
     ...tabs.flatMap((tab) => tab.required_discord_role_ids),
-    ...pricingTiers
-      .map((tier) => tier.discordRoleId)
-      .filter((roleId): roleId is string => Boolean(roleId)),
+    ...Object.keys(roleTierMapping),
   ]))
 
   const roleTitlesById = await resolveRoleTitlesById(supabase, roleIdsForCatalog)
 
   return {
     settings: settings || getDefaultAccessControlSettings(),
-    pricingTiers,
     roleTierMapping,
     tabs,
     roleTitlesById,
