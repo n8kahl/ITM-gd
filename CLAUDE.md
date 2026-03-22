@@ -1,7 +1,7 @@
 # CLAUDE.md - TradeITM Production Codex
 
 > **AI-Maintained:** This project is built and maintained by Claude Code with minimal developer intervention.
-> **Last Updated:** 2026-03-01
+> **Last Updated:** 2026-03-22
 
 ---
 
@@ -266,104 +266,6 @@ This project is designed for autonomous multi-agent development. The following g
 | **Backend Agent** | Express routes, services, middleware, backend tests | Read, Write, Edit, Bash (tsc/test), Glob, Grep | sonnet |
 | **SPX Engine Agent** | `lib/spx/` modules, decision engine, optimizer, replay | Read, Write, Edit, Bash (vitest), Glob, Grep | opus |
 | **Database Agent** | Supabase migrations, RLS policies, edge functions, SQL | Read, Write, Supabase MCP tools | sonnet |
-
----
-
-## 8. Prompt-Driven Production Loop (Replicable Playbook)
-
-Use this when the operator is non-technical and wants safe, production-grade delivery via short Codex sessions.
-
-### 8.1 Operating Model
-1. Work in thin slices. One prompt = one scoped change with explicit boundaries.
-2. Always require validation command output before moving to next slice.
-3. Keep a running "done vs remaining" list to avoid hidden drift.
-4. Keep backend and frontend contracts explicit (status codes, payload shapes, units).
-5. Prefer fail-closed behavior for auth and security checks.
-
-### 8.2 Session Contract (What to Ask For Every Time)
-Every implementation prompt must require this exact response format:
-1. `Changed files`
-2. `Command outputs (pass/fail)`
-3. `Risks/notes`
-4. `Suggested commit message`
-
-If any section is missing, do not advance to next slice.
-
-### 8.3 Prompt Template (Copy/Paste)
-```md
-Implement <slice name>.
-
-Scope:
-- <absolute file path 1>
-- <absolute file path 2>
-
-Requirements:
-1) <requirement>
-2) <requirement>
-3) No unrelated changes.
-
-Validation:
-- <exact command 1>
-- <exact command 2>
-
-Return:
-- changed files
-- command outputs (pass/fail)
-- risks/notes
-- suggested commit message
-```
-
-### 8.4 Slice Ordering Pattern (Recommended)
-1. Data contracts and canonical types.
-2. Auth and route skeletons.
-3. Core backend pipeline.
-4. Proxy/transport layer.
-5. Frontend shell + health preflight.
-6. UI feature surfaces (charts, panels, controls).
-7. Cross-surface consistency (units, limits, status mapping).
-8. Test hardening (unit + route tests).
-9. Auth alignment and operational drift mitigation.
-10. Release evidence + runbook updates.
-
-### 8.5 Hard Gates Before Moving Forward
-1. Typecheck passes in every touched package (`root` and `backend` as needed).
-2. Lint passes for touched files.
-3. New behavior has at least one targeted test for non-happy-path.
-4. Error handling is deterministic and user-facing where appropriate.
-5. No hidden contract mismatch (units, enum values, response schema).
-
-### 8.6 Common Failure Modes to Actively Prevent
-1. Frontend/backend unit mismatch (percent vs decimal, timestamp zone assumptions).
-2. Route/status mismatch (e.g., 422 vs 502 vs 500).
-3. Admin gate drift between page and API layers.
-4. DB constraint drift vs TypeScript unions.
-5. "Config constant" mistaken as enforced runtime limiter.
-6. Tests placed outside discovery pattern (`__tests__` for Jest in backend).
-
-### 8.7 Review Rhythm (One-Line Status Rule)
-After each completed slice, produce:
-1. What changed.
-2. What remains (highest-risk item next).
-3. Next exact prompt.
-
-### 8.8 Safety Rules for Non-Developers Running Sessions
-1. Never accept "done" without validation command output.
-2. Never merge slices that modify out-of-scope files.
-3. Never skip auth/error-path tests for privileged routes.
-4. Prefer additive migrations and fail-closed auth behavior.
-5. Keep prompts explicit: file paths, commands, and "no unrelated changes".
-
-### 8.9 Release Checklist (Prompt-Run Projects)
-1. Route contracts documented and tested.
-2. Admin/auth consistency documented with operational runbook note.
-3. Timeouts and size limits enforced both server and UI.
-4. External dependency failures mapped to explicit status codes.
-5. At least one route test for each privileged endpoint: 401, 403, and happy path.
-6. Final summary includes:
-   - implemented slices,
-   - residual risks,
-   - rollback points,
-   - suggested commit grouping.
 | **QA Agent** | E2E tests, integration tests, a11y audits, validation | Read, Bash (playwright/vitest), Glob, Grep | sonnet |
 | **Docs Agent** | Spec authoring, release notes, runbooks, tracker updates | Read, Write, Edit, Glob | haiku |
 | **Explorer Agent** | Codebase investigation, drift analysis, file discovery | Read, Glob, Grep (read-only) | haiku |
@@ -483,7 +385,105 @@ When context compacts mid-session, the agent must preserve:
 
 ---
 
-## 8. Hooks Configuration
+## 8. Prompt-Driven Production Loop (Replicable Playbook)
+
+Use this when the operator is non-technical and wants safe, production-grade delivery via short Codex sessions.
+
+### 8.1 Operating Model
+1. Work in thin slices. One prompt = one scoped change with explicit boundaries.
+2. Always require validation command output before moving to next slice.
+3. Keep a running "done vs remaining" list to avoid hidden drift.
+4. Keep backend and frontend contracts explicit (status codes, payload shapes, units).
+5. Prefer fail-closed behavior for auth and security checks.
+
+### 8.2 Session Contract (What to Ask For Every Time)
+Every implementation prompt must require this exact response format:
+1. `Changed files`
+2. `Command outputs (pass/fail)`
+3. `Risks/notes`
+4. `Suggested commit message`
+
+If any section is missing, do not advance to next slice.
+
+### 8.3 Prompt Template (Copy/Paste)
+```md
+Implement <slice name>.
+
+Scope:
+- <absolute file path 1>
+- <absolute file path 2>
+
+Requirements:
+1) <requirement>
+2) <requirement>
+3) No unrelated changes.
+
+Validation:
+- <exact command 1>
+- <exact command 2>
+
+Return:
+- changed files
+- command outputs (pass/fail)
+- risks/notes
+- suggested commit message
+```
+
+### 8.4 Slice Ordering Pattern (Recommended)
+1. Data contracts and canonical types.
+2. Auth and route skeletons.
+3. Core backend pipeline.
+4. Proxy/transport layer.
+5. Frontend shell + health preflight.
+6. UI feature surfaces (charts, panels, controls).
+7. Cross-surface consistency (units, limits, status mapping).
+8. Test hardening (unit + route tests).
+9. Auth alignment and operational drift mitigation.
+10. Release evidence + runbook updates.
+
+### 8.5 Hard Gates Before Moving Forward
+1. Typecheck passes in every touched package (`root` and `backend` as needed).
+2. Lint passes for touched files.
+3. New behavior has at least one targeted test for non-happy-path.
+4. Error handling is deterministic and user-facing where appropriate.
+5. No hidden contract mismatch (units, enum values, response schema).
+
+### 8.6 Common Failure Modes to Actively Prevent
+1. Frontend/backend unit mismatch (percent vs decimal, timestamp zone assumptions).
+2. Route/status mismatch (e.g., 422 vs 502 vs 500).
+3. Admin gate drift between page and API layers.
+4. DB constraint drift vs TypeScript unions.
+5. "Config constant" mistaken as enforced runtime limiter.
+6. Tests placed outside discovery pattern (`__tests__` for Jest in backend).
+
+### 8.7 Review Rhythm (One-Line Status Rule)
+After each completed slice, produce:
+1. What changed.
+2. What remains (highest-risk item next).
+3. Next exact prompt.
+
+### 8.8 Safety Rules for Non-Developers Running Sessions
+1. Never accept "done" without validation command output.
+2. Never merge slices that modify out-of-scope files.
+3. Never skip auth/error-path tests for privileged routes.
+4. Prefer additive migrations and fail-closed auth behavior.
+5. Keep prompts explicit: file paths, commands, and "no unrelated changes".
+
+### 8.9 Release Checklist (Prompt-Run Projects)
+1. Route contracts documented and tested.
+2. Admin/auth consistency documented with operational runbook note.
+3. Timeouts and size limits enforced both server and UI.
+4. External dependency failures mapped to explicit status codes.
+5. At least one route test for each privileged endpoint: 401, 403, and happy path.
+6. Final summary includes:
+   - implemented slices,
+   - residual risks,
+   - rollback points,
+   - suggested commit grouping.
+
+---
+
+## 9. Hooks Configuration
 
 ### Recommended hooks for `.claude/settings.local.json`:
 
@@ -527,9 +527,9 @@ When context compacts mid-session, the agent must preserve:
 
 ---
 
-## 9. Quality Standards for Production Grade
+## 10. Quality Standards for Production Grade
 
-### 9.1 Code Quality Gates (Every PR)
+### 10.1 Code Quality Gates (Every PR)
 - TypeScript strict mode: zero `any` types in new code.
 - ESLint: zero warnings in touched files.
 - Build: `pnpm run build` succeeds without errors.
@@ -537,28 +537,28 @@ When context compacts mid-session, the agent must preserve:
 - E2E tests: all targeted specs pass.
 - A11y: no critical axe-core violations in new UI.
 
-### 9.2 Performance Standards
+### 10.2 Performance Standards
 - Lighthouse score >= 90 for member-facing routes.
 - No client-side bundle increase > 10KB without justification.
 - API response time < 500ms p95 for non-data-intensive endpoints.
 - WebSocket reconnection within 3 seconds.
 - Use `pnpm analyze` to audit bundle size before major releases.
 
-### 9.3 Security Standards
+### 10.3 Security Standards
 - All Supabase tables must have RLS policies. Run `get_advisors(type: "security")` after DDL changes.
 - No secrets in client-side code or git history.
 - All API endpoints require authentication unless explicitly public.
 - Rate limiting on all public-facing endpoints.
 - Input validation (Zod schemas) on all API inputs.
 
-### 9.4 Database Standards
+### 10.4 Database Standards
 - Every schema change requires a migration file in `supabase/migrations/`.
 - Migrations must be idempotent and reversible.
 - No raw SQL in application code; use Supabase client or typed queries.
 - Index all foreign keys and frequently-queried columns.
 - Run `get_advisors(type: "performance")` after adding tables or indexes.
 
-### 9.5 Documentation Standards
+### 10.5 Documentation Standards
 - Every major feature has an execution spec in `docs/specs/`.
 - API changes documented in route file JSDoc comments.
 - Breaking changes noted in release notes.
@@ -566,7 +566,7 @@ When context compacts mid-session, the agent must preserve:
 
 ---
 
-## 10. Collaboration Defaults: SPX Optimization
+## 11. Collaboration Defaults: SPX Optimization
 
 These defaults apply to SPX-related workstreams unless explicitly overridden:
 
@@ -582,11 +582,11 @@ These defaults apply to SPX-related workstreams unless explicitly overridden:
 
 ---
 
-## 11. Gold Standard: Incremental Development & QA Process
+## 12. Gold Standard: Incremental Development & QA Process
 
 This is the proven process for building, testing, and hardening any feature surface. It separates **authoring** from **validation** across sessions to ensure clean, reproducible results.
 
-### 11.1 Process Overview
+### 12.1Process Overview
 
 The workflow has three distinct phases, each in its own session:
 
@@ -596,7 +596,7 @@ The workflow has three distinct phases, each in its own session:
 
 Separating authoring from validation prevents resource exhaustion and ensures each phase gets a clean environment.
 
-### 11.2 Session A: Plan & Author
+### 12.2Session A: Plan & Author
 
 **Step 1 — Enter Plan Mode and explore the surface.**
 Read every component, hook, API route, and type file for the target feature. Map the full surface area: what exists, what's tested, what's not.
@@ -634,7 +634,7 @@ test.beforeEach(async ({ page }) => {
 **Step 6 — Verify imports and exports.**
 Before ending the session, run a read-only verification pass across all new files to confirm every import resolves and every exported helper is actually used.
 
-### 11.3 Session B: Validate & Fix
+### 12.3Session B: Validate & Fix
 
 **Step 1 — Type check.**
 ```bash
@@ -663,7 +663,7 @@ Expect some failures on the first run — this is normal. The iteration loop is:
 **Step 4 — Add test IDs if needed.**
 If a component's DOM is ambiguous (multiple elements match a selector), add `data-testid` attributes at the component boundary. This is the only time production code should change during QA.
 
-### 11.4 Session C: Harden & Commit
+### 12.4Session C: Harden & Commit
 
 **Step 1 — Full green run.**
 ```bash
@@ -688,7 +688,7 @@ git commit -m "test(<feature>): add E2E coverage — <N> tests across <M> spec f
 **Step 4 — Update documentation.**
 Update the feature's execution spec or release notes with the new test inventory.
 
-### 11.5 Test File Conventions
+### 12.5Test File Conventions
 
 | Convention | Pattern |
 |------------|---------|
@@ -701,7 +701,7 @@ Update the feature's execution spec or release notes with the new test inventory
 | Assertions | Use `expect.poll(() => ..., { timeout: 10_000 })` for async state |
 | Timeouts | `test.setTimeout(60_000)` in every `beforeEach` |
 
-### 11.6 Priority Tiers for Coverage Gaps
+### 12.6Priority Tiers for Coverage Gaps
 
 When auditing a new surface, categorize gaps into tiers to sequence work:
 
@@ -713,7 +713,7 @@ When auditing a new surface, categorize gaps into tiers to sequence work:
 
 Always complete Critical tier before starting High. Always complete High before Medium. This ensures maximum value from partial progress if a session runs out of context.
 
-### 11.7 When to Apply This Process
+### 12.7When to Apply This Process
 
 This process is required for:
 - E2E QA audits of any member-facing feature surface
@@ -725,11 +725,11 @@ For smaller changes (single component fix, isolated bug), the standard slice cad
 
 ---
 
-## 12. Upgrade Execution Standard & Session Boundaries (2026-03-01)
+## 13. Upgrade Execution Standard & Session Boundaries (2026-03-01)
 
 This section is the canonical operating system for medium/large upgrades (including SPX Command Center hardening).
 
-### 12.1 90-Day Upgrade Frame (Deterministic)
+### 13.1 90-Day Upgrade Frame (Deterministic)
 
 Use a release train, not ad-hoc tasking:
 
@@ -740,7 +740,7 @@ Use a release train, not ad-hoc tasking:
    - P0 work must be behind flags when blast radius is not low.
    - P0 introduced failures cannot be deferred.
 
-### 12.2 Required In-Repo Artifacts
+### 13.2 Required In-Repo Artifacts
 
 For any audit-driven upgrade, land these files first (or confirm they already exist and are current):
 
@@ -752,7 +752,7 @@ For any audit-driven upgrade, land these files first (or confirm they already ex
 
 These are required before implementation starts so the plan is executable and reviewable.
 
-### 12.3 Workstream Structure (Epics)
+### 13.3 Workstream Structure (Epics)
 
 Use explicit epics so slices remain bounded:
 
@@ -766,7 +766,7 @@ Use explicit epics so slices remain bounded:
 
 Each ticket must include: problem, evidence, risk, acceptance criteria, test plan, rollout plan.
 
-### 12.4 Upgrade Delivery Standard (Per Slice)
+### 13.4 Upgrade Delivery Standard (Per Slice)
 
 Use this flow for every slice:
 
@@ -797,7 +797,7 @@ pnpm exec playwright test <targeted-e2e-specs> --project=chromium --workers=1
 7. **Push/PR**
    - Include changed files by slice, validation outcomes, residual failures, rollback plan.
 
-### 12.5 Correct Quality Process (Non-Negotiable DoD)
+### 13.5 Correct Quality Process (Non-Negotiable DoD)
 
 A slice is done only if all are true:
 
@@ -809,7 +809,7 @@ A slice is done only if all are true:
 6. Rollout/rollback path defined (flag if risk > low).
 7. Known pre-existing failures are captured with evidence.
 
-### 12.6 Mandatory Flags for Risky Upgrades
+### 13.6 Mandatory Flags for Risky Upgrades
 
 For high-risk upgrade paths, implement and use:
 
@@ -820,7 +820,7 @@ For high-risk upgrade paths, implement and use:
 
 Flag behavior must be consistent across backend and frontend surfaces.
 
-### 12.7 Mandatory Session Output Contract
+### 13.7 Mandatory Session Output Contract
 
 Every implementation session must end with:
 
@@ -830,7 +830,7 @@ Every implementation session must end with:
 4. `Risks/notes`
 5. `Suggested next slice`
 
-### 12.8 When to Start a New Session (Decision Matrix)
+### 13.8 When to Start a New Session (Decision Matrix)
 
 Start a **new session** when any are true:
 
@@ -851,7 +851,7 @@ Stay in the **same session** when all are true:
 3. Validation loop is converging.
 4. No context confusion or tool instability.
 
-### 12.9 First 72-Hour Startup Sequence (New Upgrade)
+### 13.9 First 72-Hour Startup Sequence (New Upgrade)
 
 Day 1:
 1. Create scoped branch.
@@ -866,7 +866,7 @@ Day 3:
 1. Ship highest-impact correctness/security fixes first.
 2. Deploy to staging and run smoke validation.
 
-### 12.10 Session Handoff Block (Required)
+### 13.10 Session Handoff Block (Required)
 
 When starting a new session, provide:
 
@@ -885,7 +885,178 @@ This handoff is required for deterministic continuity across sessions.
 
 ---
 
-## 13. Update Log
+## 14. Context Discipline & Anti-Degradation Protocol (2026-03-22)
+
+Code quality degrades mid-spec because of **context poisoning**: as a session progresses, old code/errors/tool outputs accumulate and push out the original instructions, causing the agent to pattern-match to its own recent (potentially flawed) output rather than the governing spec. This section codifies the mandatory countermeasures.
+
+### 14.1 The Core Problem: Why Code Gets Worse
+
+1. **Sliding context window** — early instructions, types, and constraints get evicted as the session grows.
+2. **Self-reinforcing drift** — the agent starts copying patterns from its recent output rather than the spec or CLAUDE.md.
+3. **Scope creep under pressure** — when many files are open, the agent takes shortcuts (inline types, skipped validation, `any` casts) to "make it work."
+4. **Error accumulation** — failed attempts and their error messages pollute context, biasing toward workarounds rather than correct solutions.
+
+### 14.2 Mandatory Phase-Gated Execution (Hard Stops)
+
+**CRITICAL: Never execute an entire dev spec in a single session.** Break every spec into phases with mandatory session boundaries:
+
+| Phase | Scope | Session Rule |
+|-------|-------|--------------|
+| **Phase 1: Types & Contracts** | Data models, Zod schemas, DB types, API contracts | STOP. Review. New session. |
+| **Phase 2: Data Layer** | DB migrations, queries, services | STOP. Review. New session. |
+| **Phase 3: API/Backend** | Routes, middleware, business logic | STOP. Review. New session. |
+| **Phase 4: UI Components** | React components, hooks, contexts | STOP. Review. New session. |
+| **Phase 5: Integration & Polish** | Wiring, error handling, loading states | STOP. Review. New session. |
+| **Phase 6: Tests & Hardening** | Unit tests, E2E tests, edge cases | STOP. Review. New session. |
+
+Each new session = fresh context = no drift. **This is the single biggest lever for code quality.**
+
+### 14.3 Architect-First Pattern (Mandatory Before Coding)
+
+Before any code generation in a new feature or phase, run a pure planning pass:
+
+```
+You are the architect. Do NOT write any code yet.
+
+Review the spec at <path> and the existing code at <paths>. Produce:
+1. File structure — what files will be created/modified
+2. Data flow — how data moves through the system (text diagram)
+3. Ambiguities — any conflicts or unclear requirements in the spec
+4. Phase breakdown — ordered list of atomic implementation steps
+5. Risk assessment — what could go wrong, what needs tests first
+```
+
+Review that output. Fix the spec. **Then** start coding. This catches 80% of drift before it begins.
+
+### 14.4 Atomic Task Format (Required for Every Prompt)
+
+Never give a vague instruction. Every implementation prompt must follow this format:
+
+```md
+## Task: <Feature> — Step N of M
+
+**Scope:** <exactly what to build — one layer only>
+**Input:** <existing files/types to read first>
+**Output:** <exact files to create/modify>
+**Constraints:**
+- Do NOT build <out-of-scope items>
+- Do NOT modify files outside scope
+- Follow patterns in <reference file>
+**Done when:** <concrete, testable completion criteria>
+**Validate:** <exact commands to run>
+```
+
+Atomic tasks = the agent knows exactly when it's done and doesn't over-reach.
+
+### 14.5 Mid-Session Self-Audit Checkpoints
+
+**Every 3 slices or when quality feels like it's slipping**, the agent MUST pause and self-audit:
+
+```
+STOP CODING. Review everything written in this session.
+
+Check against CLAUDE.md rules:
+1. Any `any` types introduced? → Fix immediately
+2. Any inline styles instead of Tailwind? → Fix immediately
+3. Any direct DB calls outside lib/db? → Fix immediately
+4. Any missing error boundaries on async functions? → Fix immediately
+5. Any files modified outside declared scope? → Revert
+6. Any patterns contradicting the governing spec? → Fix immediately
+7. Any shortcuts taken "to make it work"? → Refactor properly
+```
+
+This self-audit is **non-negotiable** and must produce a written checklist before continuing.
+
+### 14.6 Context Reset Protocol
+
+When starting a new session after a phase boundary:
+
+1. **Clear context** — start fresh, do not continue from a compacted session.
+2. **Re-anchor** — begin with: *"We're starting Phase N. Read CLAUDE.md and the spec at `<path>`. Here's what Phase N-1 produced: [key files/types]. Your task is..."*
+3. **Verify before building** — read the output of the previous phase before writing new code. Never assume previous work is correct.
+4. **Commit before switching** — always commit working code before ending a session. The commit is both a checkpoint and a forcing function for quality.
+
+### 14.7 Anti-Drift Hard Rules
+
+These rules are enforced at all times, regardless of context pressure:
+
+1. **Never introduce `any` types** — if you can't type it properly, stop and ask. This is the #1 canary for degradation.
+2. **Never skip validation** — every slice must pass lint + typecheck before commit. No "I'll fix it later."
+3. **Never modify files outside declared scope** — if you discover a needed change, document it as a blocker for the next slice.
+4. **Never copy-paste code to make it work** — if you're duplicating logic, extract it or stop and reassess the approach.
+5. **Never suppress errors** — no `catch {}`, no `// @ts-ignore` in new code, no `eslint-disable` without documented justification.
+6. **Read before writing** — always read existing code in a file before modifying it. Never generate code based on assumptions about what's already there.
+7. **One concern per commit** — if a commit message needs "and" more than once, the slice is too big.
+
+### 14.8 Quality Degradation Detection & Recovery
+
+Signs that code quality is degrading (agent or reviewer should watch for):
+
+| Signal | What It Means | Action |
+|--------|--------------|--------|
+| `any` types appearing | Context lost type definitions | Stop. Re-read types. Fix. |
+| Growing `// TODO` comments | Agent deferring instead of solving | Stop. Solve or declare blocker. |
+| Duplicated logic across files | Agent forgot shared utilities exist | Stop. Read lib/. Refactor. |
+| Error handlers returning `null` | Agent optimizing for "no red" over correctness | Stop. Implement proper error handling. |
+| Files modified outside scope | Agent solving problems it wasn't asked to solve | Revert. Document for next slice. |
+| Test assertions getting weaker | Agent making tests pass rather than testing behavior | Stop. Rewrite assertions from spec. |
+| Increasing `eslint-disable` comments | Agent fighting the linter instead of fixing code | Stop. Fix the underlying issue. |
+
+**Recovery procedure:** When 2+ signals are detected:
+1. Stop all implementation.
+2. Run the self-audit checkpoint (Section 13.5).
+3. Commit whatever is clean.
+4. Start a new session with a fresh context and explicit re-anchoring.
+
+### 14.9 Claude Code vs Codex: Operating Model Comparison
+
+Understanding this difference is key to getting production-grade output from Claude Code:
+
+| Dimension | Codex | Claude Code |
+|-----------|-------|-------------|
+| Session length | Short, isolated bursts | Long-running, agentic |
+| Context drift risk | Low (fresh per call) | High if unmanaged |
+| Multi-file reasoning | Weaker | Much stronger |
+| Best use case | Surgical edits, single-file fixes | Full feature builds across files |
+| Requires | Just a well-scoped prompt | Intentional session structure |
+
+**The key insight:** Codex feels more precise because its short sessions force fresh context. Claude Code's power is in long-horizon, multi-file work — but you must architect your prompts and sessions the same way you'd architect your code. The developers getting great results from Claude Code are using phase-gated execution, not single-session marathons.
+
+### 14.10 Session Length Limits
+
+To prevent degradation, enforce these hard limits:
+
+1. **Maximum files modified per session:** 8-10 production files. If you need more, break into phases.
+2. **Maximum slices per session:** 4-5. After that, context quality degrades measurably.
+3. **Maximum session duration for implementation:** ~45 minutes of active coding. After that, commit and start fresh.
+4. **Mandatory commit checkpoint:** After every 2-3 slices, commit clean code before continuing.
+
+### 14.11 Prompt Hygiene for Operators
+
+When giving prompts to Claude Code, follow these rules to maximize output quality:
+
+1. **One layer at a time** — never ask for "backend + frontend + tests" in one prompt. Pick one.
+2. **Reference files explicitly** — "See `lib/types/alerts.ts` for existing types" beats "use the existing types."
+3. **State what NOT to do** — "Do NOT build any UI yet" prevents scope creep.
+4. **Include done-when criteria** — "Done when `pnpm exec tsc --noEmit` passes and the new route returns 200" is unambiguous.
+5. **Paste key context** — when starting a new session, paste the relevant types/interfaces rather than expecting the agent to find them.
+
+---
+
+## 15. Update Log
+
+### 2026-03-22: Context Discipline & Anti-Degradation Protocol
+- Added Section 14: comprehensive anti-degradation protocol addressing code quality decay during long sessions.
+- Added phase-gated execution model with mandatory session boundaries.
+- Added architect-first pattern requirement before any coding begins.
+- Added atomic task format template for all implementation prompts.
+- Added mid-session self-audit checkpoints (every 3 slices).
+- Added quality degradation detection signals and recovery procedure.
+- Added session length limits and prompt hygiene rules for operators.
+- Added Claude Code vs Codex operating model comparison for context.
+- Fixed orphaned agent table rows (QA, Docs, Explorer) misplaced after Section 8.9; restored to Section 7.1 table.
+- Renumbered all sections after 7 to fix duplicate Section 8 numbering.
+- Renumbered Update Log to Section 15.
 
 ### 2026-02-27: Gold Standard Development Process
 - Added Section 11: Incremental Development & QA Process.

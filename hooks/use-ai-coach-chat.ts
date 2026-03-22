@@ -20,6 +20,8 @@ import {
   getActiveChartSymbol,
   subscribeActiveChartSymbol,
 } from '@/lib/ai-coach-chart-context'
+import { getLatestAssistantChartRequest } from '@/lib/ai-coach-chat-state'
+import { recoverInterruptedStreamContent } from '@/lib/ai-coach-stream'
 
 export const AI_COACH_CURRENT_SESSION_STORAGE_KEY = 'ai-coach-current-session-id'
 
@@ -33,6 +35,10 @@ export interface ChatMessage {
   isOptimistic?: boolean
   isStreaming?: boolean
   streamStatus?: string
+}
+
+export interface AICoachSendMessageOptions {
+  initialStreamStatus?: string
 }
 
 interface AICoachChatState {
@@ -781,7 +787,11 @@ export function useAICoachChat() {
   /**
    * Send message with streaming (default) or fallback to non-streaming
    */
-  const sendMessage = useCallback(async (text: string, imagePayload?: { image: string; imageMimeType: string }) => {
+  const sendMessage = useCallback(async (
+    text: string,
+    imagePayload?: { image: string; imageMimeType: string },
+    options?: AICoachSendMessageOptions,
+  ) => {
     const token = getToken()
     if (!token || !text.trim() || sendingRef.current) return
 
@@ -823,7 +833,7 @@ export function useAICoachChat() {
       content: '',
       timestamp: new Date().toISOString(),
       isStreaming: true,
-      streamStatus: 'Thinking...',
+      streamStatus: options?.initialStreamStatus?.trim() || 'Thinking...',
     }
 
     const applyStateIfActive = (updater: (prev: AICoachChatState) => AICoachChatState) => {
@@ -841,7 +851,8 @@ export function useAICoachChat() {
     try {
       let streamContent = ''
       let doneData: StreamDoneData | null = null
-      let usedStreaming = false
+      let receivedStreamEvent = false
+      let recoveredStreamError: string | null = null
 
       try {
         // Try streaming first
@@ -853,7 +864,7 @@ export function useAICoachChat() {
           imagePayload,
           { activeChartSymbol: activeChartSymbolRef.current },
         )) {
-          usedStreaming = true
+          receivedStreamEvent = true
 
           if (event.type === 'status') {
             const status = event.data as { phase: string; function?: string; resetContent?: boolean }
@@ -890,8 +901,9 @@ export function useAICoachChat() {
           }
         }
       } catch (streamError) {
-        // If streaming fails and we haven't received any data, fall back to non-streaming
-        if (!usedStreaming) {
+        const shouldFallbackToNonStreaming = !receivedStreamEvent || (!streamContent.trim() && !doneData)
+
+        if (shouldFallbackToNonStreaming) {
           const response = await apiSendMessage(
             sessionId,
             trimmedText,
@@ -909,7 +921,12 @@ export function useAICoachChat() {
             responseTime: response.responseTime,
           }
         } else {
-          throw streamError
+          const recovered = recoverInterruptedStreamContent(streamContent)
+          if (!recovered) {
+            throw streamError
+          }
+          streamContent = recovered.content
+          recoveredStreamError = recovered.error
         }
       }
 
@@ -938,6 +955,7 @@ export function useAICoachChat() {
           assistantMessage,
         ],
         isSending: false,
+        error: recoveredStreamError,
         ...(newChartRequest ? { chartRequest: newChartRequest } : {}),
       }))
 
@@ -952,7 +970,7 @@ export function useAICoachChat() {
         },
       })
 
-      if (activeSendTokenRef.current === sendToken) {
+      if (activeSendTokenRef.current === sendToken && !recoveredStreamError) {
         loadSessions()
       }
     } catch (error) {
@@ -1026,6 +1044,8 @@ export function useAICoachChat() {
       error: null,
       rateLimitInfo: null,
       isSending: false,
+      chartRequest: null,
+      isSending: false,
     }))
   }, [])
 
@@ -1062,7 +1082,12 @@ export function useAICoachChat() {
             ? extractChartRequest(msg.functionCalls as ChatMessageResponse['functionCalls'])
             : null,
         }))
-      setState(prev => ({ ...prev, messages: loadedMessages, isLoadingMessages: false }))
+      setState(prev => ({
+        ...prev,
+        messages: loadedMessages,
+        isLoadingMessages: false,
+        chartRequest: getLatestAssistantChartRequest(loadedMessages),
+      }))
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return
@@ -1106,7 +1131,11 @@ export function useAICoachChat() {
       setState(prev => {
         const updatedSessions = prev.sessions.filter(s => s.id !== sessionId)
         const isCurrentSession = prev.currentSessionId === sessionId
-        return { ...prev, sessions: updatedSessions, ...(isCurrentSession ? { currentSessionId: null, messages: [] } : {}) }
+        return {
+          ...prev,
+          sessions: updatedSessions,
+          ...(isCurrentSession ? { currentSessionId: null, messages: [], chartRequest: null } : {}),
+        }
       })
     } catch (error) {
       const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to delete session'

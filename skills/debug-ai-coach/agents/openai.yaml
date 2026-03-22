@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Coach Debugger"
+  short_description: "Debug symbol routing and chat-state bugs."
+  default_prompt: "Investigate AI Coach bugs end-to-end: reproduce the issue, trace prompt/routing/tool execution, identify root cause, add regression tests, and summarize fixes and remaining risks."

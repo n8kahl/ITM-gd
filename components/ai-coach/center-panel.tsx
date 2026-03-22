@@ -1987,7 +1987,6 @@ function WelcomeView({
     if (marketStatus.label === 'After Hours') return 'After-Hours Review'
     return 'Market Closed'
   }, [marketStatus.label])
-
   const quickAccessCards: Array<{
     label: string
     subtitle: string

@@ -4,6 +4,7 @@ import {
   buildIntentRoutingPlan,
   shouldAttemptContractRewrite,
   evaluateResponseContract,
+  sanitizeToolArgumentsForRoutingPlan,
 } from '../intentRouter';
 
 describe('intentRouter', () => {
@@ -365,5 +366,28 @@ describe('intentRouter', () => {
     expect(message).toContain('PDL');
     expect(message).not.toContain('Completed tools');
     expect(message).not.toContain('Remaining required tools');
+  });
+
+  it('sanitizes stray tool-call symbols back to the routed symbol scope', () => {
+    const plan = buildIntentRoutingPlan('Explain this move simply and show the chart.', {
+      activeSymbol: 'SPY',
+    });
+
+    expect(
+      sanitizeToolArgumentsForRoutingPlan('get_key_levels', { symbol: 'HERE', timeframe: 'intraday' }, plan),
+    ).toEqual({
+      symbol: 'SPY',
+      timeframe: 'intraday',
+    });
+  });
+
+  it('preserves allowed multi-symbol tool arguments for comparison flows', () => {
+    const plan = buildIntentRoutingPlan('Compare SPX and SPY right now.');
+
+    expect(
+      sanitizeToolArgumentsForRoutingPlan('compare_symbols', { symbols: ['SPX', 'SPY'] }, plan),
+    ).toEqual({
+      symbols: ['SPX', 'SPY'],
+    });
   });
 });

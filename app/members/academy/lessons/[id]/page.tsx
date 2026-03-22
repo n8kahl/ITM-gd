@@ -10,6 +10,7 @@ export default async function AcademyLessonPage({
   const { id } = await params
   const query = await searchParams
   const resume = query.resume === '1'
+  const preview = query.preview === 'true'
 
-  return <AcademyLessonViewer lessonId={id} resume={resume} />
+  return <AcademyLessonViewer lessonId={id} resume={resume} preview={preview} />
 }

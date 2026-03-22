@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { useAICoachChat } from '@/hooks/use-ai-coach-chat'
+import { useAICoachChat, type AICoachSendMessageOptions } from '@/hooks/use-ai-coach-chat'
 import { ChatMessageBubble, TypingIndicator } from '@/components/ai-coach/chat-message'
 import { ChatImageUpload, ChatDropOverlay } from '@/components/ai-coach/chat-image-upload'
 import { CenterPanel, type ChartRequest, type CenterView } from '@/components/ai-coach/center-panel'
@@ -678,7 +678,11 @@ interface ChatAreaProps {
   isLoadingMessages: boolean
   error: string | null
   rateLimitInfo: { queryCount?: number; queryLimit?: number; resetDate?: string } | null
-  onSendMessage: (text: string, imagePayload?: { image: string; imageMimeType: string }) => void
+  onSendMessage: (
+    text: string,
+    imagePayload?: { image: string; imageMimeType: string },
+    options?: AICoachSendMessageOptions,
+  ) => Promise<void> | void
   onNewSession: () => void
   onSelectSession: (id: string) => void
   onDeleteSession: (id: string) => void
@@ -833,7 +837,6 @@ function ChatArea({
       setActivePromptSymbol(normalizePromptSymbol(symbol))
     })
   }, [])
-
   useEffect(() => {
     const handleFocusInput = () => {
       inputRef.current?.focus()
@@ -993,7 +996,11 @@ function ChatArea({
 
     // Send the image directly to the chat LLM so it can see and discuss it
     setIsAnalyzingImage(false)
-    onSendMessage(msg, { image: staged.base64, imageMimeType: staged.mimeType })
+    onSendMessage(
+      msg,
+      { image: staged.base64, imageMimeType: staged.mimeType },
+      { initialStreamStatus: 'Analyzing screenshot...' },
+    )
   }
 
   const handleCsvAnalysis = async (userMessage: string) => {

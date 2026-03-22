@@ -1,3 +1,5 @@
+import { extractExplicitSymbols } from './symbolExtraction';
+
 type ChartTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1D';
 
 export type CoachIntentId =
@@ -41,14 +43,6 @@ interface IntentSpec {
   requiresStructuredTradeSchema?: boolean;
   requiresClarifyBeforeCommit?: boolean;
 }
-
-const STOPWORDS = new Set([
-  'A', 'AI', 'ALL', 'AM', 'AN', 'AND', 'ARE', 'AS', 'AT', 'BE', 'BEST', 'BULL', 'BEAR', 'BY', 'CAN', 'CLOSE',
-  'DAY', 'ET', 'FOR', 'FROM', 'GAME', 'GIVE', 'GO', 'HOUR', 'HOW', 'I', 'IF', 'IN', 'IS', 'IT', 'KEY', 'LEVEL',
-  'LEVELS', 'LOOK', 'MARKET', 'ME', 'MY', 'NOW', 'OF', 'ON', 'OR', 'PLAN', 'PRICE', 'RISK', 'SCAN', 'SETUP',
-  'SHOW', 'SPOT', 'THAT', 'THE', 'THIS', 'TO', 'TODAY', 'TRADE', 'WHAT', 'WHEN', 'WHERE', 'WITH', 'YOU', 'YOUR',
-  'VWAP', 'GEX', 'PDH', 'PDL', 'PDC', 'ATR', 'IV', 'DTE', 'EMA', 'RSI', 'MACD', 'OI',
-]);
 
 const SYMBOL_PRIORITY = ['SPX', 'NDX', 'QQQ', 'SPY'];
 
@@ -357,26 +351,7 @@ function isSetAlertCreationPrompt(message: string): boolean {
 }
 
 function extractSymbols(message: string): string[] {
-  const matches = message.match(/\b\$?[A-Za-z]{1,5}\b/g) || [];
-  const lowercaseKnownSymbols = new Set([
-    'spx', 'ndx', 'spy', 'qqq', 'iwm', 'dia', 'vix', 'xlf', 'xle', 'xlk', 'smh', 'tlt', 'gld', 'slv',
-    'aapl', 'msft', 'nvda', 'tsla', 'amzn', 'meta', 'googl', 'amd',
-  ]);
-
-  const symbols = matches
-    .map((rawToken) => {
-      const hasDollarPrefix = rawToken.startsWith('$');
-      const token = rawToken.replace(/^\$/, '');
-      const lower = token.toLowerCase();
-      const isAllUpper = token === token.toUpperCase();
-      if (!hasDollarPrefix && !isAllUpper && !lowercaseKnownSymbols.has(lower)) return null;
-      return token.toUpperCase();
-    })
-    .filter((token): token is string => typeof token === 'string')
-    .filter((token) => token.length >= 1 && token.length <= 5)
-    .filter((token) => !STOPWORDS.has(token));
-
-  return dedupe(symbols);
+  return extractExplicitSymbols(message);
 }
 
 function selectPrimarySymbol(symbols: string[], intents: CoachIntentId[], loweredMessage: string): string | null {
@@ -481,6 +456,52 @@ function extractCalledSymbols(functionCalls: FunctionCallLike[]): string[] {
   }
 
   return dedupe(symbols);
+}
+
+export function sanitizeToolArgumentsForRoutingPlan(
+  functionName: string,
+  args: Record<string, unknown>,
+  plan: IntentRoutingPlan,
+): Record<string, unknown> {
+  const nextArgs: Record<string, unknown> = { ...args };
+  const allowedSymbols = dedupe(plan.symbols.map((symbol) => coerceSymbol(symbol)).filter((symbol): symbol is string => Boolean(symbol)));
+  const fallbackSymbol = coerceSymbol(plan.primarySymbol) || allowedSymbols[0] || null;
+
+  if (typeof nextArgs.symbol === 'string' && (SYMBOL_SPECIFIC_FUNCTIONS.has(functionName) || fallbackSymbol)) {
+    const requestedSymbol = coerceSymbol(nextArgs.symbol);
+    if (!requestedSymbol && fallbackSymbol) {
+      nextArgs.symbol = fallbackSymbol;
+    } else if (
+      requestedSymbol
+      && allowedSymbols.length > 0
+      && !allowedSymbols.includes(requestedSymbol)
+      && fallbackSymbol
+    ) {
+      nextArgs.symbol = fallbackSymbol;
+    }
+  } else if (nextArgs.symbol == null && SYMBOL_SPECIFIC_FUNCTIONS.has(functionName) && fallbackSymbol) {
+    nextArgs.symbol = fallbackSymbol;
+  }
+
+  if (Array.isArray(nextArgs.symbols)) {
+    const requestedSymbols = dedupe(nextArgs.symbols
+      .map((symbol) => coerceSymbol(symbol))
+      .filter((symbol): symbol is string => Boolean(symbol)));
+
+    const sanitizedSymbols = allowedSymbols.length > 0
+      ? requestedSymbols.filter((symbol) => allowedSymbols.includes(symbol))
+      : requestedSymbols;
+
+    if (sanitizedSymbols.length > 0) {
+      nextArgs.symbols = sanitizedSymbols.slice(0, 3);
+    } else if (fallbackSymbol) {
+      nextArgs.symbols = [fallbackSymbol];
+    } else {
+      delete nextArgs.symbols;
+    }
+  }
+
+  return nextArgs;
 }
 
 export function buildIntentRoutingPlan(message: string, context?: IntentRoutingContext): IntentRoutingPlan {
