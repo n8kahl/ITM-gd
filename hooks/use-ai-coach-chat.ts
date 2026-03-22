@@ -1045,7 +1045,6 @@ export function useAICoachChat() {
       rateLimitInfo: null,
       isSending: false,
       chartRequest: null,
-      isSending: false,
     }))
   }, [])
 
