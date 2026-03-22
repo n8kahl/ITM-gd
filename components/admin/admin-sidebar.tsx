@@ -100,7 +100,7 @@ export function AdminSidebar() {
     const productAndContent: NavGroupModel = {
       group: 'Product & Content',
       items: [
-        { name: 'Course Library', href: '/admin/courses', icon: GraduationCap },
+        { name: 'Academy', href: '/admin/academy', icon: GraduationCap },
         { name: 'Knowledge Base', href: '/admin/knowledge-base', icon: BookOpen },
         { name: 'Alert Console', href: '/admin/alerts', icon: Radio },
         {
