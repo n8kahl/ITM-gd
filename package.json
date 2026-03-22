@@ -32,7 +32,7 @@
     "test:backend": "pnpm --dir backend exec jest --runInBand --silent",
     "test:backend:coverage": "pnpm --dir backend exec jest --coverage --runInBand --silent",
     "test:backend:journal-contract": "pnpm --dir backend exec jest src/__tests__/integration/spx-replay-journal-api.test.ts src/__tests__/integration/spx-replay-session-detail-api.test.ts src/__tests__/integration/spx-replay-session-trades-api.test.ts src/__tests__/integration/spx-replay-sessions-api.test.ts --runInBand --silent",
-    "test:journal:e2e": "PLAYWRIGHT_REUSE_SERVER=false playwright test e2e/specs/members/journal*.spec.ts e2e/specs/admin/trade-review.spec.ts --project=chromium --workers=1",
+    "test:journal:e2e": "node scripts/e2e/run-journal-e2e.mjs",
     "test:journal:release": "pnpm typecheck && pnpm lint:journal:release && pnpm test:coverage && pnpm test:backend:journal-contract && pnpm build && pnpm test:journal:e2e",
     "backtest:spx": "pnpm --dir backend run backtest:spx",
     "backtest:spx:walkforward": "pnpm --dir backend run backtest:spx:walkforward",

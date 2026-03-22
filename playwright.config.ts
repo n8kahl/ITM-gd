@@ -4,6 +4,7 @@ const aiCoachMode = process.env.E2E_AI_COACH_MODE || 'mock'
 const isAICoachLiveMode = aiCoachMode === 'live'
 const defaultLiveBackendUrl = 'http://127.0.0.1:3101'
 const frontendBaseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000'
+const e2eDeterministicMode = String(process.env.E2E_DETERMINISTIC_MODE || 'false').toLowerCase() === 'true'
 const e2eBackendUrl = process.env.E2E_BACKEND_URL
   || process.env.NEXT_PUBLIC_AI_COACH_API_URL
   || (isAICoachLiveMode ? defaultLiveBackendUrl : 'http://127.0.0.1:3001')
@@ -55,7 +56,7 @@ const webServers: NonNullable<ReturnType<typeof defineConfig>['webServer']> = [
 if (shouldStartLocalBackendServer()) {
   const backendPort = new URL(e2eBackendUrl).port || '3001'
   webServers.push({
-    command: `PORT=${backendPort} E2E_BYPASS_AUTH=true E2E_BYPASS_SHARED_SECRET=${process.env.E2E_BYPASS_SHARED_SECRET || ''} npm run dev`,
+    command: `PORT=${backendPort} E2E_BYPASS_AUTH=true E2E_BYPASS_SHARED_SECRET=${process.env.E2E_BYPASS_SHARED_SECRET || ''} E2E_DETERMINISTIC_MODE=${e2eDeterministicMode ? 'true' : 'false'} npm run dev`,
     cwd: 'backend',
     url: e2eBackendUrl,
     reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === 'true',
