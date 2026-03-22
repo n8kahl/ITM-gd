@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import dotenv from 'dotenv';
 import { logger } from '../lib/logger';
+import { fmpCircuit } from '../lib/circuitBreaker';
 
 dotenv.config();
 
@@ -123,11 +124,13 @@ export async function getFMPEarningsCalendar(
   }
 
   try {
-    const response = await fmpClient.get<FMPEarningsEvent[]>('/earnings-calendar', {
-      params: { from, to },
+    const events = await fmpCircuit.execute(async () => {
+      const response = await fmpClient.get<FMPEarningsEvent[]>('/earnings-calendar', {
+        params: { from, to },
+      });
+      return Array.isArray(response.data) ? response.data : [];
     });
 
-    const events = Array.isArray(response.data) ? response.data : [];
     logger.info('FMP earnings calendar fetched', { from, to, count: events.length });
     return events;
   } catch (error: any) {

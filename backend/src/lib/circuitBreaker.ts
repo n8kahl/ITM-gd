@@ -1,6 +1,6 @@
 /**
  * Circuit Breaker implementation for external API calls.
- * Prevents cascade failures when OpenAI or Massive.com APIs are down.
+ * Prevents cascade failures when external APIs (OpenAI, Massive.com, FRED, FMP) are down.
  *
  * States:
  * - CLOSED: Normal operation, requests pass through
@@ -134,3 +134,25 @@ export const massiveCircuit = new CircuitBreaker({
   cooldownMs: 30000, // 30 seconds
   timeoutMs: 15000,  // 15 seconds per call
 });
+
+export const fredCircuit = new CircuitBreaker({
+  name: 'FRED',
+  failureThreshold: 3,
+  cooldownMs: 30000, // 30 seconds
+  timeoutMs: 15000,  // 15 seconds per call
+});
+
+export const fmpCircuit = new CircuitBreaker({
+  name: 'FMP',
+  failureThreshold: 3,
+  cooldownMs: 30000, // 30 seconds
+  timeoutMs: 15000,  // 15 seconds per call
+});
+
+/** Registry of all circuit breakers for health check endpoints */
+export const circuitBreakerRegistry: Record<string, CircuitBreaker> = {
+  openai: openaiCircuit,
+  massive: massiveCircuit,
+  fred: fredCircuit,
+  fmp: fmpCircuit,
+};
