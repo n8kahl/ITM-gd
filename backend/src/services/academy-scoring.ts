@@ -3,11 +3,21 @@
  * Provides scoring logic for each interactive lesson block type.
  */
 
+export interface ScoringDetailItem {
+  field: string;
+  correct: boolean;
+  expected?: string | number;
+  actual?: string | number;
+  hint?: string;
+  partialCredit?: number;
+}
+
 export interface ScoringResult {
   score: number;
   maxScore: number;
   feedback: string;
   isCorrect: boolean;
+  details?: ScoringDetailItem[];
 }
 
 // ---------------------------------------------------------------------------
@@ -56,11 +66,23 @@ function scoreOptionsChainSimulator(answer: unknown, answerKey: unknown): Scorin
   const score = correctHits;
   const isCorrect = score === maxScore;
 
+  const details: ScoringDetailItem[] = correct.map(option => ({
+    field: option,
+    correct: selected.includes(option),
+    hint: selected.includes(option) ? undefined : `Option "${option}" should have been selected.`,
+  }));
+  // Flag false positives
+  for (const s of selected) {
+    if (!correct.includes(s)) {
+      details.push({ field: s, correct: false, hint: `"${s}" was selected but is not correct.` });
+    }
+  }
+
   const feedback = isCorrect
     ? 'Perfect selection — all correct options identified.'
     : `${correctHits} of ${maxScore} correct. Review the options chain metrics and try again.`;
 
-  return { score, maxScore, feedback, isCorrect };
+  return { score, maxScore, feedback, isCorrect, details };
 }
 
 /**
@@ -78,15 +100,24 @@ function scorePayoffDiagramBuilder(answer: unknown, answerKey: unknown): Scoring
   let correctFields = 0;
 
   const feedbackParts: string[] = [];
+  const details: ScoringDetailItem[] = [];
   for (const field of fields) {
     const submitted = asNumber(answer[field as string], NaN);
     const expected = asNumber(answerKey[field as string], NaN);
     if (Number.isNaN(submitted) || Number.isNaN(expected)) continue;
-    if (Math.abs(submitted - expected) <= tolerance) {
+    const isFieldCorrect = Math.abs(submitted - expected) <= tolerance;
+    if (isFieldCorrect) {
       correctFields++;
     } else {
       feedbackParts.push(`${field}: expected ~${expected}, got ${submitted}`);
     }
+    details.push({
+      field: String(field),
+      correct: isFieldCorrect,
+      expected,
+      actual: submitted,
+      hint: isFieldCorrect ? undefined : `Expected ~${expected} (±${tolerance}). You entered ${submitted}.`,
+    });
   }
 
   const isCorrect = correctFields === fields.length;
@@ -94,7 +125,7 @@ function scorePayoffDiagramBuilder(answer: unknown, answerKey: unknown): Scoring
     ? 'Payoff diagram values are correct.'
     : `${correctFields}/${fields.length} values within tolerance. ` + feedbackParts.join('; ');
 
-  return { score: correctFields, maxScore: fields.length, feedback, isCorrect };
+  return { score: correctFields, maxScore: fields.length, feedback, isCorrect, details };
 }
 
 /**
@@ -131,11 +162,20 @@ function scoreStrategyMatcher(answer: unknown, answerKey: unknown): ScoringResul
   const pairs = Object.entries(answerKey);
   const maxScore = pairs.length || 1;
   let correctCount = 0;
+  const details: ScoringDetailItem[] = [];
 
   for (const [scenarioKey, correctStrategy] of pairs) {
-    if (asString(answer[scenarioKey]) === asString(correctStrategy)) {
-      correctCount++;
-    }
+    const submitted = asString(answer[scenarioKey]);
+    const expected = asString(correctStrategy);
+    const isMatch = submitted === expected;
+    if (isMatch) correctCount++;
+    details.push({
+      field: scenarioKey,
+      correct: isMatch,
+      expected,
+      actual: submitted || '(none)',
+      hint: isMatch ? undefined : `The correct strategy for this scenario is "${expected}".`,
+    });
   }
 
   const isCorrect = correctCount === maxScore;
@@ -143,7 +183,7 @@ function scoreStrategyMatcher(answer: unknown, answerKey: unknown): ScoringResul
     ? 'All scenarios matched correctly.'
     : `${correctCount}/${maxScore} correct matches. Revisit strategy selection criteria.`;
 
-  return { score: correctCount, maxScore, feedback, isCorrect };
+  return { score: correctCount, maxScore, feedback, isCorrect, details };
 }
 
 /**
@@ -266,11 +306,22 @@ function scoreMarketContextTagger(answer: unknown, answerKey: unknown): ScoringR
 
   const isCorrect = correctHits === correct.size && falsePositives === 0;
 
+  const details: ScoringDetailItem[] = [...correct].map(tag => ({
+    field: tag,
+    correct: selected.has(tag),
+    hint: selected.has(tag) ? undefined : `Tag "${tag}" was expected but not selected.`,
+  }));
+  for (const tag of selected) {
+    if (!correct.has(tag)) {
+      details.push({ field: tag, correct: false, hint: `Tag "${tag}" is a false positive — precision matters.` });
+    }
+  }
+
   const feedback = isCorrect
     ? 'Market context tagged correctly.'
     : `${correctHits}/${correct.size} correct tags, ${falsePositives} incorrect tag(s). Precision matters — false signals hurt.`;
 
-  return { score, maxScore, feedback, isCorrect };
+  return { score, maxScore, feedback, isCorrect, details };
 }
 
 /**
@@ -286,22 +337,31 @@ function scoreOrderEntrySimulator(answer: unknown, answerKey: unknown): ScoringR
   let correctFields = 0;
   const maxScore = 3; // side, type, quantity (price is optional)
   const feedbackParts: string[] = [];
+  const details: ScoringDetailItem[] = [];
 
   const checkField = (field: string, tolerance = 0): void => {
     const submitted = answer[field];
     const expected = answerKey[field];
     if (expected === undefined) return; // optional field not in key
+    let isFieldCorrect = false;
     if (typeof expected === 'number' && typeof submitted === 'number') {
-      if (Math.abs(submitted - expected) <= tolerance) {
-        correctFields++;
-      } else {
+      isFieldCorrect = Math.abs(submitted - expected) <= tolerance;
+      if (!isFieldCorrect) {
         feedbackParts.push(`${field}: expected ${expected}, got ${submitted}`);
       }
     } else if (asString(submitted).toLowerCase() === asString(expected).toLowerCase()) {
-      correctFields++;
+      isFieldCorrect = true;
     } else {
       feedbackParts.push(`${field}: expected "${expected}", got "${submitted}"`);
     }
+    if (isFieldCorrect) correctFields++;
+    details.push({
+      field,
+      correct: isFieldCorrect,
+      expected: typeof expected === 'number' ? expected : asString(expected),
+      actual: typeof submitted === 'number' ? submitted : asString(submitted) || '(none)',
+      hint: isFieldCorrect ? undefined : `Expected "${expected}" for ${field}.`,
+    });
   };
 
   checkField('side');
@@ -318,7 +378,7 @@ function scoreOrderEntrySimulator(answer: unknown, answerKey: unknown): ScoringR
     ? 'Order entered correctly.'
     : `${correctFields}/${maxScore} fields correct. ` + feedbackParts.join('; ');
 
-  return { score: correctFields, maxScore, feedback, isCorrect };
+  return { score: correctFields, maxScore, feedback, isCorrect, details };
 }
 
 /**

@@ -19,6 +19,7 @@ import { sendError, ErrorCode } from '../lib/errors';
 import { logger } from '../lib/logger';
 import { scoreActivity } from '../services/academy-scoring';
 import { awardXp, XP_REWARDS } from '../services/academy-xp';
+import { buildRetrySchedule } from '../services/academy-spaced-repetition';
 import type { AcademyLessonBlock } from '../types/academy';
 
 const router = Router();
@@ -179,14 +180,73 @@ router.post(
         }
       }
 
+      // Calculate spaced repetition retry schedule for failed activities
+      const previousAttempts = await supabase
+        .from('academy_learning_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('entity_id', blockId)
+        .eq('event_type', 'activity_submission');
+
+      const attemptCount = (previousAttempts.count ?? 1);
+
+      const retrySchedule = buildRetrySchedule({
+        blockId,
+        blockType: block.block_type,
+        lessonId: block.lesson_id,
+        userId,
+        score: scoring.score,
+        maxScore: scoring.maxScore,
+        attemptCount,
+      });
+
+      // Persist retry queue entry if scheduled
+      if (retrySchedule.scheduled && retrySchedule.nextRetryDate) {
+        const { error: retryError } = await supabase.from('academy_activity_retry_queue').upsert(
+          {
+            user_id: userId,
+            block_id: blockId,
+            block_type: block.block_type,
+            lesson_id: block.lesson_id,
+            attempt_count: retrySchedule.attemptCount,
+            last_score: scoring.score,
+            max_score: scoring.maxScore,
+            scheduled_for: retrySchedule.nextRetryDate,
+            updated_at: now,
+          },
+          { onConflict: 'user_id,block_id' }
+        );
+
+        if (retryError) {
+          logger.warn('Failed to upsert retry queue entry', {
+            userId,
+            blockId,
+            error: retryError.message,
+          });
+        }
+      }
+
+      // Remove from retry queue if activity passed
+      if (scoring.isCorrect || (scoring.maxScore > 0 && scoring.score / scoring.maxScore >= 0.7)) {
+        await supabase
+          .from('academy_activity_retry_queue')
+          .delete()
+          .eq('user_id', userId)
+          .eq('block_id', blockId);
+      }
+
       res.json({
         score: scoring.score,
         maxScore: scoring.maxScore,
         feedback: scoring.feedback,
         isCorrect: scoring.isCorrect,
+        details: scoring.details ?? [],
         xpEarned,
         xp: xpResult
           ? { totalXp: xpResult.totalXp, currentLevel: xpResult.currentLevel, leveledUp: xpResult.leveledUp }
+          : null,
+        retry: retrySchedule.scheduled
+          ? { nextRetryDate: retrySchedule.nextRetryDate, attemptCount: retrySchedule.attemptCount }
           : null,
       });
     } catch (error) {
@@ -233,6 +293,53 @@ router.get(
     } catch (error) {
       logger.error('Error fetching activity results', { blockId, error });
       sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to fetch activity results');
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /retry-queue — Fetch the authed user's pending retry activities
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/retry-queue',
+  async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      sendError(res, 401, ErrorCode.UNAUTHORIZED, 'User not authenticated');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('academy_activity_retry_queue')
+        .select('block_id, block_type, lesson_id, attempt_count, last_score, max_score, scheduled_for, updated_at')
+        .eq('user_id', userId)
+        .order('scheduled_for', { ascending: true });
+
+      if (error) {
+        logger.error('Failed to fetch retry queue', { userId, error: error.message });
+        sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to fetch retry queue');
+        return;
+      }
+
+      const now = new Date();
+      const items = (data ?? []).map((row) => ({
+        blockId: row.block_id,
+        blockType: row.block_type,
+        lessonId: row.lesson_id,
+        attemptCount: row.attempt_count,
+        lastScore: row.last_score,
+        maxScore: row.max_score,
+        scheduledFor: row.scheduled_for,
+        isDue: new Date(row.scheduled_for) <= now,
+      }));
+
+      res.json({ retryQueue: items });
+    } catch (error) {
+      logger.error('Error fetching retry queue', { error });
+      sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to fetch retry queue');
     }
   }
 );
