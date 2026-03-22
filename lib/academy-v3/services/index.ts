@@ -6,6 +6,10 @@ export { AcademyAssessmentService } from './assessment-service'
 export { AcademyReviewService } from './review-service'
 export { AcademyMasteryService } from './mastery-service'
 export { AcademyRecommendationService } from './recommendation-service'
+export { ContentWorkflowService, ContentWorkflowError } from './content-workflow-service'
+export { ContentVersioningService, ContentVersioningError } from './content-versioning-service'
+export { BulkContentService, BulkContentError } from './bulk-content-service'
+export { AiContentGeneratorService, AiContentGeneratorError } from './ai-content-generator-service'
 export {
   AcademyPlanNotFoundError,
   AcademyModuleNotFoundError,
