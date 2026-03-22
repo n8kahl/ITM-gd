@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__36d0c2a7-36d5-4c24-a17e-c6ca60114e01__execute_sql",
+      "mcp__36d0c2a7-36d5-4c24-a17e-c6ca60114e01__apply_migration"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
