@@ -1,6 +1,8 @@
 import type {
   AcademyLesson,
   AcademyLessonBlock,
+  AcademyLessonStatus,
+  AcademyLessonVersion,
   AcademyModule,
   AcademyProgram,
   AcademyTrack,
@@ -85,12 +87,24 @@ export interface AcademyModuleRepository {
 
 export interface AcademyLessonRepository {
   getPublishedLessonById(lessonId: string): Promise<AcademyLesson | null>
+  getLessonById(lessonId: string): Promise<AcademyLesson | null>
   listPublishedLessonsForModule(moduleId: string): Promise<AcademyLesson[]>
   listBlocksForLesson(lessonId: string): Promise<AcademyLessonBlock[]>
   listRecommendedLessonsForCompetencies(
     competencyIds: string[],
     limit: number
   ): Promise<AcademyLessonRecommendation[]>
+  listLessonsByStatus(params: {
+    status?: AcademyLessonStatus
+    moduleId?: string
+    limit: number
+    offset: number
+  }): Promise<{ lessons: AcademyLesson[]; total: number }>
+  updateLessonStatus(
+    lessonId: string,
+    status: AcademyLessonStatus,
+    publishedBy?: string
+  ): Promise<AcademyLesson | null>
 }
 
 export interface AcademyProgressRepository {
@@ -159,6 +173,19 @@ export interface AcademyReviewRepository {
     confidenceRating?: number
     latencyMs?: number
   }): Promise<void>
+}
+
+export interface AcademyLessonVersionRepository {
+  createVersion(input: {
+    lessonId: string
+    versionNumber: number
+    contentSnapshot: Record<string, unknown>
+    changeSummary?: string
+    publishedBy?: string
+  }): Promise<AcademyLessonVersion>
+  listVersionsForLesson(lessonId: string): Promise<AcademyLessonVersion[]>
+  getVersion(lessonId: string, versionId: string): Promise<AcademyLessonVersion | null>
+  getLatestVersionNumber(lessonId: string): Promise<number>
 }
 
 export interface AcademyLearningEventRepository {

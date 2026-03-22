@@ -2,6 +2,8 @@ import { z } from 'zod'
 import {
   academyLessonBlockSchema,
   academyLessonSchema,
+  academyLessonStatusSchema,
+  academyLessonVersionSchema,
   academyModuleSchema,
   academyPlanSchema,
 } from './domain'
@@ -239,6 +241,60 @@ export const getAcademyAchievementsResponseSchema = z.object({
 export type AcademyAchievementItem = z.infer<typeof academyAchievementItemSchema>
 export type GetAcademyAchievementsResponse = z.infer<typeof getAcademyAchievementsResponseSchema>
 
+// ---------------------------------------------------------------------------
+// Content Workflow (Slice 2.1)
+// ---------------------------------------------------------------------------
+
+export const updateLessonStatusRequestSchema = z.object({
+  status: academyLessonStatusSchema,
+  publishedBy: z.string().uuid().optional(),
+})
+
+export const updateLessonStatusResponseSchema = z.object({
+  data: z.object({
+    lessonId: z.string().uuid(),
+    previousStatus: academyLessonStatusSchema,
+    newStatus: academyLessonStatusSchema,
+    publishedAt: z.string().nullable(),
+  }),
+})
+
+export const listLessonsByStatusRequestSchema = z.object({
+  status: academyLessonStatusSchema.optional(),
+  moduleId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+})
+
+export const adminLessonItemSchema = academyLessonSchema.extend({
+  moduleName: z.string().nullable(),
+})
+
+export const listAdminLessonsResponseSchema = z.object({
+  data: z.object({
+    lessons: z.array(adminLessonItemSchema),
+    total: z.number().int().nonnegative(),
+  }),
+})
+
+// ---------------------------------------------------------------------------
+// Content Versioning (Slice 2.2)
+// ---------------------------------------------------------------------------
+
+export const listLessonVersionsResponseSchema = z.object({
+  data: z.object({
+    versions: z.array(academyLessonVersionSchema),
+  }),
+})
+
+export const rollbackLessonVersionResponseSchema = z.object({
+  data: z.object({
+    lessonId: z.string().uuid(),
+    restoredVersionNumber: z.number().int().positive(),
+    newStatus: academyLessonStatusSchema,
+  }),
+})
+
 export type ApiErrorResponse = z.infer<typeof academyErrorResponseSchema>
 export type GetAcademyPlanResponse = z.infer<typeof getAcademyPlanResponseSchema>
 export type GetAcademyModuleParams = z.infer<typeof getAcademyModuleParamsSchema>
@@ -266,3 +322,10 @@ export type GetAcademyLessonAttemptResponse = z.infer<typeof getAcademyLessonAtt
 export type ModuleProgressSummaryItem = z.infer<typeof moduleProgressSummaryItemSchema>
 export type TrackProgressSummaryItem = z.infer<typeof trackProgressSummaryItemSchema>
 export type GetAcademyProgressSummaryResponse = z.infer<typeof getAcademyProgressSummaryResponseSchema>
+export type UpdateLessonStatusRequest = z.infer<typeof updateLessonStatusRequestSchema>
+export type UpdateLessonStatusResponse = z.infer<typeof updateLessonStatusResponseSchema>
+export type ListLessonsByStatusRequest = z.infer<typeof listLessonsByStatusRequestSchema>
+export type AdminLessonItem = z.infer<typeof adminLessonItemSchema>
+export type ListAdminLessonsResponse = z.infer<typeof listAdminLessonsResponseSchema>
+export type ListLessonVersionsResponse = z.infer<typeof listLessonVersionsResponseSchema>
+export type RollbackLessonVersionResponse = z.infer<typeof rollbackLessonVersionResponseSchema>

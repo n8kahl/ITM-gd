@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+export const academyLessonStatusSchema = z.enum(['draft', 'review', 'published'])
+
 export const academyDifficultySchema = z.enum(['beginner', 'intermediate', 'advanced'])
 
 export const academyBlockTypeSchema = z.enum([
@@ -98,6 +100,9 @@ export const academyLessonSchema = z.object({
   prerequisiteLessonIds: z.array(z.string().uuid()),
   position: z.number().int().nonnegative(),
   isPublished: z.boolean(),
+  status: academyLessonStatusSchema,
+  publishedAt: z.string().nullable(),
+  publishedBy: z.string().uuid().nullable(),
 })
 
 export const academyLessonBlockSchema = z.object({
@@ -120,6 +125,16 @@ export const academyPlanSchema = z.object({
       ),
     })
   ),
+})
+
+export const academyLessonVersionSchema = z.object({
+  id: z.string().uuid(),
+  lessonId: z.string().uuid(),
+  versionNumber: z.number().int().positive(),
+  contentSnapshot: z.record(z.string(), z.unknown()),
+  changeSummary: z.string().nullable(),
+  publishedBy: z.string().uuid().nullable(),
+  publishedAt: z.string(),
 })
 
 export const academyUserXpSchema = z.object({
@@ -162,6 +177,7 @@ export const academyUserAchievementSchema = z.object({
   unlockedAt: z.string(),
 })
 
+export type AcademyLessonStatus = z.infer<typeof academyLessonStatusSchema>
 export type AcademyDifficulty = z.infer<typeof academyDifficultySchema>
 export type AcademyBlockType = z.infer<typeof academyBlockTypeSchema>
 export type AcademyLearningEventType = z.infer<typeof academyLearningEventTypeSchema>
@@ -177,4 +193,5 @@ export type AcademyPlan = z.infer<typeof academyPlanSchema>
 export type AcademyUserXp = z.infer<typeof academyUserXpSchema>
 export type AcademyUserStreak = z.infer<typeof academyUserStreakSchema>
 export type AcademyAchievement = z.infer<typeof academyAchievementSchema>
+export type AcademyLessonVersion = z.infer<typeof academyLessonVersionSchema>
 export type AcademyUserAchievement = z.infer<typeof academyUserAchievementSchema>

@@ -39,3 +39,17 @@ export class AcademyReviewQueueItemNotFoundError extends Error {
     this.name = 'AcademyReviewQueueItemNotFoundError'
   }
 }
+
+export class AcademyInvalidStatusTransitionError extends Error {
+  constructor(from: string, to: string) {
+    super(`Invalid status transition from '${from}' to '${to}'`)
+    this.name = 'AcademyInvalidStatusTransitionError'
+  }
+}
+
+export class AcademyLessonVersionNotFoundError extends Error {
+  constructor(message = 'Lesson version not found') {
+    super(message)
+    this.name = 'AcademyLessonVersionNotFoundError'
+  }
+}

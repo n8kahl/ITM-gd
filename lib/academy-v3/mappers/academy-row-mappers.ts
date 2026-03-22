@@ -79,6 +79,13 @@ export function mapAcademyModuleRow(row: Record<string, unknown>): AcademyModule
   }
 }
 
+function asLessonStatus(value: unknown): 'draft' | 'review' | 'published' {
+  if (value === 'draft' || value === 'review' || value === 'published') {
+    return value
+  }
+  return 'draft'
+}
+
 export function mapAcademyLessonRow(row: Record<string, unknown>): AcademyLesson {
   return {
     id: asString(row.id),
@@ -92,6 +99,9 @@ export function mapAcademyLessonRow(row: Record<string, unknown>): AcademyLesson
     prerequisiteLessonIds: asStringArray(row.prerequisite_lesson_ids),
     position: asNumber(row.position),
     isPublished: asBoolean(row.is_published),
+    status: asLessonStatus(row.status),
+    publishedAt: typeof row.published_at === 'string' ? row.published_at : null,
+    publishedBy: typeof row.published_by === 'string' ? row.published_by : null,
   }
 }
 
