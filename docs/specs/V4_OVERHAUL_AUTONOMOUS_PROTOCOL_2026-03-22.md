@@ -54,10 +54,25 @@ ALLOWED TO READ:
   backend/src/routes/academy-*.ts
   Everything else (read-only)
 
+ALLOWED MCP TOOLS:
+  Gamma MCP: generate, get_themes, get_folders
+  Supabase MCP: execute_sql, list_tables (for curriculum queries)
+
 NEVER MODIFY:
   app/admin/** (except academy subdir)
   backend/** (except academy routes)
   lib/spx/**
+```
+
+**Phase 2 Autonomous Run Command:**
+```bash
+claude -p "You are executing Phase 2 (Content Revolution) of the V4 Overhaul.
+Read docs/specs/V4_OVERHAUL_EXECUTION_SPEC_2026-03-22.md for full scope.
+Use Gamma MCP tools (generate, get_themes, get_folders) for all visual asset
+production in Slice 2.9. Query curriculum structure from Supabase before
+generating assets. Follow Emerald Standard brand guidelines (dark mode,
+#10B981 primary, Playfair Display headings, no stock photos).
+Work through slices 2.1-2.9 sequentially. Commit after each slice."
 ```
 
 ### Phase 3: Interactive Activities

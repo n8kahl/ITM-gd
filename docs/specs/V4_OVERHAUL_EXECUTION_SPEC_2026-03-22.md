@@ -80,10 +80,11 @@ pnpm exec playwright test e2e/specs/admin/ --project=chromium --workers=1
 |-------|-------------|-------------|-------------------|
 | 2.1 | Add content draft/publish workflow | `lib/academy-v3/services/`, `app/api/academy-v3/` | Lessons have `draft` → `review` → `published` states; only `published` visible to members |
 | 2.2 | Content versioning (immutable history) | `supabase/migrations/`, `lib/academy-v3/` | Every publish creates an immutable version record; rollback to any previous version |
-| 2.3 | Bulk content import/export (JSON) | `app/api/admin/academy/`, `components/admin/academy/` | Export entire curriculum as JSON; import JSON to create/update lessons |
+| 2.3 | Bulk content import/export (JSON) + Gamma visual integration | `app/api/admin/academy/`, `components/admin/academy/` | Export entire curriculum as JSON; import JSON to create/update lessons; Gamma MCP tools integrated for visual asset generation |
 | 2.4 | Enhanced AI content generator | `components/admin/academy/content-generator.tsx` | Generate full lesson with blocks, activities, and quiz from a topic prompt |
 | 2.5 | Content preview mode | `components/academy/`, `app/members/academy/` | Admin can preview unpublished content with a `?preview=true` flag |
 | 2.6 | Content analytics dashboard | `components/admin/academy/learning-analytics.tsx` | Per-lesson completion rates, time-on-page, drop-off points |
+| 2.9 | Gamma visual asset production | Supabase Storage `academy-assets/` | ~270 visual assets generated via Gamma MCP: module covers, lesson heroes, concept explainers, cheat sheets, achievement badges, social templates, track infographics |
 
 ### Out of Scope
 
@@ -110,6 +111,50 @@ CREATE TABLE academy_lesson_versions (
   UNIQUE(lesson_id, version_number)
 );
 ```
+
+### Gamma.app Visual Integration (Slice 2.3 / 2.9)
+
+**Tool:** [Gamma.app](https://gamma.app) — Creative visual generation platform, accessed via MCP.
+
+#### Available MCP Tools
+
+| Tool | Purpose |
+|------|---------|
+| `generate` | Create visual assets (presentations, infographics, cards) from text prompts |
+| `get_themes` | List available Gamma themes for brand-consistent generation |
+| `get_folders` | List Gamma folders for organizing generated content |
+
+#### Asset Type Table
+
+| Asset Type | Count | Dimensions | Supabase Storage Path | Source |
+|-----------|-------|-----------|----------------------|--------|
+| Module Covers | 35 | 1200×630 | `academy-assets/modules/{slug}/cover.webp` | Gamma `generate` |
+| Lesson Heroes | ~120 | 1200×400 | `academy-assets/lessons/{id}/hero.webp` | Gamma `generate` |
+| Concept Explainers | ~60 | 800×600 | `academy-assets/lessons/{id}/explainers/{n}.webp` | Gamma `generate` |
+| Cheat Sheets | 35 | 1080×1920 | `academy-assets/modules/{slug}/cheat-sheet.webp` | Gamma `generate` |
+| Achievement Badges | 30 | 512×512 | `academy-assets/achievements/{code}.webp` | Gamma `generate` |
+| Social Share Templates | 6 | 1200×630 | `academy-assets/social/{template}.webp` | Gamma `generate` |
+| Track Overview Infographics | 6 | 1200×1600 | `academy-assets/tracks/{code}/overview.webp` | Gamma `generate` |
+
+**Total: ~270 visual assets**
+
+#### Brand Theme Requirements (Emerald Standard)
+
+- **Primary palette:** Emerald Green (`#10B981`) + Champagne (`#F3E5AB`) on dark backgrounds
+- **Typography:** Playfair Display for headings, Inter for body, Geist Mono for data
+- **Aesthetic:** Private equity / terminal / quiet luxury — dark mode only
+- **Constraints:** No stock photos, no cartoon/clip-art, no `#D4AF37` (deprecated gold)
+- **Style:** Clean geometric patterns, abstract data visualizations, subtle gradients
+
+#### Generation Workflow (Autonomous Runs)
+
+1. Query curriculum structure from Supabase (`academy_modules`, `academy_lessons`, `academy_competencies`)
+2. For each asset type, generate prompt text using module/lesson metadata (title, description, difficulty, competency tags)
+3. Call Gamma `generate` MCP tool with brand-themed prompt
+4. Export generated asset at required dimensions (webp format)
+5. Upload to Supabase Storage at the designated path
+6. Update relevant DB record with the asset URL (`cover_image_url`, `hero_image_url`, etc.)
+7. Verify all assets render correctly via spot-check
 
 ### Validation Gates
 
