@@ -12,6 +12,7 @@ import { getMarketStatus } from '../services/marketHours';
 import { getWebSocketHealth } from '../services/websocket';
 import { TradierClient } from '../services/broker/tradier/client';
 import { getTradierExecutionRuntimeStatus } from '../services/broker/tradier/executionEngine';
+import { circuitBreakerRegistry } from '../lib/circuitBreaker';
 
 const router = Router();
 
@@ -323,6 +324,15 @@ router.get('/test-massive', async (_req: Request, res: Response) => {
   const failedTests = allTests.filter(t => !t.ok);
   results.summary = { total: allTests.length, passed: allTests.length - failedTests.length, failed: failedTests.length, status: failedTests.length === 0 ? 'all_ok' : 'issues_found' };
   return res.json(results);
+});
+
+// Circuit breaker states for admin health dashboard
+router.get('/circuits', (_req: Request, res: Response) => {
+  const circuits: Record<string, { state: string; failureCount: number }> = {};
+  for (const [key, breaker] of Object.entries(circuitBreakerRegistry)) {
+    circuits[key] = breaker.getState();
+  }
+  return res.status(200).json({ circuits });
 });
 
 export default router;

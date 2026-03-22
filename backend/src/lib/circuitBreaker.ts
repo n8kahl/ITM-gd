@@ -149,7 +149,10 @@ export const fmpCircuit = new CircuitBreaker({
   timeoutMs: 15000,  // 15 seconds per call
 });
 
-/** Registry of all circuit breakers for health check endpoints */
+/**
+ * Registry of all circuit breakers for health monitoring.
+ * Keys match service names used in the integration health dashboard.
+ */
 export const circuitBreakerRegistry: Record<string, CircuitBreaker> = {
   openai: openaiCircuit,
   massive: massiveCircuit,
