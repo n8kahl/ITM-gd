@@ -89,19 +89,19 @@ export async function POST(request: NextRequest) {
     )
 
     return NextResponse.json({ success: true, data: version })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+  } catch (err) {
+    if (err instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, error: 'Invalid request', details: error.errors },
+        { success: false, error: 'Invalid request', details: (err as z.ZodError).errors },
         { status: 400 }
       )
     }
-    if (error instanceof AcademyLessonNotFoundError) {
+    if (err instanceof AcademyLessonNotFoundError) {
       return NextResponse.json({ success: false, error: 'Lesson not found' }, { status: 404 })
     }
-    console.error('content-versions POST failed', error)
+    console.error('content-versions POST failed', err)
     return NextResponse.json(
-      { success: false, error: toSafeErrorMessage(error) },
+      { success: false, error: toSafeErrorMessage(err) },
       { status: 500 }
     )
   }
@@ -134,19 +134,19 @@ export async function PUT(request: NextRequest) {
     )
 
     return NextResponse.json({ success: true, data: version })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+  } catch (err) {
+    if (err instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, error: 'Invalid request', details: error.errors },
+        { success: false, error: 'Invalid request', details: (err as z.ZodError).errors },
         { status: 400 }
       )
     }
-    if (error instanceof ContentVersioningError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 422 })
+    if (err instanceof ContentVersioningError) {
+      return NextResponse.json({ success: false, error: err.message }, { status: 422 })
     }
-    console.error('content-versions PUT failed', error)
+    console.error('content-versions PUT failed', err)
     return NextResponse.json(
-      { success: false, error: toSafeErrorMessage(error) },
+      { success: false, error: toSafeErrorMessage(err) },
       { status: 500 }
     )
   }

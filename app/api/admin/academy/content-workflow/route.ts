@@ -102,22 +102,22 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, data: lesson })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+  } catch (err) {
+    if (err instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, error: 'Invalid request', details: error.errors },
+        { success: false, error: 'Invalid request', details: (err as z.ZodError).errors },
         { status: 400 }
       )
     }
-    if (error instanceof AcademyLessonNotFoundError) {
+    if (err instanceof AcademyLessonNotFoundError) {
       return NextResponse.json({ success: false, error: 'Lesson not found' }, { status: 404 })
     }
-    if (error instanceof ContentWorkflowError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 422 })
+    if (err instanceof ContentWorkflowError) {
+      return NextResponse.json({ success: false, error: err.message }, { status: 422 })
     }
-    console.error('content-workflow POST failed', error)
+    console.error('content-workflow POST failed', err)
     return NextResponse.json(
-      { success: false, error: toSafeErrorMessage(error) },
+      { success: false, error: toSafeErrorMessage(err) },
       { status: 500 }
     )
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, type ChangeEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -79,7 +79,7 @@ export function ContentGenerator({ courseId, onSave }: ContentGeneratorProps) {
           difficulty: form.difficulty,
           key_topics: form.key_topics
             .split(',')
-            .map((t) => t.trim())
+            .map((t: string) => t.trim())
             .filter(Boolean),
           estimated_minutes: form.estimated_minutes,
         }),
@@ -177,7 +177,7 @@ export function ContentGenerator({ courseId, onSave }: ContentGeneratorProps) {
               </Label>
               <Input
                 value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, title: e.target.value })}
                 placeholder="e.g., Understanding Options Greeks"
                 className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
               />
@@ -216,7 +216,7 @@ export function ContentGenerator({ courseId, onSave }: ContentGeneratorProps) {
               </Label>
               <Input
                 value={form.key_topics}
-                onChange={(e) => setForm({ ...form, key_topics: e.target.value })}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, key_topics: e.target.value })}
                 placeholder="e.g., delta, gamma, theta, vega"
                 className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
               />
@@ -234,7 +234,7 @@ export function ContentGenerator({ courseId, onSave }: ContentGeneratorProps) {
                 min={5}
                 max={120}
                 value={form.estimated_minutes}
-                onChange={(e) =>
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
                   setForm({ ...form, estimated_minutes: parseInt(e.target.value) || 15 })
                 }
                 className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
@@ -337,7 +337,7 @@ export function ContentGenerator({ courseId, onSave }: ContentGeneratorProps) {
                   </h3>
                 </div>
                 <ul className="space-y-3">
-                  {generated.key_takeaways.map((takeaway, i) => (
+                  {generated.key_takeaways.map((takeaway: string, i: number) => (
                     <li key={i} className="flex items-start gap-3">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-400" />
                       <span className="text-white/70 text-sm">{takeaway}</span>
@@ -360,7 +360,7 @@ export function ContentGenerator({ courseId, onSave }: ContentGeneratorProps) {
                   </span>
                 </div>
                 <div className="space-y-6">
-                  {generated.quiz_questions.map((q, qi) => (
+                  {generated.quiz_questions.map((q: QuizQuestion, qi: number) => (
                     <QuizQuestionPreview key={qi} question={q} index={qi} />
                   ))}
                 </div>
