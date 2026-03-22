@@ -4,6 +4,7 @@ import type { AcademyLesson, AcademyLessonStatus } from '@/lib/academy-v3/contra
 import { SupabaseAcademyLessonRepository } from '@/lib/academy-v3/repositories'
 
 import { AcademyInvalidStatusTransitionError, AcademyLessonNotFoundError } from './errors'
+import { AcademyVersioningService } from './versioning-service'
 
 /**
  * Valid status transitions for the content workflow.
@@ -19,9 +20,11 @@ const VALID_TRANSITIONS: Record<AcademyLessonStatus, AcademyLessonStatus[]> = {
 
 export class AcademyContentWorkflowService {
   private readonly lessons: SupabaseAcademyLessonRepository
+  private readonly versioning: AcademyVersioningService
 
   constructor(supabase: SupabaseClient) {
     this.lessons = new SupabaseAcademyLessonRepository(supabase)
+    this.versioning = new AcademyVersioningService(supabase)
   }
 
   async transitionLessonStatus(
@@ -49,6 +52,11 @@ export class AcademyContentWorkflowService {
 
     if (!updated) {
       throw new AcademyLessonNotFoundError()
+    }
+
+    // Auto-snapshot on publish
+    if (targetStatus === 'published') {
+      await this.versioning.createSnapshot(lessonId, actorId, `Published from ${currentStatus}`)
     }
 
     return { lesson: updated, previousStatus: currentStatus }

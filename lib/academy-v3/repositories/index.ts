@@ -7,6 +7,7 @@ export { SupabaseAcademyAssessmentRepository } from './assessment-repository'
 export { SupabaseAcademyMasteryRepository } from './mastery-repository'
 export { SupabaseAcademyReviewRepository } from './review-repository'
 export { SupabaseAcademyLearningEventRepository } from './learning-event-repository'
+export { SupabaseAcademyLessonVersionRepository } from './lesson-version-repository'
 
 export type {
   AcademyProgramRepository,
@@ -24,4 +25,5 @@ export type {
   AcademyMasteryRecord,
   AcademyReviewQueueRecord,
   AcademyLessonRecommendation,
+  AcademyLessonVersionRepository,
 } from './types'
