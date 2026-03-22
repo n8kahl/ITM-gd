@@ -86,6 +86,8 @@ export const academyModuleSchema = z.object({
   isPublished: z.boolean(),
 })
 
+export const academyContentStatusSchema = z.enum(['draft', 'review', 'published'])
+
 export const academyLessonSchema = z.object({
   id: z.string().uuid(),
   moduleId: z.string().uuid(),
@@ -98,6 +100,9 @@ export const academyLessonSchema = z.object({
   prerequisiteLessonIds: z.array(z.string().uuid()),
   position: z.number().int().nonnegative(),
   isPublished: z.boolean(),
+  status: academyContentStatusSchema.default('draft'),
+  publishedAt: z.string().nullable().optional(),
+  publishedBy: z.string().uuid().nullable().optional(),
 })
 
 export const academyLessonBlockSchema = z.object({
@@ -168,6 +173,102 @@ export type AcademyLearningEventType = z.infer<typeof academyLearningEventTypeSc
 export type AcademyAssessmentType = z.infer<typeof academyAssessmentTypeSchema>
 export type AcademyAssessmentItemType = z.infer<typeof academyAssessmentItemTypeSchema>
 
+// ---------------------------------------------------------------------------
+// Content Versioning
+// ---------------------------------------------------------------------------
+
+export const academyLessonVersionSchema = z.object({
+  id: z.string().uuid(),
+  lessonId: z.string().uuid(),
+  versionNumber: z.number().int().positive(),
+  contentSnapshot: z.record(z.string(), z.unknown()),
+  changeSummary: z.string().nullable(),
+  publishedBy: z.string().uuid().nullable(),
+  publishedAt: z.string(),
+  createdAt: z.string(),
+})
+
+// ---------------------------------------------------------------------------
+// Bulk Import/Export
+// ---------------------------------------------------------------------------
+
+export const bulkLessonBlockSchema = z.object({
+  blockType: academyBlockTypeSchema,
+  position: z.number().int().nonnegative(),
+  title: z.string().nullable(),
+  contentJson: z.record(z.string(), z.unknown()),
+})
+
+export const bulkLessonSchema = z.object({
+  slug: z.string().min(1),
+  title: z.string().min(1),
+  learningObjective: z.string().min(1),
+  estimatedMinutes: z.number().int().nonnegative(),
+  difficulty: academyDifficultySchema,
+  position: z.number().int().nonnegative(),
+  blocks: z.array(bulkLessonBlockSchema).optional(),
+})
+
+export const bulkModuleSchema = z.object({
+  slug: z.string().min(1),
+  code: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  learningOutcomes: z.array(z.string()),
+  estimatedMinutes: z.number().int().nonnegative(),
+  position: z.number().int().nonnegative(),
+  lessons: z.array(bulkLessonSchema).optional(),
+})
+
+export const bulkTrackSchema = z.object({
+  code: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  position: z.number().int().nonnegative(),
+  modules: z.array(bulkModuleSchema).optional(),
+})
+
+export const bulkCurriculumSchema = z.object({
+  program: z.object({
+    code: z.string().min(1),
+    title: z.string().min(1),
+    description: z.string().nullable(),
+  }),
+  tracks: z.array(bulkTrackSchema),
+  exportedAt: z.string(),
+  version: z.literal('1.0'),
+})
+
+// ---------------------------------------------------------------------------
+// AI Content Generator (structured blocks)
+// ---------------------------------------------------------------------------
+
+export const aiGeneratedBlockSchema = z.object({
+  blockType: academyBlockTypeSchema,
+  title: z.string().min(1),
+  contentJson: z.record(z.string(), z.unknown()),
+})
+
+export const aiGeneratedLessonSchema = z.object({
+  title: z.string().min(1),
+  learningObjective: z.string().min(1),
+  estimatedMinutes: z.number().int().positive(),
+  difficulty: academyDifficultySchema,
+  blocks: z.array(aiGeneratedBlockSchema),
+  keyTakeaways: z.array(z.string()),
+  quizQuestions: z.array(z.object({
+    question: z.string().min(1),
+    options: z.array(z.string()).min(2),
+    correctAnswer: z.number().int().nonnegative(),
+    explanation: z.string(),
+  })),
+})
+
+// ---------------------------------------------------------------------------
+// Type Exports
+// ---------------------------------------------------------------------------
+
+export type AcademyContentStatus = z.infer<typeof academyContentStatusSchema>
 export type AcademyProgram = z.infer<typeof academyProgramSchema>
 export type AcademyTrack = z.infer<typeof academyTrackSchema>
 export type AcademyModule = z.infer<typeof academyModuleSchema>
@@ -178,3 +279,11 @@ export type AcademyUserXp = z.infer<typeof academyUserXpSchema>
 export type AcademyUserStreak = z.infer<typeof academyUserStreakSchema>
 export type AcademyAchievement = z.infer<typeof academyAchievementSchema>
 export type AcademyUserAchievement = z.infer<typeof academyUserAchievementSchema>
+export type AcademyLessonVersion = z.infer<typeof academyLessonVersionSchema>
+export type BulkLessonBlock = z.infer<typeof bulkLessonBlockSchema>
+export type BulkLesson = z.infer<typeof bulkLessonSchema>
+export type BulkModule = z.infer<typeof bulkModuleSchema>
+export type BulkTrack = z.infer<typeof bulkTrackSchema>
+export type BulkCurriculum = z.infer<typeof bulkCurriculumSchema>
+export type AiGeneratedBlock = z.infer<typeof aiGeneratedBlockSchema>
+export type AiGeneratedLesson = z.infer<typeof aiGeneratedLessonSchema>

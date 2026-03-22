@@ -8,6 +8,8 @@ export { AcademyAssessmentService } from './assessment-service'
 export { AcademyReviewService } from './review-service'
 export { AcademyMasteryService } from './mastery-service'
 export { AcademyRecommendationService } from './recommendation-service'
+export { ContentWorkflowService, ContentWorkflowError } from './content-workflow-service'
+export { ContentVersioningService, ContentVersioningError } from './content-versioning-service'
 export {
   AcademyPlanNotFoundError,
   AcademyModuleNotFoundError,
