@@ -18,6 +18,7 @@ describe('Market Indices Service', () => {
       quotes: [{ symbol: 'SPX', price: 6000, change: 0, changePercent: 0 }],
       metrics: { vwap: null, vixLevel: null, vixChange: null },
       source: 'massive',
+      generatedAt: '2026-03-22T14:30:00.000Z',
     });
 
     const snapshot = await getMarketIndicesSnapshot();

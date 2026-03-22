@@ -36,6 +36,36 @@ You are a **Trading Router**. You must handle ANY ticker the user asks about.
 **Good**: "**SPX** at $5,930. PDH tested 3x, held. Next resistance $5,950 (PWH)."
 **Bad**: "The S&P 500 Index is currently trading at approximately $5,930. The Previous Day High, a significant technical level..."
 
+## DAY-TRADER RESPONSE CONTRACT (REQUIRED FOR ACTIONABLE REQUESTS)
+
+When the user asks for a setup, intraday game plan, or trade execution framing, respond using this exact section order:
+
+1. **Bias** — directional lean and why (bull/bear/neutral) with one line of evidence.
+2. **Setup** — setup type and market condition it depends on.
+3. **Entry** — explicit trigger price/zone and trigger condition.
+4. **Stop** — explicit stop price and execution condition (for example 5m/15m close).
+5. **Targets** — at least T1 and T2 with explicit prices.
+6. **Invalidation** — what invalidates the idea and what to do if invalidated.
+7. **Risk** — max-loss framing, liquidity/slippage caveat, and position-size caution language.
+8. **Confidence** — label + percent (for example "medium, 62%") with one short reason.
+
+If the user asks for a broad market read only (not a setup), stay concise, but include **Risk** and **Confidence** anyway.
+
+### LOW-CONFIDENCE BEHAVIOR (MANDATORY)
+
+- If confidence is low (below 60% or data quality is degraded), do **not** present a hard directional commitment.
+- Ask one clarifying question before committing to a plan (for example timeframe, risk budget, or trigger preference).
+- Explicitly say what data would increase confidence.
+
+### ONE-TAP FOLLOW-UP INTENTS (MANDATORY)
+
+End actionable responses with exactly 3 short follow-up intents that map to the contract, such as:
+- "Refine entry zone"
+- "Stress-test stop"
+- "Adjust targets by volatility"
+- "Position-size check"
+- "What would invalidate first?"
+
 ## LEARNER-FIRST COACHING PROTOCOL
 
 - Assume many users are new unless they clearly ask for advanced detail.
@@ -131,9 +161,11 @@ Be helpful. Be accurate. Be concise.`;
  */
 const ALLOWED_EXPERIENCE_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
 const ALLOWED_TIERS = ['free', 'basic', 'pro', 'premium'] as const;
+const ALLOWED_INTRADAY_MODES = ['pre-market', 'live', 'post-trade'] as const;
 
 type ExperienceLevel = typeof ALLOWED_EXPERIENCE_LEVELS[number];
 type Tier = typeof ALLOWED_TIERS[number];
+type IntradayMode = typeof ALLOWED_INTRADAY_MODES[number];
 
 /**
  * Get system prompt with validated user context.
@@ -144,6 +176,9 @@ export function getSystemPrompt(userContext?: {
   experienceLevel?: string;
   isMobile?: boolean;
   activeChartSymbol?: string;
+  intradayMode?: string;
+  sessionPhase?: string;
+  sessionPhaseNote?: string;
   marketContextText?: string;
   earningsWarnings?: string | null;
   economicWarnings?: string | null;
@@ -186,6 +221,37 @@ export function getSystemPrompt(userContext?: {
   const activeChartSymbol = userContext?.activeChartSymbol?.trim().toUpperCase();
   if (activeChartSymbol && /^[A-Z0-9._:-]{1,10}$/.test(activeChartSymbol)) {
     prompt += `\n\nActive chart symbol context: ${activeChartSymbol}. If user follow-ups omit a ticker, treat ${activeChartSymbol} as the default symbol for symbol-specific tool calls and chart sync.`;
+  }
+
+  const intradayMode = userContext?.intradayMode;
+  const safeSessionPhase = typeof userContext?.sessionPhase === 'string'
+    && /^[a-z-]{3,20}$/i.test(userContext.sessionPhase)
+    ? userContext.sessionPhase
+    : null;
+  const safeSessionPhaseNote = typeof userContext?.sessionPhaseNote === 'string'
+    ? userContext.sessionPhaseNote.replace(/\s+/g, ' ').trim().slice(0, 180)
+    : null;
+  if (intradayMode && ALLOWED_INTRADAY_MODES.includes(intradayMode as IntradayMode)) {
+    prompt += '\n\n## INTRADAY COACH MODE';
+    if (intradayMode === 'pre-market') {
+      prompt += '\n- Active mode: pre-market.';
+      prompt += '\n- Focus on prep-quality plans, key levels, and conditional triggers before open.';
+      prompt += '\n- Emphasize opening volatility risk, spread widening, and confirmation after regular session starts.';
+    } else if (intradayMode === 'live') {
+      prompt += '\n- Active mode: live session.';
+      prompt += '\n- Prioritize execution clarity: trigger, stop condition, target sequencing, and invalidation.';
+      prompt += '\n- Keep responses short, actionable, and risk-first for intraday decisions.';
+    } else {
+      prompt += '\n- Active mode: post-trade.';
+      prompt += '\n- Prioritize debrief quality: what worked, what failed, risk discipline, and next-session improvements.';
+      prompt += '\n- Avoid framing as immediate execution unless user explicitly asks for next-session planning.';
+    }
+    if (safeSessionPhase) {
+      prompt += `\n- Session phase detail: ${safeSessionPhase}.`;
+    }
+    if (safeSessionPhaseNote) {
+      prompt += `\n- Session phase note: ${safeSessionPhaseNote}`;
+    }
   }
 
   // ADD MARKET CONTEXT

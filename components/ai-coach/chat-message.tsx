@@ -62,6 +62,9 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({ message, onSe
       initial={{ opacity: 0, y: 12, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
+      data-testid={isUser ? 'ai-coach-message-user' : 'ai-coach-message-assistant'}
+      data-message-role={message.role}
+      data-message-id={message.id}
       className={cn('flex gap-3 group', isUser ? 'justify-end' : 'justify-start')}
     >
       <div className={cn(

@@ -18,6 +18,7 @@ interface MarketIndicesResponse {
         vixChange: number | null;
     };
     source: 'massive';
+    generatedAt: string;
 }
 
 const INDICES_CACHE_TTL = 15; // 15 seconds
@@ -102,6 +103,7 @@ export async function getMarketIndicesSnapshot(): Promise<MarketIndicesResponse>
                 vixChange: vixResult?.o ? ((vixResult.c - vixResult.o) / vixResult.o) * 100 : null,
             },
             source: 'massive',
+            generatedAt: new Date().toISOString(),
         };
 
         await cacheSet(cacheKey, response, INDICES_CACHE_TTL);

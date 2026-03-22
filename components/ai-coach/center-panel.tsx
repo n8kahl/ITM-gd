@@ -86,7 +86,7 @@ import {
 import { mergeRealtimePriceIntoBars } from './chart-realtime'
 import { InfoTip } from '@/components/ui/info-tip'
 import { setActiveChartSymbol } from '@/lib/ai-coach-chart-context'
-import { loadSpxTickerSnapshot } from '@/lib/ai-coach-spx-ticker'
+import type { AICoachMarketSnapshot } from '@/lib/ai-coach/market-snapshot'
 
 // ============================================
 // TYPES
@@ -241,6 +241,7 @@ export type CenterView =
 interface CenterPanelProps {
   onSendPrompt?: (prompt: string) => void
   chartRequest?: ChartRequest | null
+  marketSnapshot?: AICoachMarketSnapshot
   forcedView?: CenterView
   sheetParams?: Record<string, unknown>
   sheetSymbol?: string | null
@@ -474,6 +475,23 @@ function getWelcomeMarketStatus(now: Date = new Date()): WelcomeMarketStatus {
   return { label: 'Closed', toneClass: 'bg-white/10 text-white/60 border-white/20' }
 }
 
+function getWelcomeMarketStatusFromSnapshot(snapshot?: AICoachMarketSnapshot): WelcomeMarketStatus {
+  const status = snapshot?.marketStatus || ''
+  if (status === 'open' || status === 'early-close') {
+    return { label: 'Open', toneClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' }
+  }
+  if (status === 'pre-market') {
+    return { label: 'Pre-Market', toneClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30' }
+  }
+  if (status === 'after-hours') {
+    return { label: 'After Hours', toneClass: 'bg-sky-500/15 text-sky-300 border-sky-500/30' }
+  }
+  if (status === 'closed') {
+    return { label: 'Closed', toneClass: 'bg-white/10 text-white/60 border-white/20' }
+  }
+  return getWelcomeMarketStatus()
+}
+
 function getWelcomeGreeting(displayName?: string, now: Date = new Date()): string {
   const { hour } = getEasternTimeParts(now)
   const firstName = displayName?.trim().split(/\s+/)[0]
@@ -485,7 +503,7 @@ function getWelcomeGreeting(displayName?: string, now: Date = new Date()): strin
 // COMPONENT
 // ============================================
 
-export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParams, sheetSymbol }: CenterPanelProps) {
+export function CenterPanel({ onSendPrompt, chartRequest, marketSnapshot, forcedView, sheetParams, sheetSymbol }: CenterPanelProps) {
   const searchParams = useSearchParams()
   const { session } = useMemberSession()
   const {
@@ -1237,6 +1255,11 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
 
     const nextTab = TABS[nextIndex]
     activateTabView(nextTab.view)
+    window.requestAnimationFrame(() => {
+      const tabElement = document.getElementById(`ai-coach-tab-${nextTab.view}`) as HTMLButtonElement | null
+      tabElement?.focus()
+      tabElement?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    })
   }, [activateTabView])
 
   // ============================================
@@ -1399,7 +1422,7 @@ export function CenterPanel({ onSendPrompt, chartRequest, forcedView, sheetParam
 
           {activeView === 'welcome' && (
             <WelcomeView
-              accessToken={session?.access_token}
+              marketSnapshot={marketSnapshot}
               displayName={session?.user?.user_metadata?.full_name || session?.user?.email || undefined}
               onSendPrompt={onSendPrompt}
               onShowChart={handleShowChart}
@@ -1938,7 +1961,7 @@ function ChartView({
 // ============================================
 
 function WelcomeView({
-  accessToken,
+  marketSnapshot,
   displayName,
   onSendPrompt,
   onShowChart,
@@ -1947,7 +1970,7 @@ function WelcomeView({
   onShowPreferences,
   hideContextData = false,
 }: {
-  accessToken?: string
+  marketSnapshot?: AICoachMarketSnapshot
   displayName?: string
   onSendPrompt?: (prompt: string) => void
   onShowChart: () => void
@@ -1956,29 +1979,7 @@ function WelcomeView({
   onShowPreferences: () => void
   hideContextData?: boolean
 }) {
-  const [, setClockTick] = useState(0)
-  const [spxTicker, setSpxTicker] = useState<{
-    price: number | null
-    change: number | null
-    changePct: number | null
-    asOf: string | null
-    isLoading: boolean
-    error: string | null
-  }>({
-    price: null,
-    change: null,
-    changePct: null,
-    asOf: null,
-    isLoading: true,
-    error: null,
-  })
-
-  useEffect(() => {
-    const interval = setInterval(() => setClockTick((value) => value + 1), 60_000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const marketStatus = getWelcomeMarketStatus()
+  const marketStatus = getWelcomeMarketStatusFromSnapshot(marketSnapshot)
   const greeting = getWelcomeGreeting(displayName)
   const sessionDescriptor = useMemo(() => {
     if (marketStatus.label === 'Pre-Market') return 'Pre-Market Prep'
@@ -1986,46 +1987,6 @@ function WelcomeView({
     if (marketStatus.label === 'After Hours') return 'After-Hours Review'
     return 'Market Closed'
   }, [marketStatus.label])
-
-  const loadSPXTicker = useCallback(async () => {
-    if (!accessToken) return
-
-    setSpxTicker((prev) => ({
-      ...prev,
-      isLoading: prev.price === null,
-      error: null,
-    }))
-
-    try {
-      const snapshot = await loadSpxTickerSnapshot(accessToken)
-
-      setSpxTicker({
-        price: snapshot.price,
-        change: snapshot.change,
-        changePct: snapshot.changePct,
-        asOf: snapshot.asOf,
-        isLoading: false,
-        error: null,
-      })
-    } catch {
-      setSpxTicker((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: 'Live SPX feed unavailable',
-      }))
-    }
-  }, [accessToken])
-
-  useEffect(() => {
-    if (!accessToken || hideContextData) return
-    void loadSPXTicker()
-    const interval = setInterval(() => {
-      void loadSPXTicker()
-    }, 60_000)
-
-    return () => clearInterval(interval)
-  }, [accessToken, hideContextData, loadSPXTicker])
-
   const quickAccessCards: Array<{
     label: string
     subtitle: string
@@ -2046,7 +2007,7 @@ function WelcomeView({
     show: { opacity: 1, y: 0, transition: { duration: 0.24 } },
   }
 
-  const tickerPositive = (spxTicker.change ?? 0) >= 0
+  const tickerPositive = (marketSnapshot?.change ?? 0) >= 0
 
   return (
     <div className="h-full flex flex-col">
@@ -2067,15 +2028,15 @@ function WelcomeView({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[10px] text-emerald-300/75 uppercase tracking-[0.12em]">SPX Live</p>
-                {spxTicker.isLoading && spxTicker.price === null ? (
+                {marketSnapshot?.isLoading && marketSnapshot.price === null ? (
                   <p className="mt-1 text-sm text-white/45">Loading live index quote...</p>
-                ) : spxTicker.error ? (
-                  <p className="mt-1 text-sm text-red-300/80">{spxTicker.error}</p>
+                ) : marketSnapshot?.error && marketSnapshot.price === null ? (
+                  <p className="mt-1 text-sm text-red-300/80">{marketSnapshot.error}</p>
                 ) : (
-                  <p className="mt-0.5 text-lg font-semibold text-white lg:text-xl">${spxTicker.price?.toLocaleString()}</p>
+                  <p className="mt-0.5 text-lg font-semibold text-white lg:text-xl">${marketSnapshot?.price?.toLocaleString()}</p>
                 )}
               </div>
-              {spxTicker.price !== null && spxTicker.change !== null && (
+              {marketSnapshot?.price !== null && marketSnapshot?.change !== null && (
                 <div
                   className={cn(
                     'flex items-center gap-1.5 text-sm font-medium',
@@ -2084,27 +2045,29 @@ function WelcomeView({
                 >
                   {tickerPositive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
                   <span>
-                    {tickerPositive ? '+' : ''}{spxTicker.change.toFixed(2)}
-                    {spxTicker.changePct !== null ? ` (${tickerPositive ? '+' : ''}${spxTicker.changePct.toFixed(2)}%)` : ''}
+                    {tickerPositive ? '+' : ''}{(marketSnapshot?.change ?? 0).toFixed(2)}
+                    {marketSnapshot?.changePct != null ? ` (${tickerPositive ? '+' : ''}${marketSnapshot.changePct.toFixed(2)}%)` : ''}
                   </span>
                 </div>
               )}
             </div>
             <div className="mt-2 flex items-center justify-between gap-2">
-              {spxTicker.asOf ? (
-                <p className="text-[10px] text-white/35">As of {spxTicker.asOf} ET</p>
+              {marketSnapshot?.asOfEt ? (
+                <p className="text-[10px] text-white/35">
+                  As of {marketSnapshot.asOfEt} ET · {marketSnapshot.freshnessLabel} · {marketSnapshot.freshnessDetail}
+                </p>
               ) : <span className="text-[10px] text-white/35">&nbsp;</span>}
               <motion.button
                 type="button"
                 onClick={() => {
-                  void loadSPXTicker()
+                  void marketSnapshot?.refresh()
                 }}
                 className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/55 transition-colors hover:bg-white/10 hover:text-white/75 disabled:opacity-50"
-                disabled={spxTicker.isLoading}
+                disabled={Boolean(marketSnapshot?.isLoading)}
                 aria-label="Refresh SPX context"
                 {...PRESSABLE_PROPS}
               >
-                <RefreshCw className={cn('h-3 w-3', spxTicker.isLoading && 'animate-spin')} />
+                <RefreshCw className={cn('h-3 w-3', marketSnapshot?.isLoading && 'animate-spin')} />
                 Refresh
               </motion.button>
             </div>

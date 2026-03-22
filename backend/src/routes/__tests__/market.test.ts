@@ -60,6 +60,7 @@ describeWithSockets('Market Routes', () => {
       ],
       metrics: { vwap: 5991, vixLevel: 16.2, vixChange: -1.4 },
       source: 'massive',
+      generatedAt: '2026-03-22T14:30:00.000Z',
     });
 
     const res = await request(app).get('/api/market/indices');

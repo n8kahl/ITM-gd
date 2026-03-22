@@ -73,7 +73,12 @@ export function useAICoachChat() {
   })
 
   const sendingRef = useRef(false)
+  const activeSendTokenRef = useRef<string | null>(null)
   const activeChartSymbolRef = useRef<string>(getActiveChartSymbol('SPX'))
+  const pendingSessionRestoreIdRef = useRef<string | null>(null)
+  const hasAttemptedSessionRestoreRef = useRef(false)
+  const didLoadSessionsRef = useRef(false)
+  const didLoadSessionsSucceedRef = useRef(false)
 
   // Use a ref for the token so callbacks don't depend on the session object
   const tokenRef = useRef<string | null>(session?.access_token || null)
@@ -94,10 +99,14 @@ export function useAICoachChat() {
     setState(prev => ({ ...prev, isLoadingSessions: true, error: null }))
     try {
       const result = await apiGetSessions(token, 20)
+      didLoadSessionsRef.current = true
+      didLoadSessionsSucceedRef.current = true
       setState(prev => ({ ...prev, sessions: result.sessions, isLoadingSessions: false }))
     } catch (error) {
       console.error('[AI Coach] loadSessions error:', error)
       const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to load sessions'
+      didLoadSessionsRef.current = true
+      didLoadSessionsSucceedRef.current = false
       setState(prev => ({ ...prev, isLoadingSessions: false, error: message }))
     }
   }, [getToken])
@@ -108,10 +117,20 @@ export function useAICoachChat() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    hasAttemptedSessionRestoreRef.current = false
+    didLoadSessionsRef.current = false
+    didLoadSessionsSucceedRef.current = false
+    try {
+      pendingSessionRestoreIdRef.current = window.sessionStorage.getItem(AI_COACH_CURRENT_SESSION_STORAGE_KEY)
+    } catch {
+      pendingSessionRestoreIdRef.current = null
+    }
+  }, [session?.access_token])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
     if (state.currentSessionId) {
       window.sessionStorage.setItem(AI_COACH_CURRENT_SESSION_STORAGE_KEY, state.currentSessionId)
-    } else {
-      window.sessionStorage.removeItem(AI_COACH_CURRENT_SESSION_STORAGE_KEY)
     }
   }, [state.currentSessionId])
 
@@ -121,6 +140,7 @@ export function useAICoachChat() {
   // Cleanup: abort in-flight requests on unmount
   useEffect(() => {
     return () => {
+      activeSendTokenRef.current = null
       abortControllerRef.current?.abort()
       sessionMessagesAbortRef.current?.abort()
     }
@@ -776,6 +796,8 @@ export function useAICoachChat() {
     if (!token || !text.trim() || sendingRef.current) return
 
     sendingRef.current = true
+    const sendToken = crypto.randomUUID()
+    activeSendTokenRef.current = sendToken
 
     // Cancel any in-flight request
     abortControllerRef.current?.abort()
@@ -814,7 +836,11 @@ export function useAICoachChat() {
       streamStatus: options?.initialStreamStatus?.trim() || 'Thinking...',
     }
 
-    setState(prev => ({
+    const applyStateIfActive = (updater: (prev: AICoachChatState) => AICoachChatState) => {
+      setState(prev => (activeSendTokenRef.current === sendToken ? updater(prev) : prev))
+    }
+
+    applyStateIfActive(prev => ({
       ...prev,
       messages: [...prev.messages, userMessage, streamingMessage],
       currentSessionId: sessionId,
@@ -849,7 +875,7 @@ export function useAICoachChat() {
             if (status.phase === 'calling') statusText = `Using ${status.function}...`
             else if (status.phase === 'generating') statusText = 'Writing...'
 
-            setState(prev => ({
+            applyStateIfActive(prev => ({
               ...prev,
               messages: prev.messages.map(m =>
                 m.id === streamingMsgId ? { ...m, streamStatus: statusText } : m
@@ -859,7 +885,7 @@ export function useAICoachChat() {
             const tokenData = event.data as { content: string }
             streamContent += tokenData.content
 
-            setState(prev => ({
+            applyStateIfActive(prev => ({
               ...prev,
               messages: prev.messages.map(m =>
                 m.id === streamingMsgId
@@ -921,7 +947,7 @@ export function useAICoachChat() {
         isStreaming: false,
       }
 
-      setState(prev => ({
+      applyStateIfActive(prev => ({
         ...prev,
         messages: [
           ...prev.messages.filter(m => m.id !== userMessage.id && m.id !== streamingMsgId),
@@ -944,17 +970,24 @@ export function useAICoachChat() {
         },
       })
 
-      if (!recoveredStreamError) {
+      if (activeSendTokenRef.current === sendToken && !recoveredStreamError) {
         loadSessions()
       }
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') { return }
-
-      if (error instanceof AICoachAPIError && error.isUnauthorized) {
-        setState(prev => ({
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        applyStateIfActive(prev => ({
           ...prev,
           isSending: false,
-          messages: prev.messages.filter(m => m.id !== streamingMsgId),
+          messages: prev.messages.filter(m => m.id !== streamingMsgId && m.id !== userMessage.id),
+        }))
+        return
+      }
+
+      if (error instanceof AICoachAPIError && error.isUnauthorized) {
+        applyStateIfActive(prev => ({
+          ...prev,
+          isSending: false,
+          messages: prev.messages.filter(m => m.id !== streamingMsgId && m.id !== userMessage.id),
           error: 'Your session has expired. Please sign in again.',
         }))
         return
@@ -972,35 +1005,47 @@ export function useAICoachChat() {
       })
 
       if (error instanceof AICoachAPIError && error.isRateLimited) {
-        setState(prev => ({
+        applyStateIfActive(prev => ({
           ...prev,
           isSending: false,
-          messages: prev.messages.filter(m => m.id !== streamingMsgId),
+          messages: prev.messages.filter(m => m.id !== streamingMsgId && m.id !== userMessage.id),
           error: error.apiError.message,
           rateLimitInfo: { queryCount: error.apiError.queryCount, queryLimit: error.apiError.queryLimit, resetDate: error.apiError.resetDate },
         }))
       } else {
         const message = error instanceof AICoachAPIError ? error.apiError.message : 'Failed to send message. Please try again.'
-        setState(prev => ({
+        applyStateIfActive(prev => ({
           ...prev,
           isSending: false,
-          messages: prev.messages.filter(m => m.id !== streamingMsgId),
+          messages: prev.messages.filter(m => m.id !== streamingMsgId && m.id !== userMessage.id),
           error: message,
         }))
       }
     } finally {
+      if (activeSendTokenRef.current === sendToken) {
+        activeSendTokenRef.current = null
+      }
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+      }
       sendingRef.current = false
     }
   }, [getToken, loadSessions, extractChartRequest])
 
   const newSession = useCallback(() => {
+    activeSendTokenRef.current = null
+    sendingRef.current = false
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
     setState(prev => ({
       ...prev,
       messages: [],
       currentSessionId: null,
       error: null,
       rateLimitInfo: null,
+      isSending: false,
       chartRequest: null,
+      isSending: false,
     }))
   }, [])
 
@@ -1008,10 +1053,21 @@ export function useAICoachChat() {
     if (sessionId === currentSessionIdRef.current) return
     const token = getToken()
     if (!token) return
+    activeSendTokenRef.current = null
+    sendingRef.current = false
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
     sessionMessagesAbortRef.current?.abort()
     const controller = new AbortController()
     sessionMessagesAbortRef.current = controller
-    setState(prev => ({ ...prev, currentSessionId: sessionId, messages: [], isLoadingMessages: true, error: null }))
+    setState(prev => ({
+      ...prev,
+      currentSessionId: sessionId,
+      messages: [],
+      isSending: false,
+      isLoadingMessages: true,
+      error: null,
+    }))
     try {
       const result = await apiGetSessionMessages(sessionId, token, 50, 0, controller.signal)
       const loadedMessages: ChatMessage[] = result.messages
@@ -1040,6 +1096,32 @@ export function useAICoachChat() {
       setState(prev => ({ ...prev, isLoadingMessages: false, error: message }))
     }
   }, [extractChartRequest, getToken])
+
+  useEffect(() => {
+    if (!session?.access_token) return
+    if (hasAttemptedSessionRestoreRef.current) return
+    if (state.isLoadingSessions) return
+    if (!didLoadSessionsRef.current || !didLoadSessionsSucceedRef.current) return
+
+    hasAttemptedSessionRestoreRef.current = true
+    const persistedSessionId = pendingSessionRestoreIdRef.current
+    if (!persistedSessionId) return
+
+    const persistedSessionExists = state.sessions.some((chatSession) => chatSession.id === persistedSessionId)
+    if (!persistedSessionExists) {
+      pendingSessionRestoreIdRef.current = null
+      try {
+        window.sessionStorage.removeItem(AI_COACH_CURRENT_SESSION_STORAGE_KEY)
+      } catch {
+        // ignore storage cleanup errors (private mode / blocked storage)
+      }
+      return
+    }
+
+    if (persistedSessionId !== currentSessionIdRef.current) {
+      void selectSession(persistedSessionId)
+    }
+  }, [selectSession, session?.access_token, state.isLoadingSessions, state.sessions])
 
   const removeSession = useCallback(async (sessionId: string) => {
     const token = getToken()

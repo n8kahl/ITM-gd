@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -108,14 +107,6 @@ function dispatchChartEvent(detail: {
 }) {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('ai-coach-show-chart', { detail }))
-}
-
-function mapLegacyViewToCenterView(view: string | null | undefined): WorkflowCenterView {
-  if (!view) return 'chart'
-  if (view === 'options') return 'options'
-  if (view === 'journal') return 'journal'
-  if (view === 'preferences') return 'preferences'
-  return 'chart'
 }
 
 interface AICoachWorkflowProviderProps {
@@ -286,92 +277,6 @@ export function AICoachWorkflowProvider({
     if (symbol) setActiveSymbol(symbol)
     setActiveCenterView('journal')
   }, [])
-
-  useEffect(() => {
-    const onChart = (event: Event) => {
-      const detail = (event as CustomEvent<{
-        symbol?: string
-        level?: number
-        timeframe?: ChartTimeframe
-        label?: string
-        contextNotes?: string[]
-        eventMarkers?: Array<{
-          label: string
-          date?: string
-          impact?: 'high' | 'medium' | 'low' | 'info'
-          source?: string
-        }>
-        positionOverlays?: Array<{
-          id?: string
-          label?: string
-          entry: number
-          stop?: number
-          target?: number
-        }>
-      }>).detail
-      if (!detail?.symbol) return
-      viewChartAtLevel(detail.symbol, detail.level, {
-        timeframe: detail.timeframe || '5m',
-        label: detail.label,
-        contextNotes: detail.contextNotes,
-        eventMarkers: detail.eventMarkers,
-        positionOverlays: detail.positionOverlays,
-      })
-    }
-
-    const onOptions = (event: Event) => {
-      const detail = (event as CustomEvent<{ symbol?: string; strike?: number; expiry?: string }>).detail
-      if (!detail?.symbol) return
-      viewOptionsNearStrike(detail.symbol, detail.strike, detail.expiry)
-    }
-
-    const onAlert = (event: Event) => {
-      const detail = (event as CustomEvent<{ symbol?: string; price?: number; alertType?: string }>).detail
-      if (!detail?.symbol || typeof detail.price !== 'number') return
-      const type = detail.alertType || 'level_approach'
-      sendToChat(`Set a ${type} alert for ${detail.symbol} at ${detail.price}.`)
-    }
-
-    const onAnalyze = (event: Event) => {
-      const detail = (event as CustomEvent<{ setup?: Record<string, unknown> }>).detail
-      if (!detail?.setup) return
-      analyzeSetup(detail.setup)
-    }
-
-    const onChat = (event: Event) => {
-      const detail = (event as CustomEvent<{ prompt?: string }>).detail
-      if (!detail?.prompt) return
-      sendToChat(detail.prompt)
-    }
-
-    const onView = (event: Event) => {
-      const detail = (event as CustomEvent<{ view?: string; symbol?: string }>).detail
-      const nextView = mapLegacyViewToCenterView(detail?.view)
-      const normalized = normalizeSymbol(detail?.symbol)
-
-      if (normalized) {
-        setActiveSymbol(normalized)
-      }
-
-      setActiveCenterView(nextView)
-    }
-
-    window.addEventListener('ai-coach-widget-chart', onChart)
-    window.addEventListener('ai-coach-widget-options', onOptions)
-    window.addEventListener('ai-coach-widget-alert', onAlert)
-    window.addEventListener('ai-coach-widget-analyze', onAnalyze)
-    window.addEventListener('ai-coach-widget-chat', onChat)
-    window.addEventListener('ai-coach-widget-view', onView)
-
-    return () => {
-      window.removeEventListener('ai-coach-widget-chart', onChart)
-      window.removeEventListener('ai-coach-widget-options', onOptions)
-      window.removeEventListener('ai-coach-widget-alert', onAlert)
-      window.removeEventListener('ai-coach-widget-analyze', onAnalyze)
-      window.removeEventListener('ai-coach-widget-chat', onChat)
-      window.removeEventListener('ai-coach-widget-view', onView)
-    }
-  }, [analyzeSetup, sendToChat, viewChartAtLevel, viewOptionsNearStrike])
 
   const value = useMemo<AICoachWorkflowContextValue>(() => ({
     activeSymbol,

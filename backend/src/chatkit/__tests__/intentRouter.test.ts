@@ -16,6 +16,8 @@ describe('intentRouter', () => {
     expect(plan.primarySymbol).toBe('SPY');
     expect(plan.requiresChart).toBe(true);
     expect(plan.requiresSetupPlan).toBe(true);
+    expect(plan.requiresStructuredTradeSchema).toBe(true);
+    expect(plan.requiresClarifyBeforeCommit).toBe(true);
 
     const directive = buildIntentRoutingDirective(plan);
     expect(directive).toContain('Required tool calls');
@@ -43,6 +45,8 @@ describe('intentRouter', () => {
     expect(plan.requiredFunctions).toEqual(expect.arrayContaining(['scan_opportunities', 'show_chart']));
     expect(plan.requiresChart).toBe(true);
     expect(plan.requiresSetupPlan).toBe(true);
+    expect(plan.requiresStructuredTradeSchema).toBe(true);
+    expect(plan.requiresClarifyBeforeCommit).toBe(true);
   });
 
   it('applies intent precedence for SPX game plan prompts', () => {
@@ -58,6 +62,8 @@ describe('intentRouter', () => {
     expect(plan.requiresDisclaimer).toBe(false);
     expect(plan.requiresScenarioProbabilities).toBe(false);
     expect(plan.requiresLiquidityWatchouts).toBe(false);
+    expect(plan.requiresStructuredTradeSchema).toBe(true);
+    expect(plan.requiresClarifyBeforeCommit).toBe(true);
   });
 
   it('does not force price-check for generic market-status prompts without a symbol', () => {
@@ -166,11 +172,18 @@ describe('intentRouter', () => {
       functionCalls,
       [
         'This is not financial advice; this is educational market analysis.',
+        'Bias: Bull-leaning while above $6020.25; bear risk rises below $5981.50.',
+        'Setup: Opening-drive continuation with pullback-hold confirmation.',
+        'Entry: Buy only on reclaim above $6020.25 with 5m close confirmation.',
+        'Stop: Exit on 15m close below $5981.50.',
+        'Targets: T1 $6030.00, T2 $6044.50.',
+        'Invalidation: If price accepts below $5981.50, bullish setup is invalid.',
+        'Risk: Keep size small into open and respect slippage around fast tape.',
         'Scenario matrix: bull case 40%, base case 35%, bear case 25%.',
-        'Setup plan: Entry $6012.00, Stop $5998.50, Target $6030.00.',
-        'Bull case above $6020.25, bear case below $5981.50. Invalidation on 15m close under $5981.50.',
+        'Confidence: medium, 68% because levels and tape structure are aligned.',
+        'Bull case above $6020.25, bear case below $5981.50.',
         'Liquidity watchouts: bid/ask can widen around open and close; account for slippage on market orders.',
-      ].join(' '),
+      ].join('\n'),
     );
 
     expect(audit.passed).toBe(true);
@@ -208,6 +221,107 @@ describe('intentRouter', () => {
     expect(audit.blockingViolations).toContain('missing_scenario_probabilities');
     expect(audit.blockingViolations).toContain('missing_liquidity_watchouts');
     expect(audit.blockingViolations).toContain('missing_setup_plan_levels');
+    expect(audit.blockingViolations).toContain('missing_trade_response_schema');
+  });
+
+  it('fails contract audit when actionable response omits structured trade schema sections', () => {
+    const plan = buildIntentRoutingPlan('Help with setup on SPX: entry, stop, invalidation and show chart.');
+    expect(plan.requiresStructuredTradeSchema).toBe(true);
+    const functionCalls = [
+      {
+        function: 'get_key_levels',
+        arguments: { symbol: 'SPX' },
+        result: { symbol: 'SPX' },
+      },
+      {
+        function: 'scan_opportunities',
+        arguments: { symbols: ['SPX'] },
+        result: { opportunities: [{ symbol: 'SPX' }] },
+      },
+      {
+        function: 'show_chart',
+        arguments: { symbol: 'SPX', timeframe: '15m' },
+        result: { symbol: 'SPX', timeframe: '15m' },
+      },
+    ];
+
+    const audit = evaluateResponseContract(
+      plan,
+      functionCalls,
+      'This is not financial advice. Scenario matrix: bull 45%, base 35%, bear 20%. Entry $6012, stop $5998, target $6032. Liquidity risk can be elevated.',
+    );
+
+    expect(audit.passed).toBe(false);
+    expect(audit.blockingViolations).toContain('missing_trade_response_schema');
+  });
+
+  it('fails contract audit when confidence is low and no clarifying question is asked', () => {
+    const plan = buildIntentRoutingPlan('Give me the SPX game plan for today.');
+    const functionCalls = [
+      {
+        function: 'get_spx_game_plan',
+        arguments: {},
+        result: { symbol: 'SPX' },
+      },
+      {
+        function: 'show_chart',
+        arguments: { symbol: 'SPX', timeframe: '15m' },
+        result: { symbol: 'SPX', timeframe: '15m' },
+      },
+    ];
+
+    const audit = evaluateResponseContract(
+      plan,
+      functionCalls,
+      [
+        'Bias: Neutral.',
+        'Setup: Range-bound rotation.',
+        'Entry: Wait for break of $6020.',
+        'Stop: 15m close below $5988.',
+        'Targets: T1 $6031, T2 $6042.',
+        'Invalidation: Bullish thesis fails below $5988.',
+        'Risk: Volatility can expand quickly around data releases.',
+        'Confidence: low, 48% due mixed breadth and conflicting tape.',
+      ].join('\n'),
+    );
+
+    expect(audit.passed).toBe(false);
+    expect(audit.blockingViolations).toContain('missing_clarify_before_commit');
+  });
+
+  it('passes contract audit when low-confidence response asks a clarifying question', () => {
+    const plan = buildIntentRoutingPlan('Give me the SPX game plan for today.');
+    const functionCalls = [
+      {
+        function: 'get_spx_game_plan',
+        arguments: {},
+        result: { symbol: 'SPX' },
+      },
+      {
+        function: 'show_chart',
+        arguments: { symbol: 'SPX', timeframe: '15m' },
+        result: { symbol: 'SPX', timeframe: '15m' },
+      },
+    ];
+
+    const audit = evaluateResponseContract(
+      plan,
+      functionCalls,
+      [
+        'Bias: Neutral.',
+        'Setup: Range-bound rotation.',
+        'Entry: Wait for reclaim above $6020 with 5m close.',
+        'Stop: 15m close below $5988.',
+        'Targets: T1 $6031, T2 $6042.',
+        'Invalidation: Bullish thesis fails below $5988.',
+        'Risk: Keep risk tight because open-drive whipsaws can expand quickly.',
+        'Confidence: low, 48% due mixed breadth and conflicting tape.',
+        'Can you confirm whether you want a breakout plan or a fade plan before we commit?',
+      ].join('\n'),
+    );
+
+    expect(audit.passed).toBe(true);
+    expect(audit.blockingViolations).toHaveLength(0);
   });
 
   it('does not trigger rewrite for warnings-only audits', () => {

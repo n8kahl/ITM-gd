@@ -40,7 +40,12 @@ import type { ChatMessage } from '@/hooks/use-ai-coach-chat'
 import type { ChatSession } from '@/lib/api/ai-coach'
 import { Analytics } from '@/lib/analytics'
 import { getActiveChartSymbol, subscribeActiveChartSymbol } from '@/lib/ai-coach-chart-context'
-import { loadSpxTickerSnapshot } from '@/lib/ai-coach-spx-ticker'
+import {
+  createWidgetEventDeduper,
+  createWidgetEventId,
+} from '@/lib/ai-coach/widget-event-dedupe'
+import { useAICoachMarketSnapshot } from '@/hooks/use-ai-coach-market-snapshot'
+import type { AICoachMarketSnapshot } from '@/lib/ai-coach/market-snapshot'
 
 type PlaceholderBucket = 'pre_market' | 'session' | 'after_hours' | 'closed'
 type LearnerLevel = 'beginner' | 'intermediate' | 'advanced'
@@ -181,6 +186,7 @@ function getEasternPlaceholderBucket(now: Date = new Date()): PlaceholderBucket 
 export default function AICoachPage() {
   const searchParams = useSearchParams()
   const chat = useAICoachChat()
+  const marketSnapshot = useAICoachMarketSnapshot()
   const mobileSheet = useMobileToolSheet()
   const { activeSheet, openSheet, closeSheet, sheetSymbol, sheetParams } = mobileSheet
   const { sendMessage, isSending } = chat
@@ -188,6 +194,7 @@ export default function AICoachPage() {
   const chatPanelRef = useRef<ImperativePanelHandle | null>(null)
   const seededPromptRef = useRef<string | null>(null)
   const pulse = usePanelAttentionPulse()
+  const shouldHandleWidgetEventRef = useRef(createWidgetEventDeduper())
   const latestAssistantSummary = useMemo(() => {
     const latest = [...chat.messages].reverse().find((message) => (
       message.role === 'assistant' && message.content.trim().length > 0
@@ -375,8 +382,13 @@ export default function AICoachPage() {
       return request
     }
 
+    const shouldHandleWidgetEvent = (eventName: string, detail: unknown): boolean => {
+      return shouldHandleWidgetEventRef.current(eventName, detail)
+    }
+
     const handleWidgetChat = (event: Event) => {
       const detail = (event as CustomEvent<{ prompt?: unknown }>).detail
+      if (!shouldHandleWidgetEvent('ai-coach-widget-chat', detail)) return
       if (!detail || typeof detail.prompt !== 'string') return
       const prompt = detail.prompt.trim()
       if (!prompt) return
@@ -390,6 +402,7 @@ export default function AICoachPage() {
         alertType?: unknown
         notes?: unknown
       }>).detail
+      if (!shouldHandleWidgetEvent('ai-coach-widget-alert', detail)) return
       const symbol = typeof detail?.symbol === 'string' ? detail.symbol.trim().toUpperCase() : ''
       const price = toNumber(detail?.price)
       const alertType = typeof detail?.alertType === 'string' ? detail.alertType : 'level_approach'
@@ -409,6 +422,7 @@ export default function AICoachPage() {
 
     const handleWidgetAnalyze = (event: Event) => {
       const detail = (event as CustomEvent<{ setup?: Record<string, unknown> }>).detail
+      if (!shouldHandleWidgetEvent('ai-coach-widget-analyze', detail)) return
       const setup = detail?.setup
       if (!setup || typeof setup !== 'object') return
 
@@ -433,6 +447,7 @@ export default function AICoachPage() {
 
     const handleWidgetChart = (event: Event) => {
       const detail = (event as CustomEvent<Record<string, unknown>>).detail
+      if (!shouldHandleWidgetEvent('ai-coach-widget-chart', detail)) return
       if (!detail || typeof detail !== 'object') return
       const request = toChartRequestFromWidget(detail)
       if (!request) return
@@ -441,6 +456,7 @@ export default function AICoachPage() {
 
     const handleWidgetOptions = (event: Event) => {
       const detail = (event as CustomEvent<{ symbol?: unknown }>).detail
+      if (!shouldHandleWidgetEvent('ai-coach-widget-options', detail)) return
       const symbol = typeof detail?.symbol === 'string' ? detail.symbol.toUpperCase() : undefined
 
       if (window.innerWidth < 1024) {
@@ -458,6 +474,7 @@ export default function AICoachPage() {
 
     const handleWidgetView = (event: Event) => {
       const detail = (event as CustomEvent<{ view?: unknown; symbol?: unknown; timeframe?: unknown }>).detail
+      if (!shouldHandleWidgetEvent('ai-coach-widget-view', detail)) return
       if (!detail || typeof detail.view !== 'string') return
       const view = detail.view
       const symbol = typeof detail.symbol === 'string' ? detail.symbol.toUpperCase() : undefined
@@ -536,6 +553,7 @@ export default function AICoachPage() {
                     messages={chat.messages}
                     sessions={chat.sessions}
                     currentSessionId={chat.currentSessionId}
+                    marketSnapshot={marketSnapshot}
                     isSending={chat.isSending}
                     isLoadingSessions={chat.isLoadingSessions}
                     isLoadingMessages={chat.isLoadingMessages}
@@ -580,7 +598,11 @@ export default function AICoachPage() {
                         </motion.div>
                       )}
                     </AnimatePresence>
-                    <CenterPanel onSendPrompt={handleSendPrompt} chartRequest={chat.chartRequest} />
+                    <CenterPanel
+                      onSendPrompt={handleSendPrompt}
+                      chartRequest={chat.chartRequest}
+                      marketSnapshot={marketSnapshot}
+                    />
                   </div>
                 </Panel>
               </PanelGroup>
@@ -601,6 +623,7 @@ export default function AICoachPage() {
                 messages={chat.messages}
                 sessions={chat.sessions}
                 currentSessionId={chat.currentSessionId}
+                marketSnapshot={marketSnapshot}
                 isSending={chat.isSending}
                 isLoadingSessions={chat.isLoadingSessions}
                 isLoadingMessages={chat.isLoadingMessages}
@@ -626,6 +649,7 @@ export default function AICoachPage() {
                   <CenterPanel
                     onSendPrompt={handleSendPrompt}
                     chartRequest={chat.chartRequest}
+                    marketSnapshot={marketSnapshot}
                     forcedView={activeSheet as CenterView}
                     sheetSymbol={sheetSymbol}
                     sheetParams={sheetParams}
@@ -648,6 +672,7 @@ interface ChatAreaProps {
   messages: ChatMessage[]
   sessions: ChatSession[]
   currentSessionId: string | null
+  marketSnapshot: AICoachMarketSnapshot
   isSending: boolean
   isLoadingSessions: boolean
   isLoadingMessages: boolean
@@ -681,7 +706,7 @@ interface ScreenshotActionState {
 }
 
 function ChatArea({
-  messages, sessions, currentSessionId, isSending, isLoadingSessions,
+  messages, sessions, currentSessionId, marketSnapshot, isSending, isLoadingSessions,
   isLoadingMessages, error, rateLimitInfo, onSendMessage, onNewSession,
   onSelectSession, onDeleteSession, onClearError, onAppendUserMessage, onAppendAssistantMessage, onExpandChart, onOpenSheet, onTogglePanelCollapse,
 }: ChatAreaProps) {
@@ -696,26 +721,15 @@ function ChatArea({
   const [stagedImage, setStagedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null)
   const [stagedCsv, setStagedCsv] = useState<StagedCsvUpload | null>(null)
   const [screenshotActions, setScreenshotActions] = useState<ScreenshotActionState | null>(null)
-  const [spxHeaderTicker, setSpxHeaderTicker] = useState<{
-    price: number | null
-    change: number | null
-    changePct: number | null
-    isLoading: boolean
-    error: string | null
-  }>({
-    price: null,
-    change: null,
-    changePct: null,
-    isLoading: true,
-    error: null,
-  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const messagesScrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const sessionsPanelToggleRef = useRef<HTMLButtonElement>(null)
+  const sessionsNewButtonRef = useRef<HTMLButtonElement>(null)
+  const sessionItemRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const previousMessageCount = useRef(0)
   const isUserScrolledUp = useRef(false)
-  const headerTickerAbortRef = useRef<AbortController | null>(null)
 
   const autoResizeInput = useCallback((element: HTMLTextAreaElement | null) => {
     if (!element) return
@@ -725,8 +739,25 @@ function ChatArea({
     })
   }, [])
 
+  const closeSessionsPanel = useCallback((restoreFocusToToggle = true) => {
+    setShowSessions(false)
+    if (restoreFocusToToggle) {
+      window.requestAnimationFrame(() => {
+        sessionsPanelToggleRef.current?.focus()
+      })
+    }
+  }, [])
+
   const toggleSessions = useCallback(() => {
-    setShowSessions((prev) => !prev)
+    setShowSessions((prev) => {
+      const next = !prev
+      if (!next) {
+        window.requestAnimationFrame(() => {
+          sessionsPanelToggleRef.current?.focus()
+        })
+      }
+      return next
+    })
   }, [])
 
   // Track whether user has scrolled away from bottom
@@ -741,6 +772,38 @@ function ChatArea({
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
+
+  useEffect(() => {
+    const knownSessionIds = new Set(sessions.map((s) => s.id))
+    for (const sessionId of Object.keys(sessionItemRefs.current)) {
+      if (!knownSessionIds.has(sessionId)) {
+        delete sessionItemRefs.current[sessionId]
+      }
+    }
+  }, [sessions])
+
+  useEffect(() => {
+    if (!showSessions) return
+    const frame = window.requestAnimationFrame(() => {
+      const selectedSessionId = (
+        currentSessionId && sessions.some((sessionItem) => sessionItem.id === currentSessionId)
+      )
+        ? currentSessionId
+        : sessions[0]?.id
+
+      if (selectedSessionId) {
+        const selectedSessionNode = sessionItemRefs.current[selectedSessionId]
+        if (selectedSessionNode) {
+          selectedSessionNode.focus()
+          return
+        }
+      }
+
+      sessionsNewButtonRef.current?.focus()
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [currentSessionId, sessions, showSessions])
 
   useEffect(() => {
     if (messages.length > previousMessageCount.current && !isUserScrolledUp.current) {
@@ -770,62 +833,19 @@ function ChatArea({
   }, [])
 
   useEffect(() => {
-    setActivePromptSymbol(getActiveChartSymbol('SPX'))
     return subscribeActiveChartSymbol((symbol) => {
       setActivePromptSymbol(normalizePromptSymbol(symbol))
     })
   }, [])
-
-  const loadSPXHeaderTicker = useCallback(async () => {
-    if (!session?.access_token) return
-    headerTickerAbortRef.current?.abort()
-    const controller = new AbortController()
-    headerTickerAbortRef.current = controller
-
-    try {
-      const snapshot = await loadSpxTickerSnapshot(session.access_token, controller.signal)
-
-      setSpxHeaderTicker({
-        price: snapshot.price,
-        change: snapshot.change,
-        changePct: snapshot.changePct,
-        isLoading: false,
-        error: null,
-      })
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        return
-      }
-      setSpxHeaderTicker((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: 'SPX feed offline',
-      }))
-    }
-  }, [session?.access_token])
-
-  useEffect(() => {
-    if (!session?.access_token) return
-    void loadSPXHeaderTicker()
-    const interval = window.setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return
-      void loadSPXHeaderTicker()
-    }, 60_000)
-    return () => {
-      window.clearInterval(interval)
-      headerTickerAbortRef.current?.abort()
-    }
-  }, [loadSPXHeaderTicker, session?.access_token])
-
   useEffect(() => {
     const handleFocusInput = () => {
       inputRef.current?.focus()
       autoResizeInput(inputRef.current)
     }
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShowSessions(false)
-      }
+      if (event.key !== 'Escape' || !showSessions) return
+      event.preventDefault()
+      closeSessionsPanel()
     }
 
     window.addEventListener('ai-coach-focus-input', handleFocusInput as EventListener)
@@ -837,7 +857,7 @@ function ChatArea({
       window.removeEventListener('ai-coach-toggle-sessions', toggleSessions as EventListener)
       window.removeEventListener('keydown', handleEscape)
     }
-  }, [autoResizeInput, toggleSessions])
+  }, [autoResizeInput, closeSessionsPanel, showSessions, toggleSessions])
 
   const isBusy = isSending || isAnalyzingImage
   const streamStatus = messages.find((msg) => msg.isStreaming)?.streamStatus
@@ -869,6 +889,58 @@ function ChatArea({
     : usageRatio >= 0.8
       ? 'bg-amber-400'
       : 'bg-emerald-400'
+
+  const handleSelectSession = useCallback((sessionId: string) => {
+    Analytics.trackAICoachAction('open_session')
+    onSelectSession(sessionId)
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      closeSessionsPanel(false)
+    }
+  }, [closeSessionsPanel, onSelectSession])
+
+  const focusSessionByIndex = useCallback((index: number) => {
+    if (index < 0 || index >= sessions.length) return
+    const sessionId = sessions[index]?.id
+    if (!sessionId) return
+    sessionItemRefs.current[sessionId]?.focus()
+  }, [sessions])
+
+  const handleSessionItemKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>, sessionId: string) => {
+    const currentIndex = sessions.findIndex((sessionItem) => sessionItem.id === sessionId)
+    if (currentIndex < 0) return
+
+    switch (event.key) {
+      case 'Enter':
+      case ' ': {
+        event.preventDefault()
+        handleSelectSession(sessionId)
+        break
+      }
+      case 'ArrowDown': {
+        event.preventDefault()
+        focusSessionByIndex(Math.min(currentIndex + 1, sessions.length - 1))
+        break
+      }
+      case 'ArrowUp': {
+        event.preventDefault()
+        focusSessionByIndex(Math.max(currentIndex - 1, 0))
+        break
+      }
+      case 'Home': {
+        event.preventDefault()
+        focusSessionByIndex(0)
+        break
+      }
+      case 'End': {
+        event.preventDefault()
+        focusSessionByIndex(sessions.length - 1)
+        break
+      }
+      default:
+        break
+    }
+  }, [focusSessionByIndex, handleSelectSession, sessions])
+
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
     const text = inputValue.trim()
@@ -1044,7 +1116,11 @@ function ChatArea({
   const openWorkflowView = useCallback((view: 'chart' | 'journal') => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ai-coach-widget-view', {
-        detail: { view, label: 'Screenshot next step' },
+        detail: {
+          view,
+          label: 'Screenshot next step',
+          eventId: createWidgetEventId(),
+        },
       }))
     }
 
@@ -1111,7 +1187,7 @@ function ChatArea({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-20 bg-black/55 backdrop-blur-sm lg:hidden"
-            onClick={() => setShowSessions(false)}
+            onClick={() => closeSessionsPanel()}
           />
         )}
       </AnimatePresence>
@@ -1124,6 +1200,7 @@ function ChatArea({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -20, opacity: 0 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
+            id="ai-coach-sessions-panel"
             aria-label="Chat sessions"
             data-testid="ai-coach-sessions-panel"
             className="fixed left-4 top-[calc(var(--members-topbar-h)+0.75rem)] bottom-[calc(var(--members-bottomnav-h)+0.75rem)] z-30 flex w-[min(84vw,20rem)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0A0A0B] shadow-2xl lg:static lg:top-auto lg:bottom-auto lg:left-auto lg:z-auto lg:w-[240px] lg:rounded-none lg:border-0 lg:border-r lg:border-white/5 lg:shadow-none"
@@ -1131,20 +1208,27 @@ function ChatArea({
             <div className="p-3 border-b border-white/5 flex items-center justify-between">
               <span className="text-xs font-medium text-white/50 uppercase tracking-wider">Sessions</span>
               <button
+                ref={sessionsNewButtonRef}
                 onClick={() => {
                   Analytics.trackAICoachAction('new_session')
                   onNewSession()
                   if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-                    setShowSessions(false)
+                    closeSessionsPanel(false)
                   }
                 }}
+                aria-label="Create new session"
                 className="p-1 rounded hover:bg-white/5 text-white/40 hover:text-emerald-500 transition-colors"
                 title="New session"
               >
                 <Plus className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            <div
+              role="listbox"
+              aria-label="Saved chat sessions"
+              aria-activedescendant={currentSessionId ? `ai-coach-session-option-${currentSessionId}` : undefined}
+              className="flex-1 overflow-y-auto p-2 space-y-1"
+            >
               {isLoadingSessions ? (
                 <div className="space-y-2 py-2">
                   {[80, 62, 90, 70].map((width, index) => (
@@ -1161,19 +1245,22 @@ function ChatArea({
                 sessions.map((s) => (
                   <div
                     key={s.id}
+                    id={`ai-coach-session-option-${s.id}`}
+                    ref={(node) => {
+                      sessionItemRefs.current[s.id] = node
+                    }}
+                    role="option"
+                    aria-selected={s.id === currentSessionId}
+                    aria-label={`${s.title}, ${s.message_count} message${s.message_count === 1 ? '' : 's'}`}
+                    tabIndex={s.id === currentSessionId || (!currentSessionId && sessions[0]?.id === s.id) ? 0 : -1}
                     className={cn(
                       'group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all text-left w-full',
                       s.id === currentSessionId
                         ? 'bg-emerald-500/10 border border-emerald-500/20 text-white'
                         : 'hover:bg-white/5 text-white/50 hover:text-white border border-transparent'
                     )}
-                    onClick={() => {
-                      Analytics.trackAICoachAction('open_session')
-                      onSelectSession(s.id)
-                      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-                        setShowSessions(false)
-                      }
-                    }}
+                    onClick={() => handleSelectSession(s.id)}
+                    onKeyDown={(event) => handleSessionItemKeyDown(event, s.id)}
                   >
                     <MessageSquare className={cn('w-3.5 h-3.5 shrink-0', s.id === currentSessionId ? 'text-emerald-500' : 'text-white/30')} />
                     <div className="flex-1 min-w-0">
@@ -1186,6 +1273,7 @@ function ChatArea({
                         Analytics.trackAICoachAction('delete_session')
                         onDeleteSession(s.id)
                       }}
+                      aria-label={`Delete session ${s.title}`}
                       className="inline-flex h-11 w-11 items-center justify-center rounded text-white/20 transition-all hover:bg-red-500/10 hover:text-red-400 touch-manipulation opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1208,10 +1296,14 @@ function ChatArea({
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <button
+                ref={sessionsPanelToggleRef}
                 onClick={() => {
                   Analytics.trackAICoachAction('toggle_sessions')
                   toggleSessions()
                 }}
+                aria-label={showSessions ? 'Hide sessions panel' : 'Show sessions panel'}
+                aria-controls="ai-coach-sessions-panel"
+                aria-expanded={showSessions}
                 className="shrink-0 p-1.5 rounded-lg text-white/40 transition-colors hover:bg-white/5 hover:text-white"
                 title="Toggle sessions (Ctrl/Cmd+/)"
               >
@@ -1227,26 +1319,30 @@ function ChatArea({
               <button
                 onClick={() => {
                   Analytics.trackAICoachAction('spx_game_plan_refresh')
+                  void marketSnapshot.refresh()
                   onSendMessage('Give me the full SPX game plan: key levels, GEX profile, expected move, and what setups to watch today. Show the chart.')
                 }}
                 className="hidden xl:flex items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200 transition-colors hover:bg-emerald-500/15"
                 title="Refresh SPX game plan"
               >
-                {spxHeaderTicker.isLoading ? (
+                {marketSnapshot.isLoading && marketSnapshot.price == null ? (
                   <span>SPX loading...</span>
-                ) : spxHeaderTicker.error ? (
-                  <span>{spxHeaderTicker.error}</span>
+                ) : marketSnapshot.error && marketSnapshot.price == null ? (
+                  <span>{marketSnapshot.error}</span>
                 ) : (
                   <>
-                    <span>SPX {spxHeaderTicker.price?.toLocaleString()}</span>
-                    {spxHeaderTicker.change != null && (
+                    <span>SPX {marketSnapshot.price?.toLocaleString()}</span>
+                    {marketSnapshot.change != null && (
                       <span className={cn(
-                        spxHeaderTicker.change >= 0 ? 'text-emerald-300' : 'text-red-300'
+                        marketSnapshot.change >= 0 ? 'text-emerald-300' : 'text-red-300'
                       )}>
-                        {spxHeaderTicker.change >= 0 ? '+' : ''}{spxHeaderTicker.change.toFixed(2)}
-                        {spxHeaderTicker.changePct != null ? ` (${spxHeaderTicker.change >= 0 ? '+' : ''}${spxHeaderTicker.changePct.toFixed(2)}%)` : ''}
+                        {marketSnapshot.change >= 0 ? '+' : ''}{marketSnapshot.change.toFixed(2)}
+                        {marketSnapshot.changePct != null ? ` (${marketSnapshot.change >= 0 ? '+' : ''}${marketSnapshot.changePct.toFixed(2)}%)` : ''}
                       </span>
                     )}
+                    <span className="text-white/45">
+                      {marketSnapshot.freshnessLabel}
+                    </span>
                   </>
                 )}
               </button>
@@ -1258,6 +1354,7 @@ function ChatArea({
                   Analytics.trackAICoachAction('new_session')
                   onNewSession()
                 }}
+                aria-label="Create new session"
                 variant="ghost"
                 size="sm"
                 className="h-8 px-2 text-white/40 hover:text-emerald-500"
@@ -1268,6 +1365,7 @@ function ChatArea({
               {onTogglePanelCollapse && (
                 <button
                   onClick={onTogglePanelCollapse}
+                  aria-label="Collapse chat panel"
                   className="p-1.5 rounded-lg text-white/40 transition-colors hover:bg-white/5 hover:text-white"
                   title="Collapse chat panel (Ctrl/Cmd+B)"
                 >
@@ -1282,7 +1380,13 @@ function ChatArea({
         <AnimatePresence>
           {error && (
             <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-              <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20 flex items-center gap-2">
+              <div
+                role="alert"
+                aria-live="assertive"
+                aria-atomic="true"
+                data-testid="ai-coach-error-banner"
+                className="px-4 py-2 bg-red-500/10 border-b border-red-500/20 flex items-center gap-2"
+              >
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                 <p className="text-xs text-red-400 flex-1">{error}</p>
                 <button
@@ -1298,7 +1402,13 @@ function ChatArea({
           )}
           {rateLimitInfo && (
             <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-              <div className={cn('px-4 py-2 border-b', usageToneClass)}>
+              <div
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                data-testid="ai-coach-rate-limit-banner"
+                className={cn('px-4 py-2 border-b', usageToneClass)}
+              >
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <p className="text-xs">
