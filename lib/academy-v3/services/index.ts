@@ -1,3 +1,4 @@
+export { AiContentGeneratorService } from './ai-content-generator'
 export { BulkContentService } from './bulk-content-service'
 export { AcademyPlanService } from './plan-service'
 export { AcademyModuleService } from './module-service'
