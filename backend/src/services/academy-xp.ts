@@ -7,6 +7,7 @@ import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
 
 export const XP_REWARDS = {
+  // Academy
   BLOCK_COMPLETION: 10,
   LESSON_COMPLETION: 50,
   ASSESSMENT_PASSED: 100,
@@ -14,6 +15,14 @@ export const XP_REWARDS = {
   STREAK_7_DAY: 100,
   STREAK_30_DAY: 500,
   STREAK_100_DAY: 2000,
+  // Trading performance (Phase 4)
+  TRADE_JOURNALED: 10,
+  TRADE_PROFITABLE: 25,
+  DISCIPLINE_SCORE_HIGH: 15,
+  // Social engagement (Phase 4)
+  TRADE_SHARED: 5,
+  LEADERBOARD_PARTICIPATION: 3,
+  HELPFUL_COMMENT: 2,
 } as const;
 
 /** Level thresholds: Level N requires N * 500 XP total */
@@ -235,4 +244,72 @@ export async function updateStreak(userId: string): Promise<StreakUpdateResult> 
   }
 
   return { currentStreak: newStreak, longestStreak: newLongest, milestoneReached };
+}
+
+// ---------------------------------------------------------------------------
+// Trading Performance XP (Phase 4 — Slice 4.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Awards XP when a user journals a trade.
+ */
+export async function awardTradeJournaledXp(
+  userId: string,
+  tradeId: string
+): Promise<XpAwardResult> {
+  return awardXp(userId, XP_REWARDS.TRADE_JOURNALED, 'trade_journaled', { tradeId });
+}
+
+/**
+ * Awards XP for a profitable trade.
+ */
+export async function awardProfitableTradeXp(
+  userId: string,
+  tradeId: string,
+  pnl: number
+): Promise<XpAwardResult> {
+  return awardXp(userId, XP_REWARDS.TRADE_PROFITABLE, 'trade_profitable', { tradeId, pnl });
+}
+
+/**
+ * Awards XP when a user's discipline score exceeds 80%.
+ */
+export async function awardDisciplineScoreXp(
+  userId: string,
+  disciplineScore: number
+): Promise<XpAwardResult> {
+  return awardXp(userId, XP_REWARDS.DISCIPLINE_SCORE_HIGH, 'discipline_score_high', { disciplineScore });
+}
+
+// ---------------------------------------------------------------------------
+// Social Engagement XP (Phase 4 — Slice 4.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Awards XP when a user shares a trade.
+ */
+export async function awardTradeSharedXp(
+  userId: string,
+  tradeId: string
+): Promise<XpAwardResult> {
+  return awardXp(userId, XP_REWARDS.TRADE_SHARED, 'trade_shared', { tradeId });
+}
+
+/**
+ * Awards XP for leaderboard participation.
+ */
+export async function awardLeaderboardParticipationXp(
+  userId: string
+): Promise<XpAwardResult> {
+  return awardXp(userId, XP_REWARDS.LEADERBOARD_PARTICIPATION, 'leaderboard_participation', {});
+}
+
+/**
+ * Awards XP for a helpful comment.
+ */
+export async function awardHelpfulCommentXp(
+  userId: string,
+  commentId: string
+): Promise<XpAwardResult> {
+  return awardXp(userId, XP_REWARDS.HELPFUL_COMMENT, 'helpful_comment', { commentId });
 }

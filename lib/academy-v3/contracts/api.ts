@@ -220,6 +220,8 @@ export const getAcademyProgressSummaryResponseSchema = z.object({
 // Achievements
 // ---------------------------------------------------------------------------
 
+export const achievementRaritySchema = z.enum(['common', 'uncommon', 'rare', 'epic', 'legendary'])
+
 export const academyAchievementItemSchema = z.object({
   key: z.string().min(1),
   title: z.string().min(1),
@@ -227,8 +229,13 @@ export const academyAchievementItemSchema = z.object({
   iconUrl: z.string().nullable(),
   category: z.string().min(1),
   xpReward: z.number().int().nonnegative(),
+  rarity: achievementRaritySchema.default('common'),
+  progressCurrent: z.number().int().nonnegative().default(0),
+  progressTarget: z.number().int().nonnegative().default(1),
   unlockedAt: z.string().nullable(),
 })
+
+export type AchievementRarity = z.infer<typeof achievementRaritySchema>
 
 export const getAcademyAchievementsResponseSchema = z.object({
   data: z.object({

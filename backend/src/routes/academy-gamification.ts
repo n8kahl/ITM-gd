@@ -19,7 +19,19 @@ import { validateBody, validateParams } from '../middleware/validate';
 import { supabase } from '../config/database';
 import { sendError, ErrorCode } from '../lib/errors';
 import { logger } from '../lib/logger';
-import { awardXp } from '../services/academy-xp';
+import {
+  awardXp,
+  awardTradeJournaledXp,
+  awardProfitableTradeXp,
+  awardDisciplineScoreXp,
+  awardTradeSharedXp,
+  awardHelpfulCommentXp,
+} from '../services/academy-xp';
+import {
+  getActiveChallenges,
+  getUserChallengeProgress,
+  incrementChallengeProgress,
+} from '../services/academy-challenges';
 import type { AcademyGamificationStats } from '../types/academy';
 
 const router = Router();
@@ -242,6 +254,182 @@ router.get(
     } catch (error) {
       logger.error('Error fetching user achievements', { userId, error });
       sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to fetch user achievements');
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /challenges — List active challenges
+// ---------------------------------------------------------------------------
+
+router.get('/challenges', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const challenges = await getActiveChallenges();
+    res.json({ challenges });
+  } catch (error) {
+    logger.error('Failed to fetch challenges', { error });
+    sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to fetch challenges');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /challenges/user/:userId — User's challenge progress
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/challenges/user/:userId',
+  validateParams(userIdParamSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId } = req.params;
+    try {
+      const progress = await getUserChallengeProgress(userId);
+      res.json({ progress });
+    } catch (error) {
+      logger.error('Failed to fetch user challenge progress', { userId, error });
+      sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to fetch challenge progress');
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /challenges/:challengeId/increment — Increment challenge progress
+// ---------------------------------------------------------------------------
+
+const incrementChallengeBodySchema = z.object({
+  userId: z.string().uuid(),
+  incrementBy: z.number().int().positive().optional(),
+});
+
+router.post(
+  '/challenges/:challengeId/increment',
+  validateBody(incrementChallengeBodySchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const { challengeId } = req.params;
+    const { userId, incrementBy } = (req as Request & { validatedBody: z.infer<typeof incrementChallengeBodySchema> }).validatedBody;
+
+    try {
+      const result = await incrementChallengeProgress(userId, challengeId, incrementBy);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to increment challenge';
+      logger.error('Failed to increment challenge progress', { userId, challengeId, error });
+      sendError(res, 400, ErrorCode.VALIDATION_ERROR, msg);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /xp/trade-journaled — Award XP for journaling a trade
+// ---------------------------------------------------------------------------
+
+const tradeXpBodySchema = z.object({
+  userId: z.string().uuid(),
+  tradeId: z.string().min(1),
+});
+
+router.post(
+  '/xp/trade-journaled',
+  validateBody(tradeXpBodySchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId, tradeId } = (req as Request & { validatedBody: z.infer<typeof tradeXpBodySchema> }).validatedBody;
+    try {
+      const result = await awardTradeJournaledXp(userId, tradeId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Failed to award trade journaled XP', { userId, tradeId, error });
+      sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to award XP');
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /xp/trade-profitable — Award XP for a profitable trade
+// ---------------------------------------------------------------------------
+
+const profitableTradeBodySchema = z.object({
+  userId: z.string().uuid(),
+  tradeId: z.string().min(1),
+  pnl: z.number().positive('pnl must be positive'),
+});
+
+router.post(
+  '/xp/trade-profitable',
+  validateBody(profitableTradeBodySchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId, tradeId, pnl } = (req as Request & { validatedBody: z.infer<typeof profitableTradeBodySchema> }).validatedBody;
+    try {
+      const result = await awardProfitableTradeXp(userId, tradeId, pnl);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Failed to award profitable trade XP', { userId, tradeId, error });
+      sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to award XP');
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /xp/discipline-score — Award XP for high discipline score
+// ---------------------------------------------------------------------------
+
+const disciplineScoreBodySchema = z.object({
+  userId: z.string().uuid(),
+  disciplineScore: z.number().min(80, 'disciplineScore must be >= 80').max(100),
+});
+
+router.post(
+  '/xp/discipline-score',
+  validateBody(disciplineScoreBodySchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId, disciplineScore } = (req as Request & { validatedBody: z.infer<typeof disciplineScoreBodySchema> }).validatedBody;
+    try {
+      const result = await awardDisciplineScoreXp(userId, disciplineScore);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Failed to award discipline score XP', { userId, error });
+      sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to award XP');
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /xp/trade-shared — Award XP for sharing a trade
+// ---------------------------------------------------------------------------
+
+router.post(
+  '/xp/trade-shared',
+  validateBody(tradeXpBodySchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId, tradeId } = (req as Request & { validatedBody: z.infer<typeof tradeXpBodySchema> }).validatedBody;
+    try {
+      const result = await awardTradeSharedXp(userId, tradeId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Failed to award trade shared XP', { userId, tradeId, error });
+      sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to award XP');
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /xp/helpful-comment — Award XP for a helpful comment
+// ---------------------------------------------------------------------------
+
+const helpfulCommentBodySchema = z.object({
+  userId: z.string().uuid(),
+  commentId: z.string().min(1),
+});
+
+router.post(
+  '/xp/helpful-comment',
+  validateBody(helpfulCommentBodySchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId, commentId } = (req as Request & { validatedBody: z.infer<typeof helpfulCommentBodySchema> }).validatedBody;
+    try {
+      const result = await awardHelpfulCommentXp(userId, commentId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error('Failed to award helpful comment XP', { userId, commentId, error });
+      sendError(res, 500, ErrorCode.INTERNAL_ERROR, 'Failed to award XP');
     }
   }
 );
