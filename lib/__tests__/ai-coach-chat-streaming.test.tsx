@@ -73,8 +73,13 @@ function createDeferred() {
 describe('useAICoachChat streaming recovery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.sessionStorage.clear()
     vi.stubGlobal('crypto', {
-      randomUUID: () => 'session-123',
+      randomUUID: vi.fn()
+        .mockReturnValueOnce('send-1')
+        .mockReturnValueOnce('session-1')
+        .mockReturnValueOnce('send-2')
+        .mockReturnValueOnce('session-2'),
     })
     mockGetSessions.mockResolvedValue({ sessions: [] })
     mockGetSessionMessages.mockResolvedValue({ messages: [], total: 0, hasMore: false })
@@ -167,5 +172,48 @@ describe('useAICoachChat streaming recovery', () => {
     expect(mockSendMessage).toHaveBeenCalledTimes(1)
     expect(result.current.error).toBeNull()
     expect(result.current.messages.at(-1)?.content).toBe('Recovered full response')
+  })
+
+  it('allows a second question after a recovered stream failure', async () => {
+    mockStreamMessage
+      .mockImplementationOnce(async function* () {
+        yield { type: 'status', data: { phase: 'generating' } }
+        throw new Error('stream disconnected')
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'Second answer is complete.' } }
+        yield {
+          type: 'done',
+          data: {
+            messageId: 'assistant-second',
+            content: 'Second answer is complete.',
+            functionCalls: [],
+            tokensUsed: 15,
+            responseTime: 60,
+          },
+        }
+      })
+
+    const { result } = renderHook(() => useAICoachChat())
+
+    await act(async () => {
+      await result.current.sendMessage('First question')
+    })
+
+    expect(result.current.isSending).toBe(false)
+
+    await act(async () => {
+      await result.current.sendMessage('Second question')
+    })
+
+    await waitFor(() => {
+      expect(result.current.messages.filter((message) => message.role === 'user').map((message) => message.content)).toEqual([
+        'First question',
+        'Second question',
+      ])
+    })
+
+    expect(result.current.isSending).toBe(false)
+    expect(result.current.messages.at(-1)?.content).toContain('Second answer is complete.')
   })
 })

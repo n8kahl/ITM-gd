@@ -1859,6 +1859,8 @@ export interface StreamDoneData {
   responseTime: number
 }
 
+const STREAM_READ_TIMEOUT_MS = 20_000
+
 /**
  * Send a chat message with SSE streaming response.
  * Returns an async generator that yields stream events.
@@ -1920,29 +1922,87 @@ export async function* streamMessage(
   const decoder = new TextDecoder()
   let buffer = ''
 
+  const readNextChunk = async () => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let abortHandler: (() => void) | null = null
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error('AI Coach stream timed out while waiting for the next event.'))
+      }, STREAM_READ_TIMEOUT_MS)
+
+      abortHandler = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+        reject(new DOMException('The operation was aborted.', 'AbortError'))
+      }
+
+      signal?.addEventListener('abort', abortHandler, { once: true })
+    })
+
+    try {
+      return await Promise.race([
+        reader.read(),
+        timeoutPromise,
+      ])
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      if (signal && abortHandler) {
+        signal.removeEventListener('abort', abortHandler)
+      }
+    }
+  }
+
+  const parseStreamBlock = (block: string): StreamEvent | null => {
+    const lines = block
+      .split(/\r?\n/)
+      .map((line) => line.trimEnd())
+      .filter(Boolean)
+
+    if (lines.length === 0) return null
+
+    let eventType = ''
+    const dataLines: string[] = []
+
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        eventType = line.slice(7).trim()
+        continue
+      }
+      if (line.startsWith('data: ')) {
+        dataLines.push(line.slice(6))
+      }
+    }
+
+    if (!eventType || dataLines.length === 0) return null
+
+    try {
+      return {
+        type: eventType as StreamEvent['type'],
+        data: JSON.parse(dataLines.join('\n')),
+      }
+    } catch {
+      return null
+    }
+  }
+
   try {
     while (true) {
-      const { done, value } = await reader.read()
+      const { done, value } = await readNextChunk()
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
 
-      // Parse SSE events from buffer
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || '' // Keep incomplete line in buffer
+      const blocks = buffer.split(/\r?\n\r?\n/)
+      buffer = blocks.pop() || ''
 
-      let currentEvent = ''
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7)
-        } else if (line.startsWith('data: ') && currentEvent) {
-          try {
-            const data = JSON.parse(line.slice(6))
-            yield { type: currentEvent as StreamEvent['type'], data }
-          } catch {
-            // Skip malformed JSON
-          }
-          currentEvent = ''
+      for (const block of blocks) {
+        const parsedEvent = parseStreamBlock(block)
+        if (parsedEvent) {
+          yield parsedEvent
         }
       }
     }
