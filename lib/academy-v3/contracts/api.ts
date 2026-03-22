@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import {
+  academyBlockTypeSchema,
+  academyDifficultySchema,
   academyLessonBlockSchema,
   academyLessonSchema,
   academyModuleSchema,
@@ -266,3 +268,135 @@ export type GetAcademyLessonAttemptResponse = z.infer<typeof getAcademyLessonAtt
 export type ModuleProgressSummaryItem = z.infer<typeof moduleProgressSummaryItemSchema>
 export type TrackProgressSummaryItem = z.infer<typeof trackProgressSummaryItemSchema>
 export type GetAcademyProgressSummaryResponse = z.infer<typeof getAcademyProgressSummaryResponseSchema>
+
+// ---------------------------------------------------------------------------
+// Bulk Import / Export (Slice 2.3)
+// ---------------------------------------------------------------------------
+
+export const bulkExportLessonBlockSchema = z.object({
+  blockType: academyBlockTypeSchema,
+  position: z.number().int().nonnegative(),
+  title: z.string().nullable(),
+  contentJson: z.record(z.string(), z.unknown()),
+})
+
+export const bulkExportLessonSchema = z.object({
+  slug: z.string().min(1),
+  title: z.string().min(1),
+  learningObjective: z.string().min(1),
+  heroImageUrl: z.string().nullable(),
+  estimatedMinutes: z.number().int().nonnegative(),
+  difficulty: academyDifficultySchema,
+  position: z.number().int().nonnegative(),
+  status: z.enum(['draft', 'review', 'published']).default('draft'),
+  publishedAt: z.string().nullable().optional(),
+  versionNumber: z.number().int().nonnegative().nullable().optional(),
+  blocks: z.array(bulkExportLessonBlockSchema),
+})
+
+export const bulkExportModuleSchema = z.object({
+  slug: z.string().min(1),
+  code: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  coverImageUrl: z.string().nullable(),
+  learningOutcomes: z.array(z.string()),
+  estimatedMinutes: z.number().int().nonnegative(),
+  position: z.number().int().nonnegative(),
+  isPublished: z.boolean(),
+  lessons: z.array(bulkExportLessonSchema),
+})
+
+export const bulkExportTrackSchema = z.object({
+  code: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  position: z.number().int().nonnegative(),
+  isActive: z.boolean(),
+  modules: z.array(bulkExportModuleSchema),
+})
+
+export const bulkExportPayloadSchema = z.object({
+  exportedAt: z.string(),
+  version: z.literal('1.0'),
+  program: z.object({
+    code: z.string().min(1),
+    title: z.string().min(1),
+    description: z.string().nullable(),
+    isActive: z.boolean(),
+  }),
+  tracks: z.array(bulkExportTrackSchema),
+})
+
+export const bulkImportLessonBlockSchema = z.object({
+  blockType: academyBlockTypeSchema,
+  position: z.number().int().nonnegative(),
+  title: z.string().nullable().default(null),
+  contentJson: z.record(z.string(), z.unknown()),
+})
+
+export const bulkImportLessonSchema = z.object({
+  slug: z.string().min(1),
+  title: z.string().min(1),
+  learningObjective: z.string().min(1),
+  heroImageUrl: z.string().nullable().default(null),
+  estimatedMinutes: z.number().int().nonnegative().default(15),
+  difficulty: academyDifficultySchema.default('beginner'),
+  position: z.number().int().nonnegative(),
+  blocks: z.array(bulkImportLessonBlockSchema).default([]),
+})
+
+export const bulkImportModuleSchema = z.object({
+  slug: z.string().min(1),
+  title: z.string().min(1),
+  lessons: z.array(bulkImportLessonSchema),
+})
+
+export const bulkImportPayloadSchema = z.object({
+  moduleSlug: z.string().min(1),
+  lessons: z.array(bulkImportLessonSchema),
+})
+
+export type BulkExportLessonBlock = z.infer<typeof bulkExportLessonBlockSchema>
+export type BulkExportLesson = z.infer<typeof bulkExportLessonSchema>
+export type BulkExportModule = z.infer<typeof bulkExportModuleSchema>
+export type BulkExportTrack = z.infer<typeof bulkExportTrackSchema>
+export type BulkExportPayload = z.infer<typeof bulkExportPayloadSchema>
+export type BulkImportLessonBlock = z.infer<typeof bulkImportLessonBlockSchema>
+export type BulkImportLesson = z.infer<typeof bulkImportLessonSchema>
+export type BulkImportPayload = z.infer<typeof bulkImportPayloadSchema>
+
+// ---------------------------------------------------------------------------
+// AI Content Generator (Slice 2.4)
+// ---------------------------------------------------------------------------
+
+export const generateLessonRequestSchema = z.object({
+  topic: z.string().min(1).max(500),
+  moduleId: z.string().uuid().optional(),
+  difficulty: academyDifficultySchema.default('beginner'),
+  estimatedMinutes: z.number().int().min(5).max(120).default(15),
+  blockTypes: z.array(academyBlockTypeSchema).optional(),
+  persist: z.boolean().default(false),
+})
+
+export const generatedLessonBlockSchema = z.object({
+  blockType: academyBlockTypeSchema,
+  position: z.number().int().nonnegative(),
+  title: z.string(),
+  contentJson: z.record(z.string(), z.unknown()),
+})
+
+export const generateLessonResponseSchema = z.object({
+  title: z.string(),
+  slug: z.string(),
+  learningObjective: z.string(),
+  difficulty: academyDifficultySchema,
+  estimatedMinutes: z.number().int().nonnegative(),
+  blocks: z.array(generatedLessonBlockSchema),
+  status: z.enum(['draft']),
+  lessonId: z.string().uuid().optional(),
+})
+
+export type GenerateLessonRequest = z.infer<typeof generateLessonRequestSchema>
+export type GeneratedLessonBlock = z.infer<typeof generatedLessonBlockSchema>
+export type GenerateLessonResponse = z.infer<typeof generateLessonResponseSchema>

@@ -65,10 +65,13 @@ export async function fetchAcademyModule(slug: string) {
   )
 }
 
-export async function fetchAcademyLesson(lessonId: string) {
-  return fetchJson(`/api/academy-v3/lessons/${encodeURIComponent(lessonId)}`, undefined, (value) =>
-    getAcademyLessonResponseSchema.parse(value).data
-  )
+export async function fetchAcademyLesson(lessonId: string, options?: { preview?: boolean }) {
+  const params = options?.preview ? '?preview=true' : ''
+  return fetchJson(`/api/academy-v3/lessons/${encodeURIComponent(lessonId)}${params}`, undefined, (value) => {
+    const parsed = value as Record<string, unknown>
+    const data = getAcademyLessonResponseSchema.parse(parsed).data
+    return { ...data, _preview: parsed.preview === true }
+  })
 }
 
 export async function fetchReviewQueue(limit = 20) {

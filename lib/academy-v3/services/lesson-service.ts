@@ -6,14 +6,16 @@ import { SupabaseAcademyLessonRepository } from '@/lib/academy-v3/repositories'
 import { AcademyLessonNotFoundError } from './errors'
 
 export class AcademyLessonService {
-  private readonly lessons
+  private readonly lessons: SupabaseAcademyLessonRepository
 
   constructor(supabase: SupabaseClient) {
     this.lessons = new SupabaseAcademyLessonRepository(supabase)
   }
 
-  async getLessonById(id: string) {
-    const lesson = await this.lessons.getPublishedLessonById(id)
+  async getLessonById(id: string, options?: { preview?: boolean }) {
+    const lesson = options?.preview
+      ? await this.lessons.getLessonByIdUnfiltered(id)
+      : await this.lessons.getPublishedLessonById(id)
     if (!lesson) {
       throw new AcademyLessonNotFoundError()
     }

@@ -1,3 +1,5 @@
+export { AiContentGeneratorService } from './ai-content-generator'
+export { BulkContentService } from './bulk-content-service'
 export { AcademyPlanService } from './plan-service'
 export { AcademyModuleService } from './module-service'
 export { AcademyLessonService } from './lesson-service'
@@ -8,8 +10,6 @@ export { AcademyMasteryService } from './mastery-service'
 export { AcademyRecommendationService } from './recommendation-service'
 export { ContentWorkflowService, ContentWorkflowError } from './content-workflow-service'
 export { ContentVersioningService, ContentVersioningError } from './content-versioning-service'
-export { BulkContentService, BulkContentError } from './bulk-content-service'
-export { AiContentGeneratorService, AiContentGeneratorError } from './ai-content-generator-service'
 export {
   AcademyPlanNotFoundError,
   AcademyModuleNotFoundError,
