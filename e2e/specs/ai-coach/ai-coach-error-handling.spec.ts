@@ -11,6 +11,7 @@ import {
   navigateToAICoach,
   waitForChatReady,
   sendChatMessage,
+  getAssistantMessages,
 } from './ai-coach-test-helpers'
 
 test.describe.configure({ mode: 'serial' })
@@ -167,7 +168,7 @@ test.describe('AI Coach — Error Handling', () => {
     await sendChatMessage(page, 'Analyze SPX')
 
     // Verify assistant response is displayed (fallback to non-streaming worked)
-    const assistantMessage = page.locator('[data-role="assistant"], .message-bubble-assistant, [class*="assistant"]').filter({ hasText: /response|fallback/i }).first()
+    const assistantMessage = getAssistantMessages(page).filter({ hasText: /response|fallback/i }).first()
     await expect.poll(
       async () => {
         return await assistantMessage.isVisible().catch(() => false)
@@ -274,7 +275,7 @@ test.describe('AI Coach — Error Handling', () => {
     await sendChatMessage(page, 'Second message')
 
     // Verify success response is displayed
-    const assistantMessage = page.locator('[data-role="assistant"], .message-bubble-assistant, [class*="assistant"]').filter({ hasText: /success/i }).first()
+    const assistantMessage = getAssistantMessages(page).filter({ hasText: /success/i }).first()
     await expect.poll(
       async () => {
         return await assistantMessage.isVisible().catch(() => false)

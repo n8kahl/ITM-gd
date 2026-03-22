@@ -11,6 +11,7 @@ import {
   TableProperties,
 } from 'lucide-react'
 import type { ChartTimeframe, PositionInput } from '@/lib/api/ai-coach'
+import { createWidgetEventId } from '@/lib/ai-coach/widget-event-dedupe'
 
 export type WidgetViewTarget =
   | 'chart'
@@ -29,9 +30,14 @@ export interface WidgetAction {
   tooltip?: string
 }
 
-function dispatchWidgetEvent<T>(name: string, detail: T) {
+function dispatchWidgetEvent<T extends Record<string, unknown>>(name: string, detail: T) {
   if (typeof window === 'undefined') return
-  window.dispatchEvent(new CustomEvent(name, { detail }))
+  window.dispatchEvent(new CustomEvent(name, {
+    detail: {
+      ...detail,
+      eventId: createWidgetEventId(),
+    },
+  }))
 }
 
 export function chartAction(

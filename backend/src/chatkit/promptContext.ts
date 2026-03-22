@@ -1,7 +1,7 @@
 import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
 import { getSystemPrompt } from './systemPrompt';
-import { getMarketStatus } from '../services/marketHours';
+import { getMarketStatus, type MarketStatus } from '../services/marketHours';
 import { getMarketIndicesSnapshot } from '../services/marketIndices';
 import { massiveClient, getTickerNews } from '../config/massive';
 import { getEarningsCalendar } from '../services/earnings';
@@ -45,6 +45,23 @@ export type SessionPhase =
   | 'moc-imbalance'
   | 'after-hours'
   | 'closed';
+
+type IntradayCoachMode = 'pre-market' | 'live' | 'post-trade';
+
+function mapSessionPhaseToIntradayMode(phase: SessionPhase): IntradayCoachMode {
+  if (phase === 'pre-market') return 'pre-market';
+  if (
+    phase === 'opening-drive'
+    || phase === 'mid-morning'
+    || phase === 'midday'
+    || phase === 'afternoon'
+    || phase === 'power-hour'
+    || phase === 'moc-imbalance'
+  ) {
+    return 'live';
+  }
+  return 'post-trade';
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value && typeof value === 'object') return value as Record<string, unknown>;
@@ -92,8 +109,61 @@ function toETParts(now: Date = new Date()): { hour: number; minute: number } {
   return { hour, minute };
 }
 
-export function getSessionContext(): { time: string; phase: SessionPhase; phaseNote: string } {
-  const now = new Date();
+function resolveRegularCloseMinute(status: MarketStatus): number {
+  if (typeof status.closingTime === 'string' && status.closingTime.includes('1:00 PM')) {
+    return 780;
+  }
+  return 960;
+}
+
+function resolveOpenSessionPhase(totalMin: number, regularCloseMinute: number): { phase: SessionPhase; phaseNote: string } {
+  const isEarlyClose = regularCloseMinute <= 780;
+
+  if (isEarlyClose) {
+    if (totalMin >= 570 && totalMin < 600) {
+      return { phase: 'opening-drive', phaseNote: 'Opening drive on an early-close day. Volatility is elevated and time-to-confirmation is shorter.' };
+    }
+    if (totalMin >= 600 && totalMin < 675) {
+      return { phase: 'mid-morning', phaseNote: 'Mid-morning on an early-close day. Prioritize clean continuation versus failed break behavior.' };
+    }
+    if (totalMin >= 675 && totalMin < 735) {
+      return { phase: 'midday', phaseNote: 'Compressed midday window due to early close. Avoid overtrading chop.' };
+    }
+    if (totalMin >= 735 && totalMin < 765) {
+      return { phase: 'afternoon', phaseNote: 'Late regular session before early close. Manage risk tightly and avoid fresh low-quality entries.' };
+    }
+    if (totalMin >= 765 && totalMin < regularCloseMinute) {
+      return { phase: 'power-hour', phaseNote: 'Final 15 minutes before early close. Liquidity can thin quickly and slippage risk rises.' };
+    }
+    return { phase: 'after-hours', phaseNote: 'After-hours session. Regular trading closed early at 1:00 PM ET.' };
+  }
+
+  if (totalMin >= 570 && totalMin < 600) {
+    return { phase: 'opening-drive', phaseNote: 'Opening drive. Volatility and gap resolution are elevated.' };
+  }
+  if (totalMin >= 600 && totalMin < 690) {
+    return { phase: 'mid-morning', phaseNote: 'Mid-morning. Watch continuation versus reversal behavior.' };
+  }
+  if (totalMin >= 690 && totalMin < 810) {
+    return { phase: 'midday', phaseNote: 'Midday chop zone. Mean-reversion risk is higher.' };
+  }
+  if (totalMin >= 810 && totalMin < 900) {
+    return { phase: 'afternoon', phaseNote: 'Afternoon session. Institutional flow starts building.' };
+  }
+  if (totalMin >= 900 && totalMin < 945) {
+    return { phase: 'power-hour', phaseNote: 'Power hour. Volume and directional intent can increase.' };
+  }
+  if (totalMin >= 945 && totalMin < regularCloseMinute) {
+    return { phase: 'moc-imbalance', phaseNote: 'MOC window. Closing-order imbalances can move price quickly.' };
+  }
+
+  return { phase: 'after-hours', phaseNote: 'After-hours session. Liquidity is thin and moves can be noisy.' };
+}
+
+export function getSessionContext(
+  now: Date = new Date(),
+  marketStatus: MarketStatus = getMarketStatus(now),
+): { time: string; phase: SessionPhase; phaseNote: string } {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     hour: '2-digit',
@@ -104,36 +174,57 @@ export function getSessionContext(): { time: string; phase: SessionPhase; phaseN
   const { hour, minute } = toETParts(now);
   const totalMin = hour * 60 + minute;
 
-  let phase: SessionPhase = 'closed';
-  let phaseNote = 'Markets closed.';
-
-  if (totalMin >= 240 && totalMin < 570) {
-    phase = 'pre-market';
-    phaseNote = 'Pre-market session. Thin liquidity and wider spreads.';
-  } else if (totalMin >= 570 && totalMin < 600) {
-    phase = 'opening-drive';
-    phaseNote = 'Opening drive. Volatility and gap resolution are elevated.';
-  } else if (totalMin >= 600 && totalMin < 690) {
-    phase = 'mid-morning';
-    phaseNote = 'Mid-morning. Watch continuation versus reversal behavior.';
-  } else if (totalMin >= 690 && totalMin < 810) {
-    phase = 'midday';
-    phaseNote = 'Midday chop zone. Mean-reversion risk is higher.';
-  } else if (totalMin >= 810 && totalMin < 900) {
-    phase = 'afternoon';
-    phaseNote = 'Afternoon session. Institutional flow starts building.';
-  } else if (totalMin >= 900 && totalMin < 945) {
-    phase = 'power-hour';
-    phaseNote = 'Power hour. Volume and directional intent can increase.';
-  } else if (totalMin >= 945 && totalMin < 960) {
-    phase = 'moc-imbalance';
-    phaseNote = 'MOC window. Closing-order imbalances can move price quickly.';
-  } else if (totalMin >= 960 && totalMin < 1200) {
-    phase = 'after-hours';
-    phaseNote = 'After-hours session. Liquidity is thin and moves can be noisy.';
+  if (marketStatus.session === 'weekend') {
+    return {
+      time: etTime,
+      phase: 'closed',
+      phaseNote: 'Weekend market closure. Focus on post-trade review and next-session planning.',
+    };
   }
 
-  return { time: etTime, phase, phaseNote };
+  if (marketStatus.session === 'holiday') {
+    const holidayName = marketStatus.holidayName || 'US market holiday';
+    return {
+      time: etTime,
+      phase: 'closed',
+      phaseNote: `${holidayName} closure. No regular session today; focus on scenario planning and risk prep.`,
+    };
+  }
+
+  if (marketStatus.status === 'pre-market') {
+    return {
+      time: etTime,
+      phase: 'pre-market',
+      phaseNote: 'Pre-market session. Thin liquidity and wider spreads.',
+    };
+  }
+
+  if (marketStatus.status === 'open') {
+    const regularCloseMinute = resolveRegularCloseMinute(marketStatus);
+    const openPhase = resolveOpenSessionPhase(totalMin, regularCloseMinute);
+    return {
+      time: etTime,
+      phase: openPhase.phase,
+      phaseNote: openPhase.phaseNote,
+    };
+  }
+
+  if (marketStatus.status === 'after-hours') {
+    const regularCloseMinute = resolveRegularCloseMinute(marketStatus);
+    return {
+      time: etTime,
+      phase: 'after-hours',
+      phaseNote: regularCloseMinute <= 780
+        ? 'After-hours session. Regular trading closed early at 1:00 PM ET.'
+        : 'After-hours session. Liquidity is thin and moves can be noisy.',
+    };
+  }
+
+  return {
+    time: etTime,
+    phase: 'closed',
+    phaseNote: 'Markets closed.',
+  };
 }
 
 function formatAggLine(
@@ -390,7 +481,10 @@ export async function buildSystemPromptForUser(
   userId: string,
   options?: { isMobile?: boolean; recentSymbols?: string[]; activeChartSymbol?: string },
 ): Promise<string> {
-  const marketStatus = getMarketStatus();
+  const now = new Date();
+  const marketStatus = getMarketStatus(now);
+  const sessionContext = getSessionContext(now, marketStatus);
+  const intradayMode = mapSessionPhaseToIntradayMode(sessionContext.phase);
   const symbols = normalizeSymbols([
     ...(options?.activeChartSymbol ? [options.activeChartSymbol] : []),
     ...(options?.recentSymbols || []),
@@ -417,6 +511,9 @@ export async function buildSystemPromptForUser(
     experienceLevel: profile.experienceLevel,
     isMobile: options?.isMobile === true,
     activeChartSymbol: options?.activeChartSymbol,
+    intradayMode,
+    sessionPhase: sessionContext.phase,
+    sessionPhaseNote: sessionContext.phaseNote,
     marketContext: {
       isMarketOpen: marketStatus.status === 'open',
       marketStatus: marketStatus.status === 'open'

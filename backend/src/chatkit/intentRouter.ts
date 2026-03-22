@@ -38,6 +38,8 @@ interface IntentSpec {
   requiresScenarioProbabilities?: boolean;
   requiresLiquidityWatchouts?: boolean;
   requiresSetupPlan?: boolean;
+  requiresStructuredTradeSchema?: boolean;
+  requiresClarifyBeforeCommit?: boolean;
 }
 
 const STOPWORDS = new Set([
@@ -60,6 +62,8 @@ const INTENT_SPECS: IntentSpec[] = [
     preferredChartTimeframe: '15m',
     requiresBullBear: true,
     requiresPriceNumbers: true,
+    requiresStructuredTradeSchema: true,
+    requiresClarifyBeforeCommit: true,
   },
   {
     id: 'setup_help',
@@ -74,6 +78,8 @@ const INTENT_SPECS: IntentSpec[] = [
     requiresScenarioProbabilities: true,
     requiresLiquidityWatchouts: true,
     requiresSetupPlan: true,
+    requiresStructuredTradeSchema: true,
+    requiresClarifyBeforeCommit: true,
   },
   {
     id: 'key_levels',
@@ -151,6 +157,8 @@ const INTENT_SPECS: IntentSpec[] = [
     requiresScenarioProbabilities: true,
     requiresLiquidityWatchouts: true,
     requiresSetupPlan: true,
+    requiresStructuredTradeSchema: true,
+    requiresClarifyBeforeCommit: true,
   },
   {
     id: 'earnings_calendar',
@@ -292,6 +300,51 @@ function hasSetupPlanStructure(text: string): boolean {
   return hasEntry && hasStopOrInvalidation && hasTarget && hasLevelNumber;
 }
 
+function hasSchemaFieldLabel(text: string, labelPatterns: string[]): boolean {
+  return labelPatterns.some((pattern) => (
+    new RegExp(
+      `(?:^|\\n|\\r)\\s*(?:[#>*-]|\\d+[.)])?\\s*\\*{0,2}${pattern}\\*{0,2}(?:\\s*[:\\-]|\\b)`,
+      'im',
+    ).test(text)
+  ));
+}
+
+function hasStructuredTradeSchema(text: string): boolean {
+  const schemaFieldPatterns: string[][] = [
+    ['bias'],
+    ['setup'],
+    ['entry'],
+    ['stop(?:\\s*/\\s*invalidation)?'],
+    ['targets?', 'take\\s?-?profits?', 'tp1'],
+    ['invalidation', 'invalidates?'],
+    ['risk'],
+    ['confidence'],
+  ];
+  return schemaFieldPatterns.every((patterns) => hasSchemaFieldLabel(text, patterns));
+}
+
+function isLowConfidenceResponse(text: string): boolean {
+  const confidencePctMatch = text.match(/confidence[^\d]{0,20}(\d{1,3})\s?%/i);
+  if (confidencePctMatch) {
+    const confidencePct = Number.parseInt(confidencePctMatch[1], 10);
+    if (Number.isFinite(confidencePct) && confidencePct <= 59) {
+      return true;
+    }
+  }
+
+  const confidenceLabelMatch = text.match(/confidence[^a-z]{0,20}(low|medium|high)\b/i);
+  if (confidenceLabelMatch) {
+    return confidenceLabelMatch[1].toLowerCase() === 'low';
+  }
+
+  return /\blow confidence\b/i.test(text);
+}
+
+function hasClarifyingQuestion(text: string): boolean {
+  if (!text.includes('?')) return false;
+  return /(can you|could you|do you|would you|which|what|confirm|clarify|timeframe|risk budget|before (?:i|we) commit)/i.test(text);
+}
+
 function hasExplicitSetupExecutionLanguage(loweredMessage: string): boolean {
   return /(setup|entry|stop|take\s?-?profit|target|tp1|tp2|scanner|find setups?|execution plan|trade plan|risk plan)/.test(loweredMessage);
 }
@@ -388,6 +441,8 @@ export interface IntentRoutingPlan {
   requiresScenarioProbabilities: boolean;
   requiresLiquidityWatchouts: boolean;
   requiresSetupPlan: boolean;
+  requiresStructuredTradeSchema: boolean;
+  requiresClarifyBeforeCommit: boolean;
 }
 
 export interface ContractViolationAudit {
@@ -527,6 +582,8 @@ export function buildIntentRoutingPlan(message: string, context?: IntentRoutingC
   const requiresScenarioProbabilities = selectedSpecs.some((spec) => spec.requiresScenarioProbabilities === true);
   const requiresLiquidityWatchouts = selectedSpecs.some((spec) => spec.requiresLiquidityWatchouts === true);
   const requiresSetupPlan = selectedSpecs.some((spec) => spec.requiresSetupPlan === true);
+  const requiresStructuredTradeSchema = selectedSpecs.some((spec) => spec.requiresStructuredTradeSchema === true);
+  const requiresClarifyBeforeCommit = selectedSpecs.some((spec) => spec.requiresClarifyBeforeCommit === true);
   const primarySymbol = selectPrimarySymbol(effectiveSymbols, intents, loweredMessage);
 
   return {
@@ -543,6 +600,8 @@ export function buildIntentRoutingPlan(message: string, context?: IntentRoutingC
     requiresScenarioProbabilities,
     requiresLiquidityWatchouts,
     requiresSetupPlan,
+    requiresStructuredTradeSchema,
+    requiresClarifyBeforeCommit,
   };
 }
 
@@ -586,6 +645,12 @@ export function buildIntentRoutingDirective(plan: IntentRoutingPlan): string | n
     plan.requiresSetupPlan
       ? '- Setup responses must include explicit Entry, Stop/Invalidation, and Take-Profit prices.'
       : '- Setup plan levels are optional unless asked.',
+    plan.requiresStructuredTradeSchema
+      ? '- Use this section order for actionable responses: Bias, Setup, Entry, Stop, Targets, Invalidation, Risk, Confidence.'
+      : '- Structured trade schema is optional unless the user asks for an execution plan.',
+    plan.requiresClarifyBeforeCommit
+      ? '- If confidence is low (<60% or data degraded), ask one clarifying question before committing to a directional plan.'
+      : '- Clarify-before-commit is optional unless confidence is low.',
   ].join('\n');
 }
 
@@ -638,6 +703,14 @@ export function evaluateResponseContract(
     blockingViolations.push('missing_setup_plan_levels');
   }
 
+  if (plan.requiresStructuredTradeSchema && !hasStructuredTradeSchema(content)) {
+    blockingViolations.push('missing_trade_response_schema');
+  }
+
+  if (plan.requiresClarifyBeforeCommit && isLowConfidenceResponse(content) && !hasClarifyingQuestion(content)) {
+    blockingViolations.push('missing_clarify_before_commit');
+  }
+
   if (!content || content.trim().length < 10) {
     blockingViolations.push('empty_or_too_short_response');
   }
@@ -679,6 +752,8 @@ export function buildContractRepairDirective(plan: IntentRoutingPlan): string {
   if (plan.requiresPriceNumbers) checklist.push('Include concrete numeric levels and triggers.');
   if (plan.requiresLiquidityWatchouts) checklist.push('Include liquidity risks: bid/ask spread, slippage risk, and thin-liquidity windows.');
   if (plan.requiresSetupPlan) checklist.push('Include explicit Entry, Stop/Invalidation, and Take-Profit prices.');
+  if (plan.requiresStructuredTradeSchema) checklist.push('Use this exact section order: Bias, Setup, Entry, Stop, Targets, Invalidation, Risk, Confidence.');
+  if (plan.requiresClarifyBeforeCommit) checklist.push('If confidence is low (<60%), ask one clarifying question before committing to a directional setup.');
 
   return [
     'REPAIR RESPONSE CONTRACT (internal):',

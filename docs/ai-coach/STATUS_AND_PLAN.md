@@ -1,164 +1,83 @@
-# AI Coach - Status Assessment & Completion Plan
+# AI Coach Status And Plan
 
-**Date**: 2026-02-08
-**Prepared by**: Claude Code (Autonomous Review)
-**Branch**: `claude/phase-2-implementation-prep-uJvLK`
-**Last Updated**: All remaining items complete (alert worker, WebSocket, DST, E2E, onboarding)
+Date: 2026-03-22
+Status: Remediation execution complete (Slices 1-9 complete)
+Owner: Engineering + Product + QE + UX
 
----
+## 1. Current Source Of Truth
 
-## Executive Summary
+This status file now tracks the active production remediation packet:
 
-The AI Coach implementation is **approximately 98% complete** against the full feature roadmap. All 15 AI functions are implemented with real service backends. All 10 center panel views have fully functional frontend components. Sentry error monitoring, SSE streaming, WebSocket price feeds, background alert worker, E2E tests, and beta onboarding are all operational.
+1. `docs/specs/AI_COACH_COMPREHENSIVE_AUDIT_REMEDIATION_EXECUTION_SPEC_2026-03-20.md`
+2. `docs/specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/02_IMPLEMENTATION_PLAN_AND_PRIORITY_MODEL.md`
+3. `docs/specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/03_QUALITY_PROTOCOL_AND_TEST_GATES.md`
+4. `docs/specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/06_CHANGE_CONTROL_AND_PR_STANDARD.md`
+5. `docs/specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md`
+6. `docs/specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/08_AUTONOMOUS_EXECUTION_TRACKER.md`
 
-**What works today**: A user can chat with the AI about key levels, options chains, positions, trade history, and macro data. They can view annotated candlestick charts, browse options chains with Greeks, analyze positions, upload broker screenshots for position extraction, manage a trade journal with analytics, set price alerts that auto-trigger via background monitoring, receive real-time price updates via WebSocket, run the opportunity scanner, track LEAPS positions with Greeks projections, view macro/economic data, and experience a guided onboarding tour on first visit — all from within the AI Coach interface.
+## 2. Audit Baseline Snapshot (Updated 2026-03-22)
 
----
+1. Frontend AI Coach targeted vitest suites: passing.
+2. Backend AI Coach stream integration test: passing with open-handle warning.
+3. Playwright AI Coach sessions suite: passing with semantic listbox/option controls and keyboard parity assertions.
+4. Playwright AI Coach a11y + mobile suites: passing with live-region error/status semantics and mobile overlay parity.
+5. Day-trader prompt contract regression suites: passing (schema-first sections, intraday mode context, and low-confidence clarify-before-commit enforcement).
+6. Data-trust slice gates: passing (shared SPX market snapshot source in AI Coach top-level surfaces, explicit freshness metadata propagation, market-index freshness timestamp contracts, and weekend/holiday prompt-context regressions).
+7. Final release closure gates: passing (lint, typecheck, targeted vitest/jest, Playwright sessions/options/mobile + a11y suites, and `pnpm build`).
+8. Post-closure P2 cleanup gates: passing (session restore-on-reload flow and stabilized AI Coach chat messaging Playwright selector contracts).
 
-## Phase-by-Phase Status
+## 3. Prioritized Defect Backlog
 
-### Phase 0: Foundation & Planning — COMPLETE (100%)
+### P0
 
-All 15+ documentation files are comprehensive and production-quality.
+1. No open P0 defects. Prior P0 issues (duplicate event ingestion and send/session race conditions) were mitigated in Slices 2 and 3.
 
-### Phase 1: Levels Engine MVP — COMPLETE (100%)
+### P1
 
-Backend fully implemented with PDH/PDL/PDC/PWH/PWL, pre-market levels, pivots (Standard/Camarilla/Fibonacci), VWAP with bands, and ATR. Unit tests for pivots and ATR pass.
+1. No open P1 defects in the remediation packet.
 
-**Known gaps**: `testsToday` hardcoded to 0 (tracking deferred to future analytics phase).
+### P2
 
-**Resolved**: DST handling centralized in `marketHours.ts` (exported `getETOffset`, `toEasternTime`). Holiday calendar extended through 2028. Levels engine `getMarketContext()` now uses the DST-aware service instead of simplified UTC-5.
+1. No open P2 defects in the active remediation scope.
 
-### Phase 2: Basic AI Chat — COMPLETE (100%)
+## 4. Delivery Plan Summary
 
-Full chat service with OpenAI GPT-4, 15 function definitions, function calling loop with circuit breaker and token budgeting. Frontend: responsive chat panel with sessions, message history loading, optimistic updates, abort controller, rate limit handling.
+Active slice sequence:
 
-**New in Phase 2 Implementation**: SSE streaming endpoint (`POST /api/chat/stream`) with real-time token delivery, status events, and automatic fallback to non-streaming.
+1. Baseline contract lock + failing repros
+2. Event ingestion canonicalization
+3. Chat lifecycle concurrency hardening
+4. E2E contract fidelity repair
+5. Accessibility + mobile/desktop UX hardening
+6. Prompt/experience upgrade for day traders
+7. Data trust + polling consolidation
+8. Final validation + release closure
+9. Post-closure P2 hardening (session restore + messaging selector stabilization)
 
-### Phase 3: Center Panel - Charts — COMPLETE (100%)
+See the implementation plan for full scope and acceptance criteria per slice.
 
-Candlestick charts via lightweight-charts, multi-timeframe (1m–1D), level annotations from AI responses, SPX/NDX support.
+Current execution state:
 
-### Phase 4: Card Widgets — COMPLETE (100%)
+1. Slice 1 completed on 2026-03-20 (baseline repro tests + proxy contract fixtures).
+2. Slice 2 completed on 2026-03-20 (canonical widget-event ingestion + event-id dedupe guardrails).
+3. Slice 3 completed on 2026-03-20 (chat send/abort/new-session concurrency hardening).
+4. Slice 4 completed on 2026-03-21 (E2E contract/selector repair with green sessions/options/mobile/a11y gates).
+5. Slice 5 completed on 2026-03-22 (sessions semantics, keyboard flow parity, and error/status accessibility hardening).
+6. Slice 6 completed on 2026-03-22 (schema-first prompt contract, intraday mode context, low-confidence clarify-before-commit contract checks, and schema-linked follow-up intents).
+7. Slice 7 completed on 2026-03-22 (canonical AI Coach market snapshot source, shared freshness metadata propagation, stale-state telemetry hooks, and weekend/holiday/early-close prompt-context hardening).
+8. Slice 8 completed on 2026-03-22 (full release gate reruns, release evidence capture, and remediation packet closure).
+9. Slice 9 completed on 2026-03-22 (session restore-on-reload flow completion, canonical message selector contracts, and stabilized messaging/sessions Playwright coverage).
 
-5 widget types implemented in `widget-cards.tsx`: key_levels, position_summary, pnl_tracker, alert_status, market_overview. Widget extraction from function calls (`extractWidgets()`) and rendering in message bubbles is fully integrated.
+## 5. Quality Bar
 
-### Phase 5: Options Analysis — COMPLETE (100%)
+No slice closes without:
 
-**Backend**: Options chain fetcher, Black-Scholes model, position analyzer, portfolio analysis. 24+ unit tests.
-**Frontend**: `options-chain.tsx` (372 lines) — full options chain viewer with Greeks columns, sorting, strike range selector, ATM/ITM highlighting. `position-form.tsx` (370 lines) — position entry form with analysis display. Both wired to API.
+1. typed contract alignment
+2. targeted tests for changed surfaces
+3. lint + typecheck + required suite evidence
+4. tracker/change-control/risk-register updates
+5. rollback steps at slice granularity
 
-### Phase 6: Screenshot Analysis — COMPLETE (100%)
+## 6. Legacy Note
 
-**Backend**: `screenshot.ts` route with OpenAI Vision API integration, 10MB file size validation.
-**Frontend**: `screenshot-upload.tsx` (319 lines) — drag-and-drop upload, base64 encoding, image preview, position review with confidence scores, broker detection (TastyTrade, ToS, IBKR, Robinhood, Webull).
-
-### Phase 7: Trade Journal — COMPLETE (100%)
-
-**Backend**: Full CRUD on `ai_coach_trades` table, P&L calculation with options 100x multiplier, trade analytics, equity curve, CSV bulk import.
-**Frontend**: `trade-journal.tsx` (772 lines) — 3-tab interface (trades list, add trade, analytics). Filtering by outcome, expandable trade cards, equity curve visualization, strategy breakdown.
-
-### Phase 8: Real-Time Alerts — COMPLETE (100%)
-
-**Backend**: Full CRUD on `ai_coach_alerts`, 20-alert limit per user, status tracking, cancel/trigger workflow. Background alert worker (`workers/alertWorker.ts`) polls Massive.com prices at adaptive intervals (2min market open, 15min closed) and auto-triggers active alerts.
-**Frontend**: `alerts-panel.tsx` (470 lines) — 5 alert types, inline creation form, status filtering, cancel/delete operations.
-
-**Known gap**: No push/email notifications (in-app triggering is complete).
-
-### Phase 9: Opportunity Scanner — COMPLETE (100%)
-
-**Backend**: 7 technical scanning algorithms (support bounce, resistance rejection, breakout, breakdown, MA crossover, RSI divergence, volume spike) + options scanner. Parallel scanning across symbols. Direct `/api/scanner/scan` endpoint.
-**Frontend**: `opportunity-scanner.tsx` (400 lines) — now wired to direct scanner API (previously used chat indirectly). Direction/type filters, expandable opportunity cards with suggested trades.
-
-### Phase 10: Swing & LEAPS Module — COMPLETE (100%)
-
-**Backend**: LEAPS CRUD (10-position limit), Greeks projection service, roll calculator, long-term trend analysis, macro context service (economic calendar, Fed policy, sector rotation, earnings).
-**Frontend**: `leaps-dashboard.tsx` (646 lines) — position management, Greeks projection table, add form, delete, AI/roll analysis buttons. `macro-context.tsx` (391 lines) — 4-tab view (economic calendar, Fed policy, sectors, earnings).
-
-### Production Hardening — COMPLETE (100%)
-
-| Item | Status |
-|------|--------|
-| Sentry (backend @sentry/node) | Done |
-| Sentry (frontend @sentry/nextjs) | Done |
-| Rate limiting (3 tiers) | Done |
-| Request validation (Zod schemas) | Done |
-| Structured logging (JSON) | Done |
-| Request IDs | Done |
-| Circuit breaker (OpenAI, Massive.com) | Done |
-| SSE streaming chat | Done |
-| Error boundaries | Done |
-| E2E tests (Playwright) | Done — 2 test suites (UI views + API health) |
-| WebSocket real-time updates | Done — `/ws/prices` with subscribe/unsubscribe |
-| Background alert worker | Done — polls Massive.com, triggers active alerts |
-| DST handling | Done — centralized in marketHours.ts, exports shared helpers |
-| Holiday calendar | Done — NYSE/NASDAQ 2025-2028, early close days |
-
----
-
-## Database Schema Status
-
-All 7 AI Coach tables are **fully migrated** with RLS policies and triggers:
-
-| Table | Schema | RLS | Used by Code |
-|-------|--------|-----|-------------|
-| ai_coach_users | Done | Done | Yes (auth) |
-| ai_coach_sessions | Done | Done | Yes (chat) |
-| ai_coach_messages | Done | Done | Yes (chat) |
-| ai_coach_positions | Done | Done | Yes (options) |
-| ai_coach_trades | Done | Done | Yes (journal) |
-| ai_coach_alerts | Done | Done | Yes (alerts) |
-| ai_coach_levels_cache | Done | N/A | Yes (cache) |
-
----
-
-## Test Coverage
-
-| Test File | Tests | Area |
-|-----------|-------|------|
-| pivots.test.ts | 19 | Pivot calculations |
-| atr.test.ts | 6 | ATR calculations |
-| blackScholes.test.ts | 12 | Option pricing, Greeks, IV |
-| positionAnalyzer.test.ts | 12 | Position analysis, portfolio Greeks |
-| functionHandlers.test.ts | 17 | All AI function handlers |
-| validation.test.ts | 18K+ | Schema validation |
-| marketHours.test.ts | 21 | Market hours, DST, holidays |
-| alertWorker.test.ts | 17 | Alert evaluation logic |
-| ai-coach-views.spec.ts | 16 | E2E: UI views & onboarding |
-| ai-coach-api.spec.ts | 12 | E2E: API health & WebSocket |
-| **Total** | **130+** | |
-
----
-
-## Summary Table
-
-| Roadmap Phase | Status | Completion |
-|---------------|--------|------------|
-| Phase 0: Foundation & Planning | COMPLETE | 100% |
-| Phase 1: Levels Engine MVP | COMPLETE | 100% |
-| Phase 2: Basic AI Chat | COMPLETE | 100% |
-| Phase 3: Center Panel - Charts | COMPLETE | 100% |
-| Phase 4: Card Widgets | COMPLETE | 100% |
-| Phase 5: Options Analysis | COMPLETE | 100% |
-| Phase 6: Screenshot Analysis | COMPLETE | 100% |
-| Phase 7: Trade Journal | COMPLETE | 100% |
-| Phase 8: Real-Time Alerts | COMPLETE | 100% |
-| Phase 9: Opportunity Scanner | COMPLETE | 100% |
-| Phase 10: Swing & LEAPS | COMPLETE | 100% |
-| Production Hardening | COMPLETE | 100% |
-| Beta & Launch | IN PROGRESS | 50% |
-
-**Overall Progress**: ~98% of total feature scope
-
----
-
-## Remaining Work (Priority Order)
-
-1. **Push notification service** — Email/push notifications for triggered alerts (in-app done)
-2. **Admin AI Coach dashboard** — Usage analytics, session metrics, cost tracking
-3. **Beta user management** — Invite codes, feature flags, usage limits
-4. **Performance optimization** — Query optimization, connection pooling, CDN setup
-
----
-
-**End of Status Assessment & Completion Plan**
+The prior status version in this file described earlier phase-completion assumptions and is superseded by the 2026-03-20 audit remediation packet above.

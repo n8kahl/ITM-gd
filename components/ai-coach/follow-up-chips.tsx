@@ -42,13 +42,46 @@ function extractPrimarySymbol(
   return firstSymbol || getActiveChartSymbol('SPX')
 }
 
-function buildFollowUps(
+function hasSchemaField(content: string, fieldPattern: string): boolean {
+  return new RegExp(
+    `(?:^|\\n|\\r)\\s*(?:[#>*-]|\\d+[.)])?\\s*\\*{0,2}${fieldPattern}\\*{0,2}(?:\\s*[:\\-]|\\b)`,
+    'im',
+  ).test(content)
+}
+
+function hasStructuredTradeSchema(content: string): boolean {
+  const fields = [
+    'bias',
+    'setup',
+    'entry',
+    'stop(?:\\s*\\/\\s*invalidation)?',
+    'targets?',
+    'invalidation',
+    'risk',
+    'confidence',
+  ]
+  return fields.every((field) => hasSchemaField(content, field))
+}
+
+function isLowConfidenceResponse(content: string): boolean {
+  const confidencePctMatch = content.match(/confidence[^\d]{0,20}(\d{1,3})\s?%/i)
+  if (confidencePctMatch) {
+    const confidencePct = Number.parseInt(confidencePctMatch[1], 10)
+    if (Number.isFinite(confidencePct) && confidencePct <= 59) return true
+  }
+
+  return /confidence[^a-z]{0,20}low\b/i.test(content) || /\blow confidence\b/i.test(content)
+}
+
+export function buildFollowUps(
   content: string,
   functionCalls?: ChatMessageResponse['functionCalls'],
 ): FollowUpChip[] {
   const lower = content.toLowerCase()
   const symbol = extractPrimarySymbol(content, functionCalls)
   const calledFunctions = new Set((functionCalls || []).map((call) => call.function))
+  const hasTradeSchema = hasStructuredTradeSchema(content)
+  const hasLowConfidence = isLowConfidenceResponse(content)
 
   const mentionsLevels = calledFunctions.has('get_key_levels')
     || /pdh|pdl|pivot|support|resistance|vwap|key level/.test(lower)
@@ -59,6 +92,38 @@ function buildFollowUps(
     || /options|greeks|implied vol|iv|gamma|delta|theta|vega/.test(lower)
 
   const candidates: FollowUpChip[] = []
+
+  if (hasTradeSchema) {
+    if (hasLowConfidence) {
+      candidates.push({
+        label: 'Clarify Before Commit',
+        prompt: `Confidence is low on this ${symbol} plan. Ask me 3 clarifying questions (timeframe, risk budget, trigger style) before finalizing the setup.`,
+      })
+    }
+
+    candidates.push(
+      {
+        label: 'Refine Entry',
+        prompt: `Refine the ${symbol} entry zone from this plan using current volatility and confirmation rules.`,
+      },
+      {
+        label: 'Stress-Test Stop',
+        prompt: `Stress-test the ${symbol} stop: show where this stop fails in normal noise and propose one tighter and one wider alternative.`,
+      },
+      {
+        label: 'Adjust Targets',
+        prompt: `Recalculate ${symbol} targets (T1/T2) using current ATR and nearest structure levels.`,
+      },
+      {
+        label: 'Position-Size Check',
+        prompt: `Convert this ${symbol} plan into position sizing: define max loss, contracts/shares, and slippage-adjusted risk.`,
+      },
+      {
+        label: 'Invalidation Drill',
+        prompt: `Walk through the ${symbol} invalidation path step-by-step and tell me what should happen immediately after invalidation.`,
+      },
+    )
+  }
 
   if (symbol === 'SPX') {
     candidates.push(

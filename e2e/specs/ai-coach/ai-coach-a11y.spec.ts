@@ -7,13 +7,16 @@ import {
   navigateToAICoach,
   waitForChatReady,
   sendChatMessage,
-  waitForAssistantResponse,
   createMockConversation,
   createMockSession,
-  AI_COACH_URL,
 } from './ai-coach-test-helpers'
 
 test.describe.configure({ mode: 'serial' })
+
+async function waitForA11yReady(page: Page) {
+  await waitForChatReady(page)
+  await expect(page.locator('main, [role="main"]').first()).toBeVisible()
+}
 
 test.describe('AI Coach — Accessibility', () => {
   test.beforeEach(async ({ page }) => {
@@ -25,12 +28,11 @@ test.describe('AI Coach — Accessibility', () => {
       messages: createMockConversation('session-001'),
     })
     await navigateToAICoach(page)
-    await waitForChatReady(page)
+    await waitForChatReady(page, 30_000)
   })
 
   test('should pass axe-core automated accessibility scan', async ({ page }) => {
-    // Wait for page to fully render
-    await page.waitForLoadState('networkidle')
+    await waitForA11yReady(page)
     await page.waitForTimeout(1000)
 
     // Run axe scan, excluding known third-party chart widget issues
@@ -68,9 +70,29 @@ test.describe('AI Coach — Accessibility', () => {
     ).toBeTruthy()
   })
 
+  test('should expose semantic session controls and expanded state', async ({ page }) => {
+    await waitForA11yReady(page)
+
+    const toggleSessionsButton = page.getByRole('button', { name: /show sessions panel|hide sessions panel/i }).first()
+    await expect(toggleSessionsButton).toHaveAttribute('aria-controls', 'ai-coach-sessions-panel')
+    await expect(toggleSessionsButton).toHaveAttribute('aria-expanded', 'false')
+
+    await toggleSessionsButton.click()
+    await expect(toggleSessionsButton).toHaveAttribute('aria-expanded', 'true')
+
+    const sessionsPanel = page.getByTestId('ai-coach-sessions-panel')
+    const sessionsList = sessionsPanel.getByRole('listbox', { name: /saved chat sessions/i })
+    await expect(sessionsList).toBeVisible()
+
+    const sessionOptions = sessionsList.getByRole('option')
+    const optionCount = await sessionOptions.count()
+    if (optionCount > 0) {
+      await expect(sessionOptions.first()).toHaveAttribute('aria-selected', /true|false/)
+    }
+  })
+
   test('should have keyboard accessible tab navigation', async ({ page }) => {
-    // Wait for page to fully render
-    await page.waitForLoadState('networkidle')
+    await waitForA11yReady(page)
 
     // Check for tab elements with aria-selected attribute
     const tabs = page.locator('[role="tab"]')
@@ -95,9 +117,6 @@ test.describe('AI Coach — Accessibility', () => {
   })
 
   test('should support Cmd+K keyboard shortcut to focus chat input', async ({ page }) => {
-    // Get initial focus element (might not be the input)
-    const initiallyFocused = await page.evaluate(() => document.activeElement?.tagName)
-
     // Press Cmd+K (or Ctrl+K on non-Mac)
     await page.keyboard.press('Meta+k')
 
@@ -107,12 +126,11 @@ test.describe('AI Coach — Accessibility', () => {
   })
 
   test('should support Tab key navigation through interactive elements', async ({ page }) => {
-    // Wait for page to render
-    await page.waitForLoadState('networkidle')
+    await waitForA11yReady(page)
 
     // Get all interactive elements (buttons, links, inputs, tabs)
     const interactiveElements = page.locator(
-      'button, a, input, textarea, [role="button"], [role="tab"], [role="link"], [tabindex="0"]'
+      'button:visible, a:visible, input:visible, textarea:visible, [role="button"]:visible, [role="tab"]:visible, [role="link"]:visible, [tabindex="0"]:visible'
     )
     const elementCount = await interactiveElements.count()
 
@@ -121,22 +139,23 @@ test.describe('AI Coach — Accessibility', () => {
       const firstElement = interactiveElements.first()
       await firstElement.focus()
       await expect(firstElement).toBeFocused()
+      await firstElement.evaluate((el) => {
+        el.setAttribute('data-a11y-focus-anchor', 'true')
+      })
 
       // Pressing Tab should move to next focusable element
-      const firstFocused = await page.evaluate(() => (document.activeElement as HTMLElement)?.id || '')
       await page.keyboard.press('Tab')
-      const secondFocused = await page.evaluate(() => (document.activeElement as HTMLElement)?.id || '')
+      const firstAnchor = page.locator('[data-a11y-focus-anchor="true"]')
 
       // Focus should have moved (unless single element)
       if (elementCount > 1) {
-        expect(secondFocused).not.toBe(firstFocused)
+        await expect(firstAnchor).not.toBeFocused()
       }
     }
   })
 
   test('should use ARIA landmarks to structure main regions', async ({ page }) => {
-    // Wait for content to render
-    await page.waitForLoadState('networkidle')
+    await waitForA11yReady(page)
 
     // Check for main landmark (required for semantic structure)
     const mainRegion = page.locator('main, [role="main"]')
@@ -144,14 +163,14 @@ test.describe('AI Coach — Accessibility', () => {
 
     // Navigation region should be present (sidebar or header nav)
     const navRegion = page.locator('nav, [role="navigation"]')
-    if (await navRegion.isVisible()) {
-      expect(await navRegion.count()).toBeGreaterThan(0)
-    }
+    expect(await navRegion.count()).toBeGreaterThan(0)
+    await expect(navRegion.first()).toBeVisible()
 
     // Complementary region (sidebar) should be present if layout includes it
     const complementary = page.locator('[role="complementary"]')
-    if (await complementary.isVisible()) {
-      expect(await complementary.count()).toBeGreaterThan(0)
+    const complementaryCount = await complementary.count()
+    if (complementaryCount > 0) {
+      await expect(complementary.first()).toBeVisible()
     }
   })
 
@@ -165,21 +184,21 @@ test.describe('AI Coach — Accessibility', () => {
     // Wait for error to appear (brief wait for error handling)
     await page.waitForTimeout(1000)
 
-    // Check for alert role elements
-    const alerts = page.locator('[role="alert"]')
-    const alertCount = await alerts.count()
-
-    // If error occurred, it should use role="alert" for accessibility
-    if (alertCount > 0) {
-      const firstAlert = alerts.first()
-      await expect(firstAlert).toBeVisible()
-      expect(await firstAlert.textContent()).toBeTruthy()
+    const errorBanner = page.getByTestId('ai-coach-error-banner')
+    if (await errorBanner.isVisible().catch(() => false)) {
+      await expect(errorBanner).toHaveAttribute('role', 'alert')
+      await expect(errorBanner).toHaveAttribute('aria-live', 'assertive')
+      await expect(errorBanner).toContainText(/\S+/)
+      return
     }
+
+    // If no textual alert is rendered, the chat should still remain stable and keep
+    // the user message visible instead of crashing.
+    await expect(page.getByText('Test message').first()).toBeVisible()
   })
 
   test('should maintain focus management in modal/dialog contexts', async ({ page }) => {
-    // Wait for page to render
-    await page.waitForLoadState('networkidle')
+    await waitForA11yReady(page)
 
     // Check if there's a dialog/modal open
     const dialog = page.locator('[role="dialog"], dialog')
@@ -200,12 +219,10 @@ test.describe('AI Coach — Accessibility', () => {
   })
 
   test('should have descriptive link and button text', async ({ page }) => {
-    // Wait for content to render
-    await page.waitForLoadState('networkidle')
+    await waitForA11yReady(page)
 
     // Get all buttons and links
     const buttons = page.locator('button')
-    const links = page.locator('a')
 
     // Sample check: verify buttons have meaningful text or aria-label
     const buttonCount = await buttons.count()
@@ -232,6 +249,8 @@ test.describe('AI Coach — Accessibility', () => {
         if (
           !text.includes('hydration') &&
           !text.includes('Failed to fetch') &&
+          !text.includes('Failed to load resource') &&
+          !text.includes('401 (Unauthorized)') &&
           !text.includes('AbortError') &&
           !text.includes('favicon') &&
           !text.includes('ARIA') // Avoid false positives

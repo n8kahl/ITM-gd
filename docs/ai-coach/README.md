@@ -8,6 +8,14 @@ This documentation covers every aspect of the AI Coach product, from initial con
 
 ## 📋 Quick Links
 
+### Current Production Packet (2026-03-20)
+- **[AI Coach Comprehensive Audit Remediation Execution Spec](../specs/AI_COACH_COMPREHENSIVE_AUDIT_REMEDIATION_EXECUTION_SPEC_2026-03-20.md)** - Active governing spec for current AI Coach remediation work.
+- **[Implementation Plan And Priority Model](../specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/02_IMPLEMENTATION_PLAN_AND_PRIORITY_MODEL.md)** - Slice-by-slice delivery plan and cutover order.
+- **[Quality Protocol And Test Gates](../specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/03_QUALITY_PROTOCOL_AND_TEST_GATES.md)** - Required quality gates and release-blocking assertions.
+- **[Change Control And PR Standard](../specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/06_CHANGE_CONTROL_AND_PR_STANDARD.md)** - Mandatory per-slice record and merge criteria.
+- **[Risk Register And Decision Log](../specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/07_RISK_REGISTER_AND_DECISION_LOG_TEMPLATE.md)** - Active risk and decision tracking.
+- **[Autonomous Execution Tracker](../specs/ai-coach-comprehensive-audit-remediation-autonomous-2026-03-20/08_AUTONOMOUS_EXECUTION_TRACKER.md)** - Current slice status and execution log.
+
 ### Core Documents
 - **[MASTER_SPEC.md](./MASTER_SPEC.md)** - 🎯 START HERE: Complete product overview, vision, metrics
 - **[IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md)** - Detailed phase-by-phase implementation plan (48-52 weeks)

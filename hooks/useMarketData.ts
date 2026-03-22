@@ -58,7 +58,7 @@ function buildMarketFallback(url: string): any {
     const timestamp = new Date().toISOString();
 
     if (url.includes('/api/market/indices')) {
-        return { quotes: [], metrics: { vwap: null }, source: 'fallback' };
+        return { quotes: [], metrics: { vwap: null }, source: 'fallback', generatedAt: timestamp };
     }
 
     if (url.includes('/api/market/status')) {
@@ -156,10 +156,11 @@ export interface MarketIndicesResponse {
         ivRank?: number;
     };
     source: string;
+    generatedAt: string;
 }
 
 export interface MarketStatusResponse {
-    status: 'open' | 'closed' | 'early-close';
+    status: 'open' | 'pre-market' | 'after-hours' | 'closed' | 'early-close';
     message: string;
     nextOpen?: string;
     nextClose?: string;
@@ -191,7 +192,7 @@ export function useMarketIndices() {
     const { session } = useMemberSession();
     const token = session?.access_token;
 
-    const { data, error, isLoading } = useSWR<MarketIndicesResponse>(token ? ['/api/market/indices', token] : null, fetcher, {
+    const { data, error, isLoading, mutate } = useSWR<MarketIndicesResponse>(token ? ['/api/market/indices', token] : null, fetcher, {
         ...MARKET_SWR_BASE_CONFIG,
         refreshInterval: (latestData) => hasFallbackSource(latestData) ? MARKET_FALLBACK_POLL_MS : 10_000,
     });
@@ -201,7 +202,11 @@ export function useMarketIndices() {
         metrics: data?.metrics,
         isLoading,
         isError: error,
-        source: data?.source
+        source: data?.source,
+        generatedAt: data?.generatedAt ?? null,
+        refresh: async () => {
+            await mutate();
+        },
     };
 }
 
@@ -209,7 +214,7 @@ export function useMarketStatus() {
     const { session } = useMemberSession();
     const token = session?.access_token;
 
-    const { data, error, isLoading } = useSWR<MarketStatusResponse>(token ? ['/api/market/status', token] : null, fetcher, {
+    const { data, error, isLoading, mutate } = useSWR<MarketStatusResponse>(token ? ['/api/market/status', token] : null, fetcher, {
         ...MARKET_SWR_BASE_CONFIG,
         refreshInterval: (latestData) => hasFallbackSource(latestData) ? MARKET_FALLBACK_POLL_MS : 60_000,
     });
@@ -218,6 +223,9 @@ export function useMarketStatus() {
         status: data,
         isLoading,
         isError: error,
+        refresh: async () => {
+            await mutate();
+        },
     };
 }
 

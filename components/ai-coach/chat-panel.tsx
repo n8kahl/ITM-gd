@@ -203,7 +203,11 @@ export function ChatPanel({
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden"
             >
-              <div className="px-3 py-2 bg-red-500/10 border-b border-red-500/20 flex items-center gap-2">
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="px-3 py-2 bg-red-500/10 border-b border-red-500/20 flex items-center gap-2"
+              >
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                 <p className="text-xs text-red-400 flex-1">{error}</p>
                 <button
