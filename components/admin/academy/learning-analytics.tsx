@@ -126,7 +126,7 @@ export function LearningAnalytics({ period: initialPeriod = '30d', courseId }: L
         throw new Error(result.error || 'Failed to fetch analytics')
       }
 
-      const result = await response.json()
+      const result = (await response.json()) as AnalyticsData
       setData(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load analytics')
