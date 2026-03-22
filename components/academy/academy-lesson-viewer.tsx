@@ -27,9 +27,11 @@ type PlanData = Awaited<ReturnType<typeof fetchAcademyPlan>>
 export function AcademyLessonViewer({
   lessonId,
   resume = false,
+  preview = false,
 }: {
   lessonId: string
   resume?: boolean
+  preview?: boolean
 }) {
   const [lesson, setLesson] = useState<LessonData | null>(null)
   const [plan, setPlan] = useState<PlanData | null>(null)
@@ -40,6 +42,7 @@ export function AcademyLessonViewer({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isPreviewMode, setIsPreviewMode] = useState(false)
 
   // ---------------------------------------------------------------------------
   // Data loading
@@ -51,13 +54,14 @@ export function AcademyLessonViewer({
     ;(async () => {
       try {
         const [lessonData, planData, attemptData] = await Promise.all([
-          fetchAcademyLesson(lessonId),
+          fetchAcademyLesson(lessonId, { preview }),
           fetchAcademyPlan(),
           fetchAcademyLessonAttempt(lessonId),
         ])
         if (!active) return
 
         setLesson(lessonData)
+        setIsPreviewMode(lessonData._preview === true)
         setPlan(planData)
         const completedSet = new Set(attemptData.completedBlockIds)
         setCompletedBlockIds(completedSet)
@@ -89,7 +93,7 @@ export function AcademyLessonViewer({
     return () => {
       active = false
     }
-  }, [lessonId, resume])
+  }, [lessonId, resume, preview])
 
   // ---------------------------------------------------------------------------
   // Derived state
@@ -234,6 +238,18 @@ export function AcademyLessonViewer({
         </div>
       ) : (
         <>
+          {/* Preview mode banner */}
+          {isPreviewMode && (
+            <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 flex items-center gap-3">
+              <span className="font-mono text-xs font-semibold tracking-wider text-emerald-400 uppercase">
+                Preview Mode
+              </span>
+              <span className="text-sm text-white/50">
+                — this lesson is not published
+              </span>
+            </div>
+          )}
+
           {/* Progress bar — thin strip at very top of lesson area */}
           <div className="mb-4">
             <LessonProgressBar

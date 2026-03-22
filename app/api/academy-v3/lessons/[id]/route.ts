@@ -16,6 +16,7 @@ import {
 import { toSafeErrorMessage } from '@/lib/academy/api-utils'
 import { getAuthenticatedUserFromRequest } from '@/lib/request-auth'
 import { academyV3ErrorResponse } from '@/app/api/academy-v3/_shared'
+import { isAdminUser } from '@/lib/supabase-server'
 
 export async function GET(
   request: NextRequest,
@@ -36,18 +37,26 @@ export async function GET(
     if (!parsedParams.success) {
       return academyV3ErrorResponse(400, 'INVALID_PARAMS', 'Invalid route parameters', parsedParams.error.flatten())
     }
-    await assertLessonContentAccess({
-      supabase: auth.supabase,
-      userId: auth.user.id,
-      roleIds,
-      lessonId: parsedParams.data.id,
-    })
+
+    const { searchParams } = new URL(request.url)
+    const previewRequested = searchParams.get('preview') === 'true'
+    const isAdmin = previewRequested ? await isAdminUser() : false
+    const preview = previewRequested && isAdmin
+
+    if (!preview) {
+      await assertLessonContentAccess({
+        supabase: auth.supabase,
+        userId: auth.user.id,
+        roleIds,
+        lessonId: parsedParams.data.id,
+      })
+    }
 
     const service = new AcademyLessonService(auth.supabase)
-    const lessonData = await service.getLessonById(parsedParams.data.id)
+    const lessonData = await service.getLessonById(parsedParams.data.id, { preview })
 
     const payload = getAcademyLessonResponseSchema.parse({ data: lessonData })
-    return NextResponse.json(payload)
+    return NextResponse.json({ ...payload, preview })
   } catch (error) {
     if (error instanceof AcademyAccessError) {
       return academyV3ErrorResponse(error.status, error.code, error.message, error.details)

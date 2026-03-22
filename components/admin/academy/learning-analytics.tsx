@@ -70,12 +70,28 @@ interface CourseCompletion {
   completion_rate: number
 }
 
+interface LessonBreakdownItem {
+  lesson_id: string
+  lesson_title: string
+  module_title: string
+  completion_count: number
+  avg_time_minutes: number
+  completion_rate: number
+  drop_off_block: {
+    block_id: string
+    title: string | null
+    block_type: string
+    position: number
+  } | null
+}
+
 interface AnalyticsData {
   overview: OverviewStats
   daily_active_learners: DailyActiveLearner[]
   quiz_score_distribution: QuizScoreDistribution[]
   struggling_lessons: StrugglingLesson[]
   course_completions: CourseCompletion[]
+  lesson_breakdown?: LessonBreakdownItem[]
 }
 
 type SortKey = 'lesson_title' | 'course_title' | 'avg_score' | 'completion_rate' | 'user_count'
@@ -481,6 +497,173 @@ export function LearningAnalytics({ period: initialPeriod = '30d', courseId }: L
           </div>
         )}
       </div>
+
+      {/* Per-Lesson Breakdown */}
+      {data.lesson_breakdown && data.lesson_breakdown.length > 0 && (
+        <>
+          {/* Lesson Completion Rate Bar Chart */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="rounded-xl bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5 p-6">
+              <h3 className="font-serif text-base font-semibold text-white mb-1">
+                Lesson Completion Rates
+              </h3>
+              <p className="text-xs text-white/40 mb-6">Top lessons by completion rate</p>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.lesson_breakdown.slice(0, 15)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                    <XAxis
+                      dataKey="lesson_title"
+                      stroke="rgba(255,255,255,0.4)"
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                      tickFormatter={(v: string) => v.length > 18 ? `${v.slice(0, 18)}…` : v}
+                    />
+                    <YAxis
+                      stroke="rgba(255,255,255,0.4)"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      domain={[0, 100]}
+                      tickFormatter={(v: number) => `${v}%`}
+                    />
+                    <Tooltip content={<CustomTooltip suffix="%" />} />
+                    <Bar
+                      dataKey="completion_rate"
+                      name="Completion Rate"
+                      radius={[4, 4, 0, 0]}
+                      fill="#10B981"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Daily Activity Line Chart */}
+            <div className="rounded-xl bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5 p-6">
+              <h3 className="font-serif text-base font-semibold text-white mb-1">
+                Daily Lesson Activity
+              </h3>
+              <p className="text-xs text-white/40 mb-6">Active learners per day</p>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={data.daily_active_learners}>
+                    <defs>
+                      <linearGradient id="lessonActivityGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#F3E5AB" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="#F3E5AB" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                    <XAxis
+                      dataKey="date"
+                      stroke="rgba(255,255,255,0.4)"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      stroke="rgba(255,255,255,0.4)"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="count"
+                      stroke="#F3E5AB"
+                      strokeWidth={2}
+                      fill="url(#lessonActivityGradient)"
+                      name="Active Learners"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Per-Lesson Metrics Table */}
+          <div className="rounded-xl bg-[#0A0A0B]/60 backdrop-blur-xl border border-white/5 p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <GraduationCap className="h-4 w-4 text-emerald-400" />
+              <h3 className="font-serif text-base font-semibold text-white">
+                Per-Lesson Metrics
+              </h3>
+              <span className="ml-auto text-xs text-white/30">
+                {data.lesson_breakdown.length} lessons with activity
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/5">
+                    <th className="py-3 pr-4 text-left text-xs font-medium text-white/40 uppercase tracking-wider">Lesson</th>
+                    <th className="py-3 pr-4 text-left text-xs font-medium text-white/40 uppercase tracking-wider">Module</th>
+                    <th className="py-3 pr-4 text-right text-xs font-medium text-white/40 uppercase tracking-wider">Completions</th>
+                    <th className="py-3 pr-4 text-right text-xs font-medium text-white/40 uppercase tracking-wider">Avg Time</th>
+                    <th className="py-3 pr-4 text-right text-xs font-medium text-white/40 uppercase tracking-wider">Completion %</th>
+                    <th className="py-3 text-left text-xs font-medium text-white/40 uppercase tracking-wider">Drop-off Block</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.lesson_breakdown.map((lesson) => (
+                    <tr
+                      key={lesson.lesson_id}
+                      className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+                    >
+                      <td className="py-3 pr-4 text-white font-medium max-w-[200px] truncate">
+                        {lesson.lesson_title}
+                      </td>
+                      <td className="py-3 pr-4 text-white/50 max-w-[160px] truncate">
+                        {lesson.module_title}
+                      </td>
+                      <td className="py-3 pr-4 text-right font-mono text-sm text-white/70">
+                        {lesson.completion_count}
+                      </td>
+                      <td className="py-3 pr-4 text-right font-mono text-sm text-white/70">
+                        {lesson.avg_time_minutes > 0 ? `${lesson.avg_time_minutes}m` : '—'}
+                      </td>
+                      <td className="py-3 pr-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-16 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full rounded-full',
+                                lesson.completion_rate < 50
+                                  ? 'bg-red-400'
+                                  : lesson.completion_rate < 70
+                                    ? 'bg-[#F3E5AB]'
+                                    : 'bg-emerald-400'
+                              )}
+                              style={{ width: `${Math.min(lesson.completion_rate, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-white/50 font-mono text-xs w-10 text-right">
+                            {lesson.completion_rate}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 text-white/40 text-xs max-w-[180px] truncate">
+                        {lesson.drop_off_block
+                          ? `${lesson.drop_off_block.title || lesson.drop_off_block.block_type} (#${lesson.drop_off_block.position + 1})`
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

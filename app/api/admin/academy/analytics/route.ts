@@ -54,6 +54,9 @@ export async function GET(request: NextRequest) {
       eventsResult,
       activeProgressRowsResult,
       lessonsWithModuleResult,
+      lessonAttemptsDetailResult,
+      blockEventsResult,
+      lessonBlocksResult,
     ] = await Promise.all([
       supabaseAdmin
         .from('academy_user_enrollments')
@@ -87,7 +90,20 @@ export async function GET(request: NextRequest) {
         .or(`started_at.gte.${sinceDate},completed_at.gte.${sinceDate}`),
       supabaseAdmin
         .from('academy_lessons')
-        .select('id, module_id, academy_modules(title, slug)'),
+        .select('id, module_id, title, slug, academy_modules(title, slug)'),
+      supabaseAdmin
+        .from('academy_user_lesson_attempts')
+        .select('lesson_id, user_id, status, started_at, completed_at')
+        .gte('started_at', sinceDate),
+      supabaseAdmin
+        .from('academy_learning_events')
+        .select('user_id, event_type, payload, lesson_id')
+        .eq('event_type', 'block_completed')
+        .gte('occurred_at', sinceDate),
+      supabaseAdmin
+        .from('academy_lesson_blocks')
+        .select('id, lesson_id, position, title, block_type')
+        .order('position', { ascending: true }),
     ])
 
     const totalLearners = new Set(
@@ -188,6 +204,108 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(-30)
 
+    // Per-lesson breakdown: completion count, avg time-on-page, completion rate, drop-off block
+    const lessonAttempts = lessonAttemptsDetailResult.data || []
+    const lessonStatsMap = new Map<string, {
+      started: number
+      completed: number
+      totalTimeMs: number
+      completedWithTime: number
+    }>()
+    for (const row of lessonAttempts) {
+      const lid = row.lesson_id as string
+      if (!lid) continue
+      const stats = lessonStatsMap.get(lid) || { started: 0, completed: 0, totalTimeMs: 0, completedWithTime: 0 }
+      stats.started += 1
+      if (row.status === 'passed' && row.completed_at) {
+        stats.completed += 1
+        if (row.started_at) {
+          const elapsed = new Date(row.completed_at as string).getTime() - new Date(row.started_at as string).getTime()
+          if (elapsed > 0 && elapsed < 24 * 60 * 60 * 1000) {
+            stats.totalTimeMs += elapsed
+            stats.completedWithTime += 1
+          }
+        }
+      }
+      lessonStatsMap.set(lid, stats)
+    }
+
+    // Build block-level completion counts per lesson for drop-off detection
+    const blockCompletionCounts = new Map<string, Map<string, number>>()
+    for (const evt of blockEventsResult.data || []) {
+      const lid = evt.lesson_id as string
+      const payload = asObject(evt.payload)
+      const blockId = typeof payload.block_id === 'string' ? payload.block_id : null
+      if (!lid || !blockId) continue
+      const lessonMap = blockCompletionCounts.get(lid) || new Map<string, number>()
+      lessonMap.set(blockId, (lessonMap.get(blockId) || 0) + 1)
+      blockCompletionCounts.set(lid, lessonMap)
+    }
+
+    // Map blocks by lesson for position ordering
+    const blocksByLesson = new Map<string, Array<{ id: string; position: number; title: string | null; blockType: string }>>()
+    for (const block of lessonBlocksResult.data || []) {
+      const lid = block.lesson_id as string
+      if (!lid) continue
+      const list = blocksByLesson.get(lid) || []
+      list.push({ id: block.id, position: block.position, title: block.title, blockType: block.block_type })
+      blocksByLesson.set(lid, list)
+    }
+
+    // Build lesson info map (title/slug from lessonsWithModuleResult)
+    const lessonInfoMap = new Map<string, { title: string; slug: string; moduleTitle: string }>()
+    for (const row of lessonsWithModuleResult.data || []) {
+      const relation = Array.isArray(row.academy_modules) ? row.academy_modules[0] : row.academy_modules
+      lessonInfoMap.set(row.id, {
+        title: row.title || 'Untitled',
+        slug: row.slug || '',
+        moduleTitle: relation?.title || 'Unknown',
+      })
+    }
+
+    const lessonBreakdown = Array.from(lessonStatsMap.entries())
+      .map(([lessonId, stats]) => {
+        const info = lessonInfoMap.get(lessonId)
+        const avgTimeMinutes = stats.completedWithTime > 0
+          ? Math.round(stats.totalTimeMs / stats.completedWithTime / 60000)
+          : 0
+        const completionRate = stats.started > 0
+          ? Math.round((stats.completed / stats.started) * 100)
+          : 0
+
+        // Find drop-off block: block with lowest completion count relative to lesson starts
+        let dropOffBlock: { id: string; title: string | null; blockType: string; position: number } | null = null
+        const blocks = blocksByLesson.get(lessonId) || []
+        const blockCounts = blockCompletionCounts.get(lessonId)
+        if (blocks.length > 0 && blockCounts && blockCounts.size > 0) {
+          let minCount = Infinity
+          for (const block of blocks) {
+            const count = blockCounts.get(block.id) || 0
+            if (count < minCount) {
+              minCount = count
+              dropOffBlock = block
+            }
+          }
+        }
+
+        return {
+          lesson_id: lessonId,
+          lesson_title: info?.title || 'Unknown',
+          module_title: info?.moduleTitle || 'Unknown',
+          completion_count: stats.completed,
+          avg_time_minutes: avgTimeMinutes,
+          completion_rate: completionRate,
+          drop_off_block: dropOffBlock ? {
+            block_id: dropOffBlock.id,
+            title: dropOffBlock.title,
+            block_type: dropOffBlock.blockType,
+            position: dropOffBlock.position,
+          } : null,
+        }
+      })
+      .sort((a, b) => b.completion_count - a.completion_count)
+      .slice(0, 50)
+
     return NextResponse.json({
       success: true,
       data: {
@@ -209,6 +327,7 @@ export async function GET(request: NextRequest) {
           by_source: Object.fromEntries(xpBySource),
         },
         daily_activity: dailyActivity,
+        lesson_breakdown: lessonBreakdown,
         period_days: days,
       },
     })

@@ -85,6 +85,7 @@ export interface AcademyModuleRepository {
 
 export interface AcademyLessonRepository {
   getPublishedLessonById(lessonId: string): Promise<AcademyLesson | null>
+  getLessonByIdUnfiltered(lessonId: string): Promise<AcademyLesson | null>
   listPublishedLessonsForModule(moduleId: string): Promise<AcademyLesson[]>
   listBlocksForLesson(lessonId: string): Promise<AcademyLessonBlock[]>
   listRecommendedLessonsForCompetencies(

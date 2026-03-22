@@ -25,6 +25,20 @@ export class SupabaseAcademyLessonRepository implements AcademyLessonRepository 
     return data ? mapAcademyLessonRow(data) : null
   }
 
+  async getLessonByIdUnfiltered(lessonId: string): Promise<AcademyLesson | null> {
+    const { data, error } = await this.supabase
+      .from('academy_lessons')
+      .select('id, module_id, slug, title, learning_objective, estimated_minutes, difficulty, prerequisite_lesson_ids, position, is_published, metadata')
+      .eq('id', lessonId)
+      .maybeSingle()
+
+    if (error) {
+      throw new Error(`Failed to fetch academy lesson by id: ${error.message}`)
+    }
+
+    return data ? mapAcademyLessonRow(data) : null
+  }
+
   async listPublishedLessonsForModule(moduleId: string): Promise<AcademyLesson[]> {
     const { data, error } = await this.supabase
       .from('academy_lessons')
