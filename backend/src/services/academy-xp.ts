@@ -5,6 +5,7 @@
 
 import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
+import { notifyLevelUp, notifyStreakMilestone } from './academy-notifications';
 
 export const XP_REWARDS = {
   // Academy
@@ -107,6 +108,8 @@ export async function awardXp(
 
   if (leveledUp) {
     logger.info('User leveled up', { userId, previousLevel, newLevel, totalXp: newXp });
+    // Best-effort push notification for level-up
+    notifyLevelUp(userId, newLevel).catch(() => {});
   }
 
   return { totalXp: newXp, currentLevel: newLevel, leveledUp };
@@ -235,6 +238,8 @@ export async function updateStreak(userId: string): Promise<StreakUpdateResult> 
           error: err instanceof Error ? err.message : String(err),
         });
       });
+      // Best-effort push notification for streak milestone
+      notifyStreakMilestone(userId, threshold).catch(() => {});
       break;
     }
   }
