@@ -6,6 +6,7 @@
 import { supabase } from '../config/database';
 import { logger } from '../lib/logger';
 import { awardXp } from './academy-xp';
+import { notifyChallengeCompleted } from './academy-notifications';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -144,7 +145,7 @@ export async function incrementChallengeProgress(
   // Fetch challenge to get target
   const { data: challenge, error: challengeError } = await supabase
     .from('academy_challenges')
-    .select('id, criteria, xp_reward, ends_at, is_active')
+    .select('id, title, criteria, xp_reward, ends_at, is_active')
     .eq('id', challengeId)
     .maybeSingle();
 
@@ -209,6 +210,9 @@ export async function incrementChallengeProgress(
       });
       xpAwarded = challenge.xp_reward;
       logger.info('Challenge completed', { userId, challengeId, xpAwarded });
+
+      // Best-effort push notification for challenge completion
+      notifyChallengeCompleted(userId, challenge.title, xpAwarded).catch(() => {});
     } catch (err) {
       logger.warn('Failed to award challenge XP', {
         userId,

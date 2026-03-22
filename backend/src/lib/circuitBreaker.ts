@@ -1,6 +1,6 @@
 /**
  * Circuit Breaker implementation for external API calls.
- * Prevents cascade failures when OpenAI or Massive.com APIs are down.
+ * Prevents cascade failures when external APIs (OpenAI, Massive.com, FRED, FMP) are down.
  *
  * States:
  * - CLOSED: Normal operation, requests pass through
