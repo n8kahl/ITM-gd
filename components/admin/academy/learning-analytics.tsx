@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import {
   Users,
   UserCheck,
@@ -310,7 +310,7 @@ export function LearningAnalytics({ period: initialPeriod = '30d', courseId }: L
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="count" name="Students" radius={[4, 4, 0, 0]}>
-                  {data.quiz_score_distribution.map((_, index) => (
+                  {data.quiz_score_distribution.map((_: QuizScoreDistribution, index: number) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={
@@ -472,7 +472,7 @@ export function LearningAnalytics({ period: initialPeriod = '30d', courseId }: L
                   tickLine={false}
                   axisLine={false}
                   domain={[0, 100]}
-                  tickFormatter={(v) => `${v}%`}
+                  tickFormatter={(v: number) => `${v}%`}
                 />
                 <YAxis
                   type="category"
@@ -613,7 +613,7 @@ export function LearningAnalytics({ period: initialPeriod = '30d', courseId }: L
                   </tr>
                 </thead>
                 <tbody>
-                  {data.lesson_breakdown.map((lesson) => (
+                  {data.lesson_breakdown.map((lesson: LessonBreakdownItem) => (
                     <tr
                       key={lesson.lesson_id}
                       className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
