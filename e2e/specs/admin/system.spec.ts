@@ -24,14 +24,24 @@ test.describe('Admin: System Diagnostics', () => {
     await expect(page.getByText(/All Systems Operational/i)).toBeVisible({ timeout: 10000 })
   })
 
-  test('shows diagnostic results', async ({ page }) => {
+  test('shows diagnostic results for all services', async ({ page }) => {
     await page.goto('/admin/system')
-    // Wait for diagnostics to complete and show at least some results
-    // Use first() since diagnostic names may appear in multiple places
+    // Wait for diagnostics to complete and show results for all 9 services
     await expect(page.getByText('Database Connection').first()).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('Edge Functions').first()).toBeVisible()
     await expect(page.getByText('OpenAI Integration').first()).toBeVisible()
+    await expect(page.getByText('Massive.com').first()).toBeVisible()
+    await expect(page.getByText('FRED').first()).toBeVisible()
+    await expect(page.getByText('FMP').first()).toBeVisible()
     await expect(page.getByText('Discord Bot').first()).toBeVisible()
+    await expect(page.getByText('Redis').first()).toBeVisible()
+    await expect(page.getByText('Storage').first()).toBeVisible()
+  })
+
+  test('shows circuit breaker states for API services', async ({ page }) => {
+    await page.goto('/admin/system')
+    // Circuit breaker badges should appear for services with circuit state
+    await expect(page.getByText('CLOSED').first()).toBeVisible({ timeout: 10000 })
   })
 
   test('displays status legend', async ({ page }) => {
@@ -76,5 +86,39 @@ test.describe('Admin: System Diagnostics', () => {
     await page.goto('/admin/system')
     // Wait for diagnostics to complete and show counts
     await expect(page.getByText('Passed', { exact: true })).toBeVisible({ timeout: 10000 })
+  })
+
+  test('shows edge function monitoring table', async ({ page }) => {
+    await page.goto('/admin/system')
+    await expect(page.getByText('Edge Function Monitoring')).toBeVisible({ timeout: 10000 })
+    // Check table headers
+    await expect(page.getByText('Invocations')).toBeVisible()
+    await expect(page.getByText('Error Rate')).toBeVisible()
+    await expect(page.getByText('Avg Time')).toBeVisible()
+    await expect(page.getByText('P95 Time')).toBeVisible()
+  })
+
+  test('shows edge function names in monitoring table', async ({ page }) => {
+    await page.goto('/admin/system')
+    await expect(page.getByText('handle-chat-message')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('notify-team-lead')).toBeVisible()
+    await expect(page.getByText('compute-leaderboards')).toBeVisible()
+  })
+
+  test('shows dead letter queue panel with unresolved entries', async ({ page }) => {
+    await page.goto('/admin/system')
+    await expect(page.getByText('Dead Letter Queue')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('2 unresolved')).toBeVisible()
+    await expect(page.getByText('webhook_retry')).toBeVisible()
+    await expect(page.getByText('discord_sync_failed')).toBeVisible()
+  })
+
+  test('shows retry and dismiss buttons for DLQ entries', async ({ page }) => {
+    await page.goto('/admin/system')
+    await expect(page.getByText('Dead Letter Queue')).toBeVisible({ timeout: 10000 })
+    const retryButtons = page.getByRole('button', { name: /Retry/i })
+    const dismissButtons = page.getByRole('button', { name: /Dismiss$/i })
+    await expect(retryButtons.first()).toBeVisible()
+    await expect(dismissButtons.first()).toBeVisible()
   })
 })
