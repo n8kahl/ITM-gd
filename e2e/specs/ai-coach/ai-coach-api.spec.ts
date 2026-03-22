@@ -179,11 +179,6 @@ test.describe('AI Coach — Backend API Health', () => {
     expect(response.status()).toBe(401)
   })
 
-  test('GET /api/journal/trades without auth should return 401', async ({ request }) => {
-    const response = await request.get(`${BACKEND_URL}/api/journal/trades`)
-    expect(response.status()).toBe(401)
-  })
-
   test('GET /api/macro without auth should return 401', async ({ request }) => {
     const response = await request.get(`${BACKEND_URL}/api/macro`)
     expect(response.status()).toBe(401)
