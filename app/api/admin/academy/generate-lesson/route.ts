@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminUser } from '@/lib/supabase-server'
 import { toSafeErrorMessage } from '@/lib/academy/api-utils'
+import { successResponse, errorResponse } from '@/lib/api/response'
+import { logAdminActivity } from '@/lib/admin/audit-log'
+import { generateLessonRequestSchema } from '@/lib/academy-v3/contracts/api'
+import { AiContentGeneratorService } from '@/lib/academy-v3/services/ai-content-generator'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -448,5 +452,49 @@ export async function PUT(request: NextRequest) {
       { success: false, error: toSafeErrorMessage(error) },
       { status: 500 }
     )
+  }
+}
+
+/**
+ * PATCH /api/admin/academy/generate-lesson
+ * Enhanced AI content generator (v2): generates structured lesson blocks
+ * with activities and quiz from a topic prompt. Returns as draft.
+ *
+ * Request body validated with Zod: { topic, moduleId?, difficulty?, estimatedMinutes?, blockTypes?, persist? }
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    if (!await isAdminUser()) {
+      return errorResponse('Unauthorized - admin access required', 401)
+    }
+
+    const body: unknown = await request.json()
+    const parsed = generateLessonRequestSchema.safeParse(body)
+
+    if (!parsed.success) {
+      return errorResponse('Invalid request', 400, parsed.error.issues)
+    }
+
+    const supabaseAdmin = getSupabaseAdmin()
+    const generator = new AiContentGeneratorService(supabaseAdmin)
+    const result = await generator.generateLesson(parsed.data)
+
+    await logAdminActivity({
+      action: 'lesson_generated_v2',
+      targetType: 'lesson',
+      targetId: result.lessonId ?? null,
+      details: {
+        topic: parsed.data.topic,
+        difficulty: parsed.data.difficulty,
+        blockCount: result.blocks.length,
+        persisted: !!result.lessonId,
+      },
+    })
+
+    return successResponse(result)
+  } catch (err) {
+    console.error('enhanced AI content generation failed', err)
+    const message = err instanceof Error ? err.message : 'Generation failed'
+    return errorResponse(message, 500)
   }
 }
