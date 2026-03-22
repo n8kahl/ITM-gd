@@ -8,8 +8,8 @@ import {
 } from '@/lib/web-push-service'
 import type {
   NotificationPayload,
-  SendNotificationRequest,
 } from '@/lib/types/notifications'
+import { sendNotificationSchema, parseRequestBody } from '@/lib/admin/validation-schemas'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -70,30 +70,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body: SendNotificationRequest = await request.json()
-
-    // Validation
-    if (!body.title?.trim()) {
-      return NextResponse.json({ success: false, error: 'Title is required' }, { status: 400 })
+    const rawBody = await request.json()
+    const parsed = parseRequestBody(sendNotificationSchema, rawBody)
+    if (!parsed.success) {
+      return NextResponse.json({ success: false, error: parsed.error }, { status: 400 })
     }
-    if (!body.body?.trim()) {
-      return NextResponse.json({ success: false, error: 'Body is required' }, { status: 400 })
-    }
-    if (!['all', 'tier', 'individual'].includes(body.targetType)) {
-      return NextResponse.json({ success: false, error: 'Invalid target type' }, { status: 400 })
-    }
-    if (body.targetType === 'tier' && (!body.targetTiers || body.targetTiers.length === 0)) {
-      return NextResponse.json(
-        { success: false, error: 'At least one tier must be selected' },
-        { status: 400 },
-      )
-    }
-    if (body.targetType === 'individual' && (!body.targetUserIds || body.targetUserIds.length === 0)) {
-      return NextResponse.json(
-        { success: false, error: 'At least one user must be selected' },
-        { status: 400 },
-      )
-    }
+    const body = parsed.data
 
     const supabase = getSupabaseAdmin()
 

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdminUser } from '@/lib/supabase-server'
 import { logAdminActivity } from '@/lib/admin/audit-log'
+import { createLessonSchema, updateLessonSchema, parseRequestBody } from '@/lib/admin/validation-schemas'
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -191,6 +192,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const parsed = parseRequestBody(createLessonSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 })
+    }
     const {
       course_id,
       title,
@@ -200,11 +205,7 @@ export async function POST(request: NextRequest) {
       is_free_preview,
       duration_minutes,
       display_order,
-    } = body || {}
-
-    if (!course_id || !title || !slug) {
-      return NextResponse.json({ error: 'Course ID, title, and slug are required' }, { status: 400 })
-    }
+    } = parsed.data
 
     const supabase = getSupabaseAdmin()
 
@@ -294,11 +295,11 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, ...updates } = body || {}
-
-    if (!id) {
-      return NextResponse.json({ error: 'Lesson ID is required' }, { status: 400 })
+    const parsed = parseRequestBody(updateLessonSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 })
     }
+    const { id, ...updates } = parsed.data
 
     const supabase = getSupabaseAdmin()
 

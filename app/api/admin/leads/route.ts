@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdminUser } from '@/lib/supabase-server'
 import { logAdminActivity } from '@/lib/admin/audit-log'
+import { updateLeadSchema, parseRequestBody } from '@/lib/admin/validation-schemas'
 
 // Create admin client lazily to avoid build-time errors
 function getSupabaseAdmin() {
@@ -76,11 +77,11 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, status, notes, reviewed_by } = body
-
-    if (!id) {
-      return NextResponse.json({ error: 'Missing application ID' }, { status: 400 })
+    const parsed = parseRequestBody(updateLeadSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 })
     }
+    const { id, status, notes, reviewed_by } = parsed.data
 
     let supabaseAdmin
     try {
