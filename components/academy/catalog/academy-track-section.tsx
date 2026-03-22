@@ -3,8 +3,8 @@
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
 
-import { AcademyModuleCardV2 } from '@/components/academy/catalog/academy-module-card-v2'
-import type { ModuleSchema } from '@/components/academy/catalog/academy-module-card-v2'
+import { AcademyModuleCardV2 } from '@/components/academy/catalog/academy-module-card'
+import type { ModuleSchema } from '@/components/academy/catalog/academy-module-card'
 import type { AcademyTrack } from '@/lib/academy-v3/contracts/domain'
 
 export type TrackWithModules = AcademyTrack & {
