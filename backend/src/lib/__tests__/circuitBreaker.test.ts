@@ -1,4 +1,4 @@
-import { CircuitBreaker, CircuitBreakerError, openaiCircuit, massiveCircuit } from '../circuitBreaker';
+import { CircuitBreaker, CircuitBreakerError, openaiCircuit, massiveCircuit, fredCircuit, fmpCircuit, circuitBreakerRegistry } from '../circuitBreaker';
 import { logger } from '../logger';
 
 // Mock logger
@@ -311,6 +311,67 @@ describe('Circuit Breaker', () => {
       } finally {
         jest.useRealTimers();
         massiveCircuit.reset();
+      }
+    });
+
+    it('should have fredCircuit instance with correct config', () => {
+      const state = fredCircuit.getState();
+      expect(state.state).toBe('CLOSED');
+      expect(state.failureCount).toBe(0);
+    });
+
+    it('fredCircuit should open after 3 failures and enforce 30s cooldown', async () => {
+      fredCircuit.reset();
+      const failFn = jest.fn().mockRejectedValue(new Error('FRED API down'));
+
+      for (let i = 0; i < 3; i++) {
+        await expect(fredCircuit.execute(failFn)).rejects.toThrow('FRED API down');
+      }
+
+      expect(fredCircuit.getState().state).toBe('OPEN');
+      await expect(fredCircuit.execute(jest.fn())).rejects.toThrow('Retry after 30s');
+      fredCircuit.reset();
+    });
+
+    it('should have fmpCircuit instance with correct config', () => {
+      const state = fmpCircuit.getState();
+      expect(state.state).toBe('CLOSED');
+      expect(state.failureCount).toBe(0);
+    });
+
+    it('fmpCircuit should open after 3 failures and enforce 30s cooldown', async () => {
+      fmpCircuit.reset();
+      const failFn = jest.fn().mockRejectedValue(new Error('FMP API down'));
+
+      for (let i = 0; i < 3; i++) {
+        await expect(fmpCircuit.execute(failFn)).rejects.toThrow('FMP API down');
+      }
+
+      expect(fmpCircuit.getState().state).toBe('OPEN');
+      await expect(fmpCircuit.execute(jest.fn())).rejects.toThrow('Retry after 30s');
+      fmpCircuit.reset();
+    });
+  });
+
+  describe('Circuit breaker registry', () => {
+    it('should contain all four circuit breakers', () => {
+      expect(Object.keys(circuitBreakerRegistry)).toEqual(['openai', 'massive', 'fred', 'fmp']);
+    });
+
+    it('should reference the same instances', () => {
+      expect(circuitBreakerRegistry.openai).toBe(openaiCircuit);
+      expect(circuitBreakerRegistry.massive).toBe(massiveCircuit);
+      expect(circuitBreakerRegistry.fred).toBe(fredCircuit);
+      expect(circuitBreakerRegistry.fmp).toBe(fmpCircuit);
+    });
+
+    it('should expose state for all circuits via registry', () => {
+      for (const [, circuit] of Object.entries(circuitBreakerRegistry)) {
+        const state = circuit.getState();
+        expect(state).toHaveProperty('state');
+        expect(state).toHaveProperty('failureCount');
+        expect(typeof state.state).toBe('string');
+        expect(typeof state.failureCount).toBe('number');
       }
     });
   });

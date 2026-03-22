@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import dotenv from 'dotenv';
 import { logger } from '../lib/logger';
+import { fredCircuit } from '../lib/circuitBreaker';
 
 dotenv.config();
 
@@ -182,15 +183,17 @@ export async function getUpcomingReleaseDates(
   }
 
   try {
-    const response = await fredClient.get<{ release_dates: FREDReleaseDate[] }>('/releases/dates', {
-      params: {
-        realtime_start: from,
-        realtime_end: to,
-        include_release_dates_with_no_data: 'true',
-      },
+    const dates = await fredCircuit.execute(async () => {
+      const response = await fredClient.get<{ release_dates: FREDReleaseDate[] }>('/releases/dates', {
+        params: {
+          realtime_start: from,
+          realtime_end: to,
+          include_release_dates_with_no_data: 'true',
+        },
+      });
+      return response.data?.release_dates || [];
     });
 
-    const dates = response.data?.release_dates || [];
     logger.info('FRED release dates fetched', { from, to, count: dates.length });
     return dates;
   } catch (error: any) {
@@ -212,15 +215,16 @@ export async function getSeriesObservations(
   if (!process.env.FRED_API_KEY) return [];
 
   try {
-    const response = await fredClient.get<{ observations: FREDObservation[] }>('/series/observations', {
-      params: {
-        series_id: seriesId,
-        sort_order: 'desc',
-        limit,
-      },
+    return await fredCircuit.execute(async () => {
+      const response = await fredClient.get<{ observations: FREDObservation[] }>('/series/observations', {
+        params: {
+          series_id: seriesId,
+          sort_order: 'desc',
+          limit,
+        },
+      });
+      return response.data?.observations || [];
     });
-
-    return response.data?.observations || [];
   } catch (error: any) {
     logger.error('FRED series observations fetch failed', {
       seriesId,
@@ -237,12 +241,13 @@ export async function getReleaseMeta(releaseId: number): Promise<FREDRelease | n
   if (!process.env.FRED_API_KEY) return null;
 
   try {
-    const response = await fredClient.get<{ releases: FREDRelease[] }>('/releases', {
-      params: { release_id: releaseId },
+    return await fredCircuit.execute(async () => {
+      const response = await fredClient.get<{ releases: FREDRelease[] }>('/releases', {
+        params: { release_id: releaseId },
+      });
+      const releases = response.data?.releases || [];
+      return releases[0] || null;
     });
-
-    const releases = response.data?.releases || [];
-    return releases[0] || null;
   } catch (error: any) {
     logger.error('FRED release meta fetch failed', {
       releaseId,
