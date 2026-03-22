@@ -6,7 +6,6 @@ import {
   UserCheck,
   GraduationCap,
   Target,
-  Loader2,
   AlertTriangle,
   ArrowUpRight,
   ArrowDownRight,
@@ -119,7 +118,7 @@ export function LearningAnalytics({ period: initialPeriod = '30d', courseId }: L
       const params = new URLSearchParams({ period })
       if (courseId) params.set('courseId', courseId)
 
-      const response = await fetch(`/api/admin/academy/analytics?${params.toString()}`)
+      const response = await fetch(`/api/admin/academy/learning-analytics?${params.toString()}`)
 
       if (!response.ok) {
         const result = await response.json()
