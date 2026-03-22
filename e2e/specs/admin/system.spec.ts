@@ -24,14 +24,24 @@ test.describe('Admin: System Diagnostics', () => {
     await expect(page.getByText(/All Systems Operational/i)).toBeVisible({ timeout: 10000 })
   })
 
-  test('shows diagnostic results', async ({ page }) => {
+  test('shows diagnostic results for all services', async ({ page }) => {
     await page.goto('/admin/system')
-    // Wait for diagnostics to complete and show at least some results
-    // Use first() since diagnostic names may appear in multiple places
+    // Wait for diagnostics to complete and show results for all 9 services
     await expect(page.getByText('Database Connection').first()).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('Edge Functions').first()).toBeVisible()
     await expect(page.getByText('OpenAI Integration').first()).toBeVisible()
+    await expect(page.getByText('Massive.com').first()).toBeVisible()
+    await expect(page.getByText('FRED').first()).toBeVisible()
+    await expect(page.getByText('FMP').first()).toBeVisible()
     await expect(page.getByText('Discord Bot').first()).toBeVisible()
+    await expect(page.getByText('Redis').first()).toBeVisible()
+    await expect(page.getByText('Storage').first()).toBeVisible()
+  })
+
+  test('shows circuit breaker states for API services', async ({ page }) => {
+    await page.goto('/admin/system')
+    // Circuit breaker badges should appear for services with circuit state
+    await expect(page.getByText('CLOSED').first()).toBeVisible({ timeout: 10000 })
   })
 
   test('displays status legend', async ({ page }) => {

@@ -14,6 +14,10 @@ import {
   AlertTriangle,
   Loader2,
   Clock,
+  TrendingUp,
+  BarChart3,
+  Server,
+  Shield,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +29,8 @@ interface DiagnosticResult {
   message: string
   details?: string
   latency?: number
+  circuitState?: 'CLOSED' | 'OPEN' | 'HALF_OPEN'
+  failureCount?: number
 }
 
 interface SystemDiagnostics {
@@ -39,7 +45,11 @@ const diagnosticIcons: Record<string, React.ComponentType<{ className?: string }
   'Database Connection': Database,
   'Edge Functions': Cloud,
   'OpenAI Integration': Zap,
+  'Massive.com': TrendingUp,
+  'FRED': BarChart3,
+  'FMP': BarChart3,
   'Discord Bot': Bot,
+  'Redis': Server,
   'Storage': HardDrive,
 }
 
@@ -63,7 +73,7 @@ export default function SystemPage() {
       } else {
         setError(data.error || 'Failed to run diagnostics')
       }
-    } catch (err) {
+    } catch {
       setError('Failed to connect to server')
     } finally {
       setLoading(false)
@@ -73,20 +83,15 @@ export default function SystemPage() {
   // Run diagnostics on mount and auto-refresh every 30 seconds
   useEffect(() => {
     runDiagnostics()
-
-    // Set up auto-refresh interval
-    const interval = setInterval(() => {
-      runDiagnostics()
-    }, 30000) // 30 seconds
-
+    const interval = setInterval(() => { runDiagnostics() }, 30000)
     return () => clearInterval(interval)
   }, [runDiagnostics])
 
   // Calculate stats
-  const passCount = diagnostics?.results.filter(r => r.status === 'pass').length || 0
-  const failCount = diagnostics?.results.filter(r => r.status === 'fail').length || 0
-  const warningCount = diagnostics?.results.filter(r => r.status === 'warning').length || 0
-  const totalLatency = diagnostics?.results.reduce((sum, r) => sum + (r.latency || 0), 0) || 0
+  const passCount = diagnostics?.results.filter((r: DiagnosticResult) => r.status === 'pass').length || 0
+  const failCount = diagnostics?.results.filter((r: DiagnosticResult) => r.status === 'fail').length || 0
+  const warningCount = diagnostics?.results.filter((r: DiagnosticResult) => r.status === 'warning').length || 0
+  const totalLatency = diagnostics?.results.reduce((sum: number, r: DiagnosticResult) => sum + (r.latency || 0), 0) || 0
 
   return (
     <div className="space-y-6">
@@ -211,8 +216,8 @@ export default function SystemPage() {
       {/* Individual Diagnostic Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {loading ? (
-          // Loading skeletons
-          [...Array(5)].map((_, i) => (
+          // Loading skeletons — show 9 placeholders
+          [...Array(9)].map((_, i) => (
             <Card key={i} className="bg-[#0a0a0b] border-white/10">
               <CardContent className="pt-6">
                 <div className="flex items-start gap-4">
@@ -262,6 +267,11 @@ export default function SystemPage() {
               <div className="w-3 h-3 rounded-full bg-red-500" />
               <span className="text-white/70">Fail</span>
               <span className="text-white/40 text-sm">- Service unavailable or not configured</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Shield className="w-3 h-3 text-white/70" />
+              <span className="text-white/70">Circuit Breaker</span>
+              <span className="text-white/40 text-sm">- Shows CLOSED/OPEN/HALF_OPEN state</span>
             </div>
           </div>
         </CardContent>
@@ -323,12 +333,28 @@ function DiagnosticCard({ result }: { result: DiagnosticResult }) {
                 {result.details}
               </p>
             )}
-            {result.latency !== undefined && (
-              <div className="flex items-center gap-1 mt-2">
-                <Clock className="w-3 h-3 text-white/30" />
-                <span className="text-xs text-white/30">{result.latency}ms</span>
-              </div>
-            )}
+            <div className="flex items-center gap-3 mt-2">
+              {result.latency !== undefined && (
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-white/30" />
+                  <span className="text-xs text-white/30">{result.latency}ms</span>
+                </div>
+              )}
+              {result.circuitState && (
+                <div className={cn(
+                  'flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono',
+                  result.circuitState === 'CLOSED' && 'bg-emerald-500/10 text-emerald-400',
+                  result.circuitState === 'OPEN' && 'bg-red-500/10 text-red-400',
+                  result.circuitState === 'HALF_OPEN' && 'bg-amber-500/10 text-amber-400',
+                )}>
+                  <Shield className="w-3 h-3" />
+                  <span>{result.circuitState}</span>
+                  {result.failureCount !== undefined && result.failureCount > 0 && (
+                    <span className="text-white/40">({result.failureCount})</span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </CardContent>

@@ -134,3 +134,28 @@ export const massiveCircuit = new CircuitBreaker({
   cooldownMs: 30000, // 30 seconds
   timeoutMs: 15000,  // 15 seconds per call
 });
+
+export const fredCircuit = new CircuitBreaker({
+  name: 'FRED',
+  failureThreshold: 3,
+  cooldownMs: 30000, // 30 seconds
+  timeoutMs: 15000,  // 15 seconds per call
+});
+
+export const fmpCircuit = new CircuitBreaker({
+  name: 'FMP',
+  failureThreshold: 3,
+  cooldownMs: 30000, // 30 seconds
+  timeoutMs: 15000,  // 15 seconds per call
+});
+
+/**
+ * Registry of all circuit breakers for health monitoring.
+ * Keys match service names used in the integration health dashboard.
+ */
+export const circuitBreakerRegistry: Record<string, CircuitBreaker> = {
+  openai: openaiCircuit,
+  massive: massiveCircuit,
+  fred: fredCircuit,
+  fmp: fmpCircuit,
+};
