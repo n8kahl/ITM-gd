@@ -837,7 +837,8 @@ export function useAICoachChat() {
     }
 
     const applyStateIfActive = (updater: (prev: AICoachChatState) => AICoachChatState) => {
-      setState(prev => (activeSendTokenRef.current === sendToken ? updater(prev) : prev))
+      if (activeSendTokenRef.current !== sendToken) return
+      setState(updater)
     }
 
     applyStateIfActive(prev => ({
