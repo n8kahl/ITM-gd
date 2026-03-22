@@ -7,7 +7,7 @@ import {
   muteCoachAlert,
   snoozeCoachAlert,
   type CoachAlertLifecycleState,
-} from '@/lib/spx/coach-alert-state-v2'
+} from '@/lib/spx/coach-alert-state'
 
 function buildMessage(overrides?: Partial<CoachMessage>): CoachMessage {
   return {

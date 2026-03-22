@@ -57,7 +57,7 @@ import {
   shouldAutoMarkAlertSeen,
   snoozeCoachAlert,
   type CoachAlertLifecycleState,
-} from '@/lib/spx/coach-alert-state-v2'
+} from '@/lib/spx/coach-alert-state'
 
 const PRE_TRADE_ACTIONS = [
   { id: 'confirm_entry', label: 'Confirm entry?', icon: Target },
