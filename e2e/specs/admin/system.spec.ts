@@ -87,4 +87,21 @@ test.describe('Admin: System Diagnostics', () => {
     // Wait for diagnostics to complete and show counts
     await expect(page.getByText('Passed', { exact: true })).toBeVisible({ timeout: 10000 })
   })
+
+  test('shows edge function monitoring table', async ({ page }) => {
+    await page.goto('/admin/system')
+    await expect(page.getByText('Edge Function Monitoring')).toBeVisible({ timeout: 10000 })
+    // Check table headers
+    await expect(page.getByText('Invocations')).toBeVisible()
+    await expect(page.getByText('Error Rate')).toBeVisible()
+    await expect(page.getByText('Avg Time')).toBeVisible()
+    await expect(page.getByText('P95 Time')).toBeVisible()
+  })
+
+  test('shows edge function names in monitoring table', async ({ page }) => {
+    await page.goto('/admin/system')
+    await expect(page.getByText('handle-chat-message')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('notify-team-lead')).toBeVisible()
+    await expect(page.getByText('compute-leaderboards')).toBeVisible()
+  })
 })

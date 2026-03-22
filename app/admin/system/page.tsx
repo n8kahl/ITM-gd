@@ -23,6 +23,18 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
+interface EdgeFunctionMetrics {
+  functionName: string
+  totalInvocations: number
+  successCount: number
+  errorCount: number
+  errorRate: number
+  avgExecutionTimeMs: number
+  p95ExecutionTimeMs: number
+  lastInvokedAt: string | null
+  lastError: string | null
+}
+
 interface DiagnosticResult {
   name: string
   status: 'pass' | 'fail' | 'warning'
@@ -58,25 +70,37 @@ export default function SystemPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastRun, setLastRun] = useState<Date | null>(null)
+  const [edgeFunctions, setEdgeFunctions] = useState<EdgeFunctionMetrics[]>([])
+  const [edgeFnLoading, setEdgeFnLoading] = useState(true)
 
   const runDiagnostics = useCallback(async () => {
     setLoading(true)
+    setEdgeFnLoading(true)
     setError(null)
 
     try {
-      const response = await fetch('/api/admin/system')
-      const data = await response.json()
+      const [systemRes, edgeFnRes] = await Promise.all([
+        fetch('/api/admin/system'),
+        fetch('/api/admin/system/edge-functions'),
+      ])
 
-      if (data.success) {
-        setDiagnostics(data)
+      const systemData = await systemRes.json()
+      if (systemData.success) {
+        setDiagnostics(systemData)
         setLastRun(new Date())
       } else {
-        setError(data.error || 'Failed to run diagnostics')
+        setError(systemData.error || 'Failed to run diagnostics')
+      }
+
+      const edgeFnData = await edgeFnRes.json()
+      if (edgeFnData.success) {
+        setEdgeFunctions(edgeFnData.metrics || [])
       }
     } catch {
       setError('Failed to connect to server')
     } finally {
       setLoading(false)
+      setEdgeFnLoading(false)
     }
   }, [])
 
@@ -240,11 +264,81 @@ export default function SystemPage() {
             </CardContent>
           </Card>
         ) : (
-          diagnostics?.results.map((result) => (
+          diagnostics?.results.map((result: DiagnosticResult) => (
             <DiagnosticCard key={result.name} result={result} />
           ))
         )}
       </div>
+
+      {/* Edge Function Monitoring */}
+      <Card className="bg-[#0a0a0b] border-white/10">
+        <CardHeader>
+          <CardTitle className="text-white text-lg flex items-center gap-2">
+            <Cloud className="w-5 h-5 text-emerald-500" />
+            Edge Function Monitoring
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {edgeFnLoading ? (
+            <div className="flex items-center gap-2 text-white/40">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading edge function metrics...
+            </div>
+          ) : edgeFunctions.length === 0 ? (
+            <p className="text-white/40">No edge function data available</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/50">
+                    <th className="text-left py-2 pr-4 font-medium">Function</th>
+                    <th className="text-right py-2 px-3 font-medium">Invocations</th>
+                    <th className="text-right py-2 px-3 font-medium">Errors</th>
+                    <th className="text-right py-2 px-3 font-medium">Error Rate</th>
+                    <th className="text-right py-2 px-3 font-medium">Avg Time</th>
+                    <th className="text-right py-2 px-3 font-medium">P95 Time</th>
+                    <th className="text-right py-2 pl-3 font-medium">Last Invoked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {edgeFunctions.map((fn: EdgeFunctionMetrics) => (
+                    <tr key={fn.functionName} className="border-b border-white/5 hover:bg-white/5">
+                      <td className="py-2 pr-4 font-mono text-white">{fn.functionName}</td>
+                      <td className="text-right py-2 px-3 text-white/70">{fn.totalInvocations}</td>
+                      <td className="text-right py-2 px-3">
+                        <span className={fn.errorCount > 0 ? 'text-red-400' : 'text-white/40'}>
+                          {fn.errorCount}
+                        </span>
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        <span className={cn(
+                          'px-1.5 py-0.5 rounded text-xs font-mono',
+                          fn.errorRate === 0 && 'bg-emerald-500/10 text-emerald-400',
+                          fn.errorRate > 0 && fn.errorRate < 10 && 'bg-amber-500/10 text-amber-400',
+                          fn.errorRate >= 10 && 'bg-red-500/10 text-red-400',
+                        )}>
+                          {fn.errorRate}%
+                        </span>
+                      </td>
+                      <td className="text-right py-2 px-3 font-mono text-white/60">
+                        {fn.totalInvocations > 0 ? `${fn.avgExecutionTimeMs}ms` : '—'}
+                      </td>
+                      <td className="text-right py-2 px-3 font-mono text-white/60">
+                        {fn.totalInvocations > 0 ? `${fn.p95ExecutionTimeMs}ms` : '—'}
+                      </td>
+                      <td className="text-right py-2 pl-3 text-white/40 text-xs">
+                        {fn.lastInvokedAt
+                          ? new Date(fn.lastInvokedAt).toLocaleString()
+                          : 'Never'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Legend */}
       <Card className="bg-[#0a0a0b] border-white/10">

@@ -65,6 +65,24 @@ export const mockApiResponses = {
       { name: 'Storage', status: 'pass' as const, message: 'Storage is accessible', latency: 30 },
     ],
   },
+  edgeFunctions: {
+    success: true,
+    metrics: [
+      { functionName: 'aggregate-chat-analytics', totalInvocations: 120, successCount: 118, errorCount: 2, errorRate: 2, avgExecutionTimeMs: 340, p95ExecutionTimeMs: 890, lastInvokedAt: new Date().toISOString(), lastError: null },
+      { functionName: 'analyze-trade-screenshot', totalInvocations: 45, successCount: 44, errorCount: 1, errorRate: 2, avgExecutionTimeMs: 1200, p95ExecutionTimeMs: 2300, lastInvokedAt: new Date().toISOString(), lastError: 'Timeout' },
+      { functionName: 'chat-visitor-sync', totalInvocations: 300, successCount: 300, errorCount: 0, errorRate: 0, avgExecutionTimeMs: 85, p95ExecutionTimeMs: 150, lastInvokedAt: new Date().toISOString(), lastError: null },
+      { functionName: 'compute-leaderboards', totalInvocations: 24, successCount: 24, errorCount: 0, errorRate: 0, avgExecutionTimeMs: 560, p95ExecutionTimeMs: 780, lastInvokedAt: new Date().toISOString(), lastError: null },
+      { functionName: 'create-team-member', totalInvocations: 5, successCount: 5, errorCount: 0, errorRate: 0, avgExecutionTimeMs: 200, p95ExecutionTimeMs: 300, lastInvokedAt: new Date().toISOString(), lastError: null },
+      { functionName: 'cron-archive-conversations', totalInvocations: 48, successCount: 48, errorCount: 0, errorRate: 0, avgExecutionTimeMs: 420, p95ExecutionTimeMs: 650, lastInvokedAt: new Date().toISOString(), lastError: null },
+      { functionName: 'handle-chat-message', totalInvocations: 1500, successCount: 1490, errorCount: 10, errorRate: 1, avgExecutionTimeMs: 150, p95ExecutionTimeMs: 400, lastInvokedAt: new Date().toISOString(), lastError: null },
+      { functionName: 'notify-team-lead', totalInvocations: 30, successCount: 30, errorCount: 0, errorRate: 0, avgExecutionTimeMs: 180, p95ExecutionTimeMs: 250, lastInvokedAt: new Date().toISOString(), lastError: null },
+      { functionName: 'send-chat-transcript', totalInvocations: 80, successCount: 79, errorCount: 1, errorRate: 1, avgExecutionTimeMs: 300, p95ExecutionTimeMs: 500, lastInvokedAt: new Date().toISOString(), lastError: null },
+      { functionName: 'send-push-notification', totalInvocations: 200, successCount: 198, errorCount: 2, errorRate: 1, avgExecutionTimeMs: 95, p95ExecutionTimeMs: 200, lastInvokedAt: new Date().toISOString(), lastError: null },
+      { functionName: 'sync-discord-roles', totalInvocations: 60, successCount: 60, errorCount: 0, errorRate: 0, avgExecutionTimeMs: 250, p95ExecutionTimeMs: 400, lastInvokedAt: new Date().toISOString(), lastError: null },
+    ],
+    hoursBack: 24,
+    tableExists: true,
+  },
 }
 
 /**
@@ -100,10 +118,25 @@ export async function setupAdminApiMocks(page: Page): Promise<void> {
 
   // Mock admin system API
   await page.route('/api/admin/system', async (route: Route) => {
+    // Don't match sub-routes like /api/admin/system/edge-functions
+    const url = new URL(route.request().url())
+    if (url.pathname !== '/api/admin/system') {
+      await route.fallback()
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(mockApiResponses.system),
+    })
+  })
+
+  // Mock admin system edge functions API
+  await page.route('/api/admin/system/edge-functions', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(mockApiResponses.edgeFunctions),
     })
   })
 }
