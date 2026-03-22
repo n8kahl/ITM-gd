@@ -129,6 +129,7 @@ const envSchema = z.object({
   E2E_BYPASS_ALLOW_IN_PRODUCTION: booleanFromEnv.default(false),
   E2E_BYPASS_TOKEN_PREFIX: z.string().default('e2e:'),
   E2E_BYPASS_SHARED_SECRET: z.string().optional(),
+  E2E_DETERMINISTIC_MODE: booleanFromEnv.default(false),
 });
 
 export type Env = z.infer<typeof envSchema>;

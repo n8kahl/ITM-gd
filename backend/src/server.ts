@@ -209,6 +209,7 @@ let stopNewsSentimentPolling: (() => void) | null = null;
 let discordConfigPollTimer: NodeJS.Timeout | null = null;
 let lastDiscordConfigFingerprint: string | null = null;
 let discordConfigSyncInFlight = false;
+let backgroundServicesStarted = false;
 
 function buildDiscordConfigFingerprint(config: {
   enabled: boolean;
@@ -345,51 +346,57 @@ async function start() {
     httpServer = app.listen(PORT, () => { logger.info(`Server running on http://localhost:${PORT}`); });
     httpServer.setTimeout(90000);
 
-    // Initialize WebSocket server for real-time price updates
-    initWebSocket(httpServer);
-    await startMassiveTickStream();
+    if (env.E2E_DETERMINISTIC_MODE) {
+      logger.info('E2E deterministic mode enabled: skipping websocket, market streams, and background workers');
+    } else {
+      // Initialize WebSocket server for real-time price updates
+      initWebSocket(httpServer);
+      await startMassiveTickStream();
 
-    // Start active background workers
-    startMorningBriefWorker();
-    startPositionTrackerWorker();
-    startSessionCleanupWorker();
-    startWorkerHealthAlertWorker();
-    startSPXDataLoop();
-    startSPXOptimizerWorker();
-    startPortfolioSyncWorker();
-    startSpxEodCleanupWorker();
-    startSpxTtlEnforcementWorker();
-    if (env.REPLAY_SNAPSHOT_ENABLED) {
-      replaySnapshotWriter.start();
-      logger.info('Replay snapshot writer lifecycle started');
-    }
-    await syncDiscordBotRuntimeConfig(env, 'startup');
-    discordConfigPollTimer = setInterval(() => {
-      void syncDiscordBotRuntimeConfig(env, 'poll');
-    }, 30_000);
+      // Start active background workers
+      startMorningBriefWorker();
+      startPositionTrackerWorker();
+      startSessionCleanupWorker();
+      startWorkerHealthAlertWorker();
+      startSPXDataLoop();
+      startSPXOptimizerWorker();
+      startPortfolioSyncWorker();
+      startSpxEodCleanupWorker();
+      startSpxTtlEnforcementWorker();
+      if (env.REPLAY_SNAPSHOT_ENABLED) {
+        replaySnapshotWriter.start();
+        logger.info('Replay snapshot writer lifecycle started');
+      }
+      await syncDiscordBotRuntimeConfig(env, 'startup');
+      discordConfigPollTimer = setInterval(() => {
+        void syncDiscordBotRuntimeConfig(env, 'poll');
+      }, 30_000);
 
-    // Restore tick evaluator state from Redis (survives backend restarts)
-    restoreTickEvaluatorState().then((count) => {
-      if (count > 0) logger.info('Restored tick evaluator state from Redis', { count });
-    }).catch((err) => {
-      logger.warn('Failed to restore tick evaluator state', { error: err instanceof Error ? err.message : String(err) });
-    });
-    if (env.SPX_NEWS_SENTIMENT_ENABLED) {
-      stopNewsSentimentPolling = startSPXNewsSentimentPolling();
-      logger.info('SPX news sentiment polling enabled');
-    }
-
-    // Initialize market holidays (async, but don't block server start completely)
-    initializeMarketHolidays().catch(err => logger.error('Failed to init market holidays', { error: err }));
-
-    // Cache warm-up: pre-populate SPX snapshot so first 60s of trading isn't degraded (Audit #7)
-    getSPXSnapshot({ forceRefresh: true }).then(() => {
-      logger.info('SPX cache warm-up complete');
-    }).catch((err) => {
-      logger.warn('SPX cache warm-up failed (will populate on first request)', {
-        error: err instanceof Error ? err.message : String(err),
+      // Restore tick evaluator state from Redis (survives backend restarts)
+      restoreTickEvaluatorState().then((count) => {
+        if (count > 0) logger.info('Restored tick evaluator state from Redis', { count });
+      }).catch((err) => {
+        logger.warn('Failed to restore tick evaluator state', { error: err instanceof Error ? err.message : String(err) });
       });
-    });
+      if (env.SPX_NEWS_SENTIMENT_ENABLED) {
+        stopNewsSentimentPolling = startSPXNewsSentimentPolling();
+        logger.info('SPX news sentiment polling enabled');
+      }
+
+      // Initialize market holidays (async, but don't block server start completely)
+      initializeMarketHolidays().catch(err => logger.error('Failed to init market holidays', { error: err }));
+
+      // Cache warm-up: pre-populate SPX snapshot so first 60s of trading isn't degraded (Audit #7)
+      getSPXSnapshot({ forceRefresh: true }).then(() => {
+        logger.info('SPX cache warm-up complete');
+      }).catch((err) => {
+        logger.warn('SPX cache warm-up failed (will populate on first request)', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+
+      backgroundServicesStarted = true;
+    }
   } catch (error) {
     logger.error('Failed to start server', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
@@ -404,33 +411,35 @@ async function gracefulShutdown(signal: string) {
   if (httpServer) { httpServer.close(() => { logger.info('HTTP server closed'); }); }
   const shutdownTimeout = setTimeout(() => { logger.error('Graceful shutdown timed out, forcing exit'); process.exit(1); }, 30000);
   try {
-    // Stop background services
-    stopMorningBriefWorker();
-    stopPositionTrackerWorker();
-    stopSessionCleanupWorker();
-    stopWorkerHealthAlertWorker();
-    stopSPXDataLoop();
-    stopSPXOptimizerWorker();
-    stopPortfolioSyncWorker();
-    stopSpxEodCleanupWorker();
-    stopSpxTtlEnforcementWorker();
-    if (discordConfigPollTimer) {
-      clearInterval(discordConfigPollTimer);
-      discordConfigPollTimer = null;
-    }
-    await replaySnapshotWriter.stop();
-    await discordBot.stop();
+    if (backgroundServicesStarted) {
+      // Stop background services
+      stopMorningBriefWorker();
+      stopPositionTrackerWorker();
+      stopSessionCleanupWorker();
+      stopWorkerHealthAlertWorker();
+      stopSPXDataLoop();
+      stopSPXOptimizerWorker();
+      stopPortfolioSyncWorker();
+      stopSpxEodCleanupWorker();
+      stopSpxTtlEnforcementWorker();
+      if (discordConfigPollTimer) {
+        clearInterval(discordConfigPollTimer);
+        discordConfigPollTimer = null;
+      }
+      await replaySnapshotWriter.stop();
+      await discordBot.stop();
 
-    // Persist tick evaluator state before shutdown
-    await persistTickEvaluatorState().catch((err) => {
-      logger.warn('Failed to persist tick evaluator state on shutdown', { error: err instanceof Error ? err.message : String(err) });
-    });
-    if (stopNewsSentimentPolling) {
-      stopNewsSentimentPolling();
-      stopNewsSentimentPolling = null;
+      // Persist tick evaluator state before shutdown
+      await persistTickEvaluatorState().catch((err) => {
+        logger.warn('Failed to persist tick evaluator state on shutdown', { error: err instanceof Error ? err.message : String(err) });
+      });
+      if (stopNewsSentimentPolling) {
+        stopNewsSentimentPolling();
+        stopNewsSentimentPolling = null;
+      }
+      await stopMassiveTickStream();
+      shutdownWebSocket();
     }
-    await stopMassiveTickStream();
-    shutdownWebSocket();
     // Flush pending Sentry events before shutdown
     await flushSentry();
     logger.info('Sentry flushed');
