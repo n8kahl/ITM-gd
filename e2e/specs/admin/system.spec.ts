@@ -104,4 +104,21 @@ test.describe('Admin: System Diagnostics', () => {
     await expect(page.getByText('notify-team-lead')).toBeVisible()
     await expect(page.getByText('compute-leaderboards')).toBeVisible()
   })
+
+  test('shows dead letter queue panel with unresolved entries', async ({ page }) => {
+    await page.goto('/admin/system')
+    await expect(page.getByText('Dead Letter Queue')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('2 unresolved')).toBeVisible()
+    await expect(page.getByText('webhook_retry')).toBeVisible()
+    await expect(page.getByText('discord_sync_failed')).toBeVisible()
+  })
+
+  test('shows retry and dismiss buttons for DLQ entries', async ({ page }) => {
+    await page.goto('/admin/system')
+    await expect(page.getByText('Dead Letter Queue')).toBeVisible({ timeout: 10000 })
+    const retryButtons = page.getByRole('button', { name: /Retry/i })
+    const dismissButtons = page.getByRole('button', { name: /Dismiss$/i })
+    await expect(retryButtons.first()).toBeVisible()
+    await expect(dismissButtons.first()).toBeVisible()
+  })
 })

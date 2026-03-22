@@ -65,6 +65,43 @@ export const mockApiResponses = {
       { name: 'Storage', status: 'pass' as const, message: 'Storage is accessible', latency: 30 },
     ],
   },
+  dlq: {
+    success: true,
+    entries: [
+      {
+        id: 'dlq-001',
+        event_type: 'webhook_retry',
+        payload: { webhook_id: 'wh_123', attempt: 3 },
+        error_message: 'Connection timeout after 5000ms',
+        error_stack: null,
+        source: 'whop-webhook-handler',
+        created_at: new Date(Date.now() - 3600000).toISOString(),
+        retried_at: null,
+        retry_count: 2,
+        resolved: false,
+      },
+      {
+        id: 'dlq-002',
+        event_type: 'discord_sync_failed',
+        payload: { user_id: 'usr_456', role: 'Core Sniper' },
+        error_message: 'Discord API rate limited (429)',
+        error_stack: null,
+        source: 'sync-discord-roles',
+        created_at: new Date(Date.now() - 7200000).toISOString(),
+        retried_at: new Date(Date.now() - 3600000).toISOString(),
+        retry_count: 1,
+        resolved: false,
+      },
+    ],
+    total: 2,
+    tableExists: true,
+  },
+  dlqEmpty: {
+    success: true,
+    entries: [],
+    total: 0,
+    tableExists: true,
+  },
   edgeFunctions: {
     success: true,
     metrics: [
@@ -138,6 +175,24 @@ export async function setupAdminApiMocks(page: Page): Promise<void> {
       contentType: 'application/json',
       body: JSON.stringify(mockApiResponses.edgeFunctions),
     })
+  })
+
+  // Mock admin system DLQ API
+  await page.route('/api/admin/system/dlq', async (route: Route) => {
+    const method = route.request().method()
+    if (method === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, action: 'dismissed', count: 1 }),
+      })
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockApiResponses.dlq),
+      })
+    }
   })
 }
 
