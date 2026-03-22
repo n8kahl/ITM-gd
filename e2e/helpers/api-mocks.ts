@@ -45,6 +45,109 @@ export const mockApiResponses = {
       { name: 'Storage', status: 'pass' as const, message: 'Storage is accessible', details: 'Bucket "journal-screenshots" found', latency: 30 },
     ],
   },
+  analytics: {
+    period: '30d',
+    platform: {
+      total_members: 1250,
+      new_members: 47,
+      total_journal_entries: 892,
+      ai_analysis_count: 340,
+      ai_coach_sessions: 156,
+      ai_coach_messages: 1204,
+      shared_trade_cards: 89,
+      active_users: 312,
+      active_learners: 198,
+      pending_applications: 3,
+    },
+    marketing: {
+      total_page_views: 28500,
+      unique_visitors: 4200,
+      total_clicks: 1890,
+      total_subscribers: 620,
+      total_contacts: 45,
+      conversion_rate: 2.18,
+    },
+    page_views_by_day: [],
+    conversions_by_day: [],
+    conversion_funnel: { modal_opened: 0, modal_closed: 0, form_submitted: 0, subscribed: 0 },
+    device_breakdown: {},
+    browser_breakdown: {},
+    click_breakdown: {},
+    top_pages: [],
+    recent_subscribers: [],
+    recent_contacts: [],
+    recent_page_views: [],
+    recent_sales: [],
+    ai_coach_activity: [],
+  },
+  leads: {
+    success: true,
+    data: [
+      { id: 'lead-1', full_name: 'Alice Johnson', status: 'pending', created_at: new Date().toISOString() },
+      { id: 'lead-2', full_name: 'Bob Chen', status: 'approved', created_at: new Date(Date.now() - 86400000).toISOString() },
+    ],
+  },
+  courses: {
+    success: true,
+    data: [
+      {
+        id: 'course-1',
+        title: 'Options Mastery',
+        description: 'Master options trading from basics to advanced',
+        slug: 'options-mastery',
+        is_published: true,
+        display_order: 1,
+        thumbnail_url: null,
+        discord_role_required: null,
+        lessons: [{ id: 'l1' }, { id: 'l2' }, { id: 'l3' }],
+      },
+      {
+        id: 'course-2',
+        title: 'SPX Day Trading',
+        description: 'Learn to trade SPX 0DTE options',
+        slug: 'spx-day-trading',
+        is_published: false,
+        display_order: 2,
+        thumbnail_url: null,
+        discord_role_required: '1111111111111111111',
+        lessons: [{ id: 'l4' }],
+      },
+    ],
+  },
+  notifications: {
+    success: true,
+    data: [
+      {
+        id: 'notif-1',
+        title: 'New Trade Alert',
+        body: 'SPX 5850C setup identified in the trading room',
+        status: 'sent' as const,
+        target_type: 'all' as const,
+        target_tiers: null,
+        target_user_ids: null,
+        delivered_count: 245,
+        failed_count: 3,
+        total_targeted: 248,
+        sent_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'notif-2',
+        title: 'Weekly Recap',
+        body: 'Your weekly trading performance summary is ready',
+        status: 'sent' as const,
+        target_type: 'tier' as const,
+        target_tiers: ['pro', 'executive'],
+        target_user_ids: null,
+        delivered_count: 89,
+        failed_count: 0,
+        total_targeted: 89,
+        sent_at: new Date(Date.now() - 86400000).toISOString(),
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+      },
+    ],
+    total: 2,
+  },
   systemWarning: {
     success: true,
     status: 'warning' as const,
@@ -97,6 +200,60 @@ export async function setupAdminApiMocks(page: Page): Promise<void> {
       contentType: 'application/json',
       body: JSON.stringify(mockApiResponses.system),
     })
+  })
+
+  // Mock admin analytics API
+  await page.route('/api/admin/analytics*', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(mockApiResponses.analytics),
+    })
+  })
+
+  // Mock admin leads API
+  await page.route('/api/admin/leads*', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(mockApiResponses.leads),
+    })
+  })
+
+  // Mock admin courses API
+  await page.route('/api/admin/courses*', async (route: Route) => {
+    const method = route.request().method()
+    if (method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockApiResponses.courses),
+      })
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true }),
+      })
+    }
+  })
+
+  // Mock admin notifications API
+  await page.route('/api/admin/notifications*', async (route: Route) => {
+    const method = route.request().method()
+    if (method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockApiResponses.notifications),
+      })
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, stats: { delivered: 245, targeted: 248, failed: 3 } }),
+      })
+    }
   })
 }
 
