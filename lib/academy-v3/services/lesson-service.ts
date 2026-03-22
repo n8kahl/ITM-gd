@@ -12,8 +12,10 @@ export class AcademyLessonService {
     this.lessons = new SupabaseAcademyLessonRepository(supabase)
   }
 
-  async getLessonById(id: string) {
-    const lesson = await this.lessons.getPublishedLessonById(id)
+  async getLessonById(id: string, options?: { preview?: boolean }) {
+    const lesson = options?.preview
+      ? await this.lessons.getLessonByIdUnfiltered(id)
+      : await this.lessons.getPublishedLessonById(id)
     if (!lesson) {
       throw new AcademyLessonNotFoundError()
     }
